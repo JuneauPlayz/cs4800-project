@@ -1,0 +1,2595 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SplitStack — Interactive Prototype</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;1,9..144,400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --green: #1DB954;
+    --green-light: #2ECC71;
+    --green-muted: #e8faf0;
+    --navy: #0D1B2A;
+    --navy-mid: #1a2f45;
+    --slate: #3d5a73;
+    --muted: #8fa3b1;
+    --bg: #f4f7fa;
+    --white: #ffffff;
+    --card: #ffffff;
+    --red: #e74c3c;
+    --amber: #f39c12;
+    --border: #e2eaf0;
+    --radius: 18px;
+    --shadow: 0 4px 24px rgba(13,27,42,0.10);
+    --shadow-lg: 0 12px 48px rgba(13,27,42,0.15);
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  /* ========== OUTER CHROME ========== */
+  html, body { height: 100%; overflow: hidden; }
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: #0D1B2A;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    overflow: hidden;
+  }
+  .prototype-shell {
+    width: 100%;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    padding: 16px 24px 12px;
+    overflow: hidden;
+  }
+  .prototype-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    flex-shrink: 0;
+  }
+  .proto-logo { font-family: 'Fraunces', serif; font-size: 26px; color: var(--green); letter-spacing: -1px; }
+  .proto-logo span { color: #fff; }
+  .proto-label {
+    background: rgba(29,185,84,0.15);
+    border: 1px solid rgba(29,185,84,0.3);
+    color: var(--green);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    padding: 5px 12px;
+    border-radius: 20px;
+    text-transform: uppercase;
+  }
+
+  /* ========== SCENARIO NAV ========== */
+  .scenario-nav {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    flex-shrink: 0;
+    margin-bottom: 10px;
+  }
+  .scenario-btn {
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.12);
+    color: rgba(255,255,255,0.65);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    font-weight: 500;
+    padding: 6px 13px;
+    border-radius: 30px;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+  .scenario-btn:hover { background: rgba(29,185,84,0.15); color: var(--green); border-color: rgba(29,185,84,0.4); }
+  .scenario-btn.active { background: var(--green); color: #fff; border-color: var(--green); }
+
+  /* ========== MAIN LAYOUT ========== */
+  .main-layout {
+    display: grid;
+    grid-template-columns: 240px 1fr;
+    gap: 16px;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  /* ========== LEFT PANEL — STORY ========== */
+  .story-panel {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 20px;
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-height: 0;
+  }
+  .story-title {
+    font-family: 'Fraunces', serif;
+    font-size: 15px;
+    color: #fff;
+    margin-bottom: 4px;
+    flex-shrink: 0;
+  }
+  .story-subtitle { font-size: 11px; color: var(--muted); margin-bottom: 14px; line-height: 1.4; flex-shrink: 0; }
+  .story-steps { display: flex; flex-direction: column; gap: 3px; overflow-y: auto; flex: 1; min-height: 0; }
+  .story-steps::-webkit-scrollbar { display: none; }
+  .story-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 9px 10px;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: background 0.2s;
+    border: 1px solid transparent;
+    flex-shrink: 0;
+  }
+  .story-step:hover { background: rgba(255,255,255,0.05); }
+  .story-step.active { background: rgba(29,185,84,0.12); border-color: rgba(29,185,84,0.25); }
+  .step-dot {
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.08);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700;
+    color: var(--muted);
+    flex-shrink: 0;
+    transition: all 0.2s;
+  }
+  .story-step.active .step-dot { background: var(--green); color: #fff; }
+  .story-step.visited .step-dot { background: rgba(29,185,84,0.3); color: var(--green); }
+  .step-info {}
+  .step-name { font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.8); line-height: 1.2; }
+  .story-step.active .step-name { color: #fff; }
+  .step-desc { font-size: 11px; color: var(--muted); margin-top: 2px; line-height: 1.3; }
+  .story-divider { height: 1px; background: rgba(255,255,255,0.06); margin: 10px 0; flex-shrink: 0; }
+  .story-persona {
+    background: rgba(29,185,84,0.08);
+    border: 1px solid rgba(29,185,84,0.15);
+    border-radius: 12px;
+    padding: 12px;
+    flex-shrink: 0;
+  }
+  .persona-name { font-size: 12px; font-weight: 700; color: var(--green); margin-bottom: 4px; }
+  .persona-quote { font-size: 11px; color: rgba(255,255,255,0.6); line-height: 1.4; font-style: italic; }
+
+  /* ========== PHONE WRAPPER ========== */
+  .phone-area {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 16px;
+    overflow: hidden;
+    min-height: 0;
+    flex: 1;
+  }
+  .phone-frame-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    flex-shrink: 0;
+    /* height will be driven by scalePhone */
+  }
+  .phone-frame {
+    width: 375px;
+    height: 812px;
+    background: var(--navy);
+    border-radius: 48px;
+    border: 3px solid rgba(255,255,255,0.12);
+    overflow: hidden;
+    position: relative;
+    box-shadow: 0 30px 80px rgba(0,0,0,0.5), inset 0 0 0 1px rgba(255,255,255,0.05);
+    transform-origin: top center;
+    flex-shrink: 0;
+  }
+  .phone-notch {
+    position: absolute;
+    top: 14px; left: 50%;
+    transform: translateX(-50%);
+    width: 120px; height: 28px;
+    background: #000;
+    border-radius: 20px;
+    z-index: 100;
+  }
+
+  /* ========== SCREENS ========== */
+  .screen {
+    position: absolute;
+    inset: 0;
+    background: var(--bg);
+    overflow-y: auto;
+    overflow-x: hidden;
+    display: none;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    padding-bottom: 80px;
+  }
+  .screen.active { display: block; opacity: 1; }
+  .screen::-webkit-scrollbar { display: none; }
+
+  /* ========== SCREEN COMPONENTS ========== */
+
+  /* Status bar */
+  .status-bar {
+    height: 50px;
+    display: flex; align-items: flex-end; justify-content: space-between;
+    padding: 0 24px 8px;
+    font-size: 12px; font-weight: 600;
+    color: var(--navy);
+    position: sticky; top: 0; z-index: 50;
+    background: inherit;
+  }
+  .status-bar.dark { color: #fff; background: var(--navy); }
+  .status-bar.green-bg { background: var(--green); color: #fff; }
+  .status-icons { display: flex; gap: 5px; align-items: center; }
+
+  /* Nav header */
+  .nav-header {
+    padding: 8px 20px 12px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .back-btn {
+    width: 34px; height: 34px;
+    background: rgba(0,0,0,0.06);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; font-size: 16px;
+    border: none;
+    transition: background 0.15s;
+  }
+  .back-btn:hover { background: rgba(0,0,0,0.12); }
+  .nav-title { font-size: 17px; font-weight: 700; color: var(--navy); }
+  .nav-spacer { flex: 1; }
+
+  /* Cards */
+  .card {
+    background: var(--white);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 18px;
+    margin: 0 16px 14px;
+  }
+  .card-sm { padding: 14px 16px; }
+
+  /* Bottom nav */
+  .bottom-nav {
+    position: fixed;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 375px;
+    background: rgba(255,255,255,0.95);
+    backdrop-filter: blur(20px);
+    border-top: 1px solid var(--border);
+    display: flex;
+    padding: 10px 0 24px;
+    z-index: 100;
+  }
+  .nav-item {
+    flex: 1;
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    cursor: pointer;
+    font-size: 10px; font-weight: 600;
+    color: var(--muted);
+    transition: color 0.15s;
+  }
+  .nav-item.active { color: var(--green); }
+  .nav-icon { font-size: 20px; }
+
+  /* Buttons */
+  .btn-primary {
+    background: var(--green);
+    color: #fff;
+    border: none;
+    border-radius: 14px;
+    padding: 14px 24px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 15px; font-weight: 700;
+    cursor: pointer;
+    width: 100%;
+    transition: all 0.2s;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .btn-primary:hover { background: #18a348; transform: translateY(-1px); box-shadow: 0 6px 20px rgba(29,185,84,0.35); }
+  .btn-secondary {
+    background: var(--bg);
+    color: var(--navy);
+    border: 1.5px solid var(--border);
+    border-radius: 14px;
+    padding: 12px 20px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px; font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .btn-secondary:hover { background: var(--border); }
+  .btn-danger {
+    background: rgba(231,76,60,0.1);
+    color: var(--red);
+    border: 1.5px solid rgba(231,76,60,0.2);
+    border-radius: 14px;
+    padding: 12px 20px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px; font-weight: 600;
+    cursor: pointer;
+  }
+
+  /* Tags */
+  .tag {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 4px 10px; border-radius: 20px;
+    font-size: 11px; font-weight: 600;
+  }
+  .tag-green { background: var(--green-muted); color: #16864a; }
+  .tag-amber { background: #fff8e6; color: #b37d00; }
+  .tag-red { background: #fdf0ee; color: var(--red); }
+  .tag-blue { background: #eef4ff; color: #2563eb; }
+
+  /* Avatar */
+  .avatar {
+    border-radius: 50%;
+    object-fit: cover;
+    background: var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; color: var(--slate);
+    font-size: 14px;
+    flex-shrink: 0;
+  }
+
+  /* ============================================================
+     SCREEN 1: SPLASH / ONBOARDING
+     ============================================================ */
+  #screen-splash {
+    background: var(--navy);
+    display: flex; flex-direction: column;
+  }
+  .splash-bg {
+    flex: 1;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 60px 32px 40px;
+    gap: 0;
+  }
+  .splash-logo-mark {
+    width: 72px; height: 72px;
+    background: var(--green);
+    border-radius: 22px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 34px;
+    margin-bottom: 24px;
+    box-shadow: 0 12px 36px rgba(29,185,84,0.4);
+  }
+  .splash-title { font-family: 'Fraunces', serif; font-size: 38px; color: #fff; line-height: 1; margin-bottom: 8px; }
+  .splash-title span { color: var(--green); }
+  .splash-tagline { font-size: 15px; color: rgba(255,255,255,0.55); margin-bottom: 40px; text-align: center; }
+  .splash-features { display: flex; flex-direction: column; gap: 12px; width: 100%; margin-bottom: 40px; }
+  .splash-feat {
+    display: flex; align-items: center; gap: 12px;
+    background: rgba(255,255,255,0.05);
+    border-radius: 12px; padding: 12px 14px;
+    border: 1px solid rgba(255,255,255,0.07);
+  }
+  .splash-feat-icon { font-size: 20px; width: 36px; text-align: center; }
+  .splash-feat-text { font-size: 13px; color: rgba(255,255,255,0.75); line-height: 1.3; }
+  .splash-feat-text strong { color: #fff; display: block; font-size: 14px; }
+  .splash-cta { width: 100%; padding: 0 0 32px; }
+
+  /* ============================================================
+     SCREEN 2: HOME HUB
+     ============================================================ */
+  #screen-home { background: var(--bg); }
+  .home-header {
+    background: var(--navy);
+    padding: 50px 20px 24px;
+    border-radius: 0 0 28px 28px;
+  }
+  .home-greeting { font-size: 13px; color: rgba(255,255,255,0.6); margin-bottom: 4px; }
+  .home-name { font-family: 'Fraunces', serif; font-size: 24px; color: #fff; margin-bottom: 16px; }
+  .home-summary {
+    background: rgba(255,255,255,0.08);
+    border-radius: 16px; padding: 16px;
+    display: flex; justify-content: space-between;
+  }
+  .summary-item { text-align: center; }
+  .summary-val { font-size: 18px; font-weight: 800; color: #fff; }
+  .summary-val.green { color: var(--green); }
+  .summary-val.red { color: #ff6b6b; }
+  .summary-lbl { font-size: 10px; color: rgba(255,255,255,0.5); margin-top: 2px; }
+  .section-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px 20px 10px;
+  }
+  .section-title { font-size: 15px; font-weight: 700; color: var(--navy); }
+  .section-link { font-size: 13px; color: var(--green); font-weight: 600; cursor: pointer; }
+  .group-card {
+    background: var(--white);
+    border-radius: 18px;
+    margin: 0 16px 12px;
+    padding: 16px;
+    box-shadow: var(--shadow);
+    cursor: pointer;
+    transition: all 0.2s;
+    border: 1.5px solid transparent;
+  }
+  .group-card:hover { border-color: var(--green); transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+  .group-card-top { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .group-icon {
+    width: 44px; height: 44px;
+    border-radius: 14px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+    background: var(--green-muted);
+  }
+  .group-name { font-size: 15px; font-weight: 700; color: var(--navy); }
+  .group-meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .group-balance-bar {
+    height: 6px; background: var(--border); border-radius: 4px; overflow: hidden; margin-bottom: 8px;
+  }
+  .group-balance-fill { height: 100%; border-radius: 4px; background: var(--green); }
+  .group-footer { display: flex; justify-content: space-between; align-items: center; }
+  .group-owed { font-size: 13px; }
+  .group-owed .amount { font-weight: 700; }
+  .group-owed.positive .amount { color: var(--green); }
+  .group-owed.negative .amount { color: var(--red); }
+  .ai-banner {
+    margin: 0 16px 14px;
+    background: linear-gradient(135deg, #0d2b1a, #0f3520);
+    border-radius: 18px;
+    padding: 14px 16px;
+    display: flex; align-items: center; gap: 12px;
+    cursor: pointer;
+    border: 1px solid rgba(29,185,84,0.2);
+  }
+  .ai-icon { font-size: 28px; }
+  .ai-msg { flex: 1; }
+  .ai-msg-title { font-size: 13px; font-weight: 700; color: var(--green); margin-bottom: 2px; }
+  .ai-msg-text { font-size: 12px; color: rgba(255,255,255,0.65); line-height: 1.4; }
+  .ai-arrow { color: var(--green); font-size: 18px; }
+
+  /* ============================================================
+     SCREEN 3: GROUP DETAIL
+     ============================================================ */
+  #screen-group { background: var(--bg); }
+  .group-hero {
+    background: linear-gradient(160deg, #0d1f30, #1a3a52);
+    padding: 50px 20px 28px;
+    border-radius: 0 0 28px 28px;
+  }
+  .group-hero-top { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+  .group-hero-icon {
+    width: 52px; height: 52px; border-radius: 16px;
+    background: rgba(29,185,84,0.2); font-size: 24px;
+    display: flex; align-items: center; justify-content: center;
+    border: 1px solid rgba(29,185,84,0.3);
+  }
+  .group-hero-info {}
+  .group-hero-name { font-family: 'Fraunces', serif; font-size: 22px; color: #fff; }
+  .group-hero-sub { font-size: 12px; color: rgba(255,255,255,0.5); margin-top: 2px; }
+  .balance-cards { display: flex; gap: 10px; }
+  .bal-card {
+    flex: 1; background: rgba(255,255,255,0.08);
+    border-radius: 14px; padding: 12px; text-align: center;
+    border: 1px solid rgba(255,255,255,0.05);
+  }
+  .bal-val { font-size: 20px; font-weight: 800; color: #fff; }
+  .bal-val.green { color: var(--green); }
+  .bal-val.red { color: #ff6b6b; }
+  .bal-lbl { font-size: 10px; color: rgba(255,255,255,0.5); margin-top: 3px; }
+  .members-row { display: flex; gap: 8px; padding: 14px 20px 0; }
+  .member-chip {
+    display: flex; align-items: center; gap: 6px;
+    background: var(--white); border-radius: 20px;
+    padding: 5px 10px 5px 5px;
+    box-shadow: var(--shadow);
+  }
+  .member-av {
+    width: 28px; height: 28px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700; color: #fff;
+  }
+  .member-av.c1 { background: #6c63ff; }
+  .member-av.c2 { background: #e74c3c; }
+  .member-av.c3 { background: var(--amber); }
+  .member-av.c4 { background: var(--green); }
+  .member-chip-name { font-size: 12px; font-weight: 600; color: var(--navy); }
+  .expense-row {
+    display: flex; align-items: center; gap: 12px;
+    padding: 13px 20px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .expense-row:hover { background: rgba(0,0,0,0.02); }
+  .expense-cat-icon {
+    width: 40px; height: 40px; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+  }
+  .expense-cat-icon.bg-green { background: var(--green-muted); }
+  .expense-cat-icon.bg-blue { background: #eef4ff; }
+  .expense-cat-icon.bg-amber { background: #fff8e6; }
+  .expense-cat-icon.bg-red { background: #fdf0ee; }
+  .expense-info { flex: 1; }
+  .expense-name { font-size: 14px; font-weight: 600; color: var(--navy); }
+  .expense-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .expense-amount { text-align: right; }
+  .expense-total { font-size: 15px; font-weight: 700; color: var(--navy); }
+  .expense-my-share { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .vote-banner {
+    margin: 12px 16px;
+    background: #fff8e6;
+    border: 1.5px solid #f0c040;
+    border-radius: 16px; padding: 14px;
+    cursor: pointer;
+  }
+  .vote-banner-title { font-size: 13px; font-weight: 700; color: #8a6000; margin-bottom: 4px; }
+  .vote-banner-sub { font-size: 12px; color: #a07800; }
+  .vote-progress { margin-top: 10px; }
+  .vote-progress-bar { height: 5px; background: #f0e0a0; border-radius: 3px; overflow: hidden; margin-top: 5px; }
+  .vote-progress-fill { height: 100%; background: var(--amber); border-radius: 3px; }
+  .fab {
+    position: fixed;
+    bottom: 90px;
+    right: calc(50% - 375px/2 + 16px);
+    width: 56px; height: 56px;
+    background: var(--green);
+    border-radius: 18px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 26px; color: #fff;
+    cursor: pointer;
+    box-shadow: 0 8px 28px rgba(29,185,84,0.4);
+    border: none;
+    transition: all 0.2s;
+    z-index: 90;
+  }
+  .fab:hover { transform: scale(1.05); }
+
+  /* ============================================================
+     SCREEN 4: ADD EXPENSE
+     ============================================================ */
+  #screen-add-expense { background: var(--bg); }
+  .add-header {
+    background: var(--navy); padding: 50px 20px 24px;
+    border-radius: 0 0 28px 28px;
+  }
+  .add-amount-field {
+    text-align: center; margin: 20px 0 8px;
+  }
+  .amount-prefix { font-size: 28px; font-weight: 300; color: rgba(255,255,255,0.5); vertical-align: top; margin-top: 10px; display: inline-block; }
+  .amount-input-display {
+    font-family: 'Fraunces', serif; font-size: 56px; color: #fff;
+    display: inline-block; cursor: text; min-width: 60px;
+    border-bottom: 2px solid rgba(255,255,255,0.2);
+    padding-bottom: 4px;
+  }
+  .amount-cents { font-size: 28px; color: rgba(255,255,255,0.5); }
+  .cat-grid {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;
+    padding: 0 16px 16px;
+  }
+  .cat-item {
+    display: flex; flex-direction: column; align-items: center; gap: 5px;
+    padding: 12px 6px;
+    background: var(--white); border-radius: 14px;
+    cursor: pointer; font-size: 11px; font-weight: 600; color: var(--slate);
+    transition: all 0.2s;
+    border: 2px solid transparent;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  }
+  .cat-item:hover { border-color: var(--green); color: var(--navy); }
+  .cat-item.selected { border-color: var(--green); background: var(--green-muted); color: #16864a; }
+  .cat-item .cat-emoji { font-size: 22px; }
+  .split-options { display: flex; gap: 8px; padding: 0 16px 14px; }
+  .split-opt {
+    flex: 1; padding: 10px;
+    background: var(--white); border-radius: 12px;
+    text-align: center; font-size: 12px; font-weight: 600;
+    color: var(--slate); cursor: pointer; border: 2px solid transparent;
+    transition: all 0.2s;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  }
+  .split-opt:hover { border-color: var(--green); }
+  .split-opt.selected { border-color: var(--green); background: var(--green-muted); color: #16864a; }
+  .split-icon { font-size: 18px; margin-bottom: 3px; }
+  .member-split-list { padding: 0 16px 14px; }
+  .member-split-row {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 0; border-bottom: 1px solid var(--border);
+  }
+  .split-member-name { flex: 1; font-size: 14px; font-weight: 600; color: var(--navy); }
+  .split-amount-badge {
+    background: var(--green-muted); color: #16864a;
+    padding: 4px 12px; border-radius: 20px;
+    font-size: 13px; font-weight: 700;
+  }
+  .receipt-upload {
+    margin: 0 16px 14px;
+    background: var(--white);
+    border-radius: 16px;
+    padding: 16px;
+    display: flex; align-items: center; gap: 12px;
+    border: 2px dashed var(--border);
+    cursor: pointer;
+    transition: border-color 0.2s;
+  }
+  .receipt-upload:hover { border-color: var(--green); }
+  .receipt-icon { font-size: 28px; }
+  .receipt-text { font-size: 13px; font-weight: 600; color: var(--navy); }
+  .receipt-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .form-label { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; padding: 0 20px; margin-bottom: 8px; display: block; }
+  .form-input {
+    width: calc(100% - 32px); margin: 0 16px;
+    padding: 13px 16px;
+    background: var(--white);
+    border: 1.5px solid var(--border);
+    border-radius: 14px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px; color: var(--navy);
+    outline: none; margin-bottom: 14px;
+  }
+  .form-input:focus { border-color: var(--green); }
+
+  /* ============================================================
+     SCREEN 5: RECEIPT SCANNER
+     ============================================================ */
+  #screen-receipt { background: var(--bg); }
+  .scanner-hero {
+    background: linear-gradient(160deg, #0d1f30, #1a3a52);
+    padding: 50px 20px 24px;
+    border-radius: 0 0 28px 28px;
+  }
+  .scanner-hero-top { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+  .scanner-title { font-family: 'Fraunces', serif; font-size: 22px; color: #fff; }
+  .scanner-sub { font-size: 13px; color: rgba(255,255,255,0.5); margin-top: 2px; }
+  .scanner-viewfinder {
+    position: relative;
+    background: #0a1220;
+    border-radius: 18px;
+    height: 160px;
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden;
+    border: 1.5px solid rgba(29,185,84,0.3);
+  }
+  .scanner-receipt-preview {
+    width: 90px;
+    background: #fff;
+    border-radius: 4px;
+    padding: 8px 6px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    font-size: 6px;
+    line-height: 1.6;
+    color: #333;
+    font-family: monospace;
+  }
+  .scanner-receipt-preview .rp-store { font-weight: 700; font-size: 7px; text-align: center; margin-bottom: 4px; border-bottom: 1px solid #ccc; padding-bottom: 3px; }
+  .scanner-receipt-preview .rp-item { display: flex; justify-content: space-between; }
+  .scanner-receipt-preview .rp-total { display: flex; justify-content: space-between; font-weight: 700; font-size: 7px; border-top: 1px solid #ccc; margin-top: 3px; padding-top: 3px; }
+  .scan-corner {
+    position: absolute;
+    width: 22px; height: 22px;
+    border-color: var(--green);
+    border-style: solid;
+    border-width: 0;
+  }
+  .scan-corner.tl { top: 12px; left: 12px; border-top-width: 2.5px; border-left-width: 2.5px; border-radius: 3px 0 0 0; }
+  .scan-corner.tr { top: 12px; right: 12px; border-top-width: 2.5px; border-right-width: 2.5px; border-radius: 0 3px 0 0; }
+  .scan-corner.bl { bottom: 12px; left: 12px; border-bottom-width: 2.5px; border-left-width: 2.5px; border-radius: 0 0 0 3px; }
+  .scan-corner.br { bottom: 12px; right: 12px; border-bottom-width: 2.5px; border-right-width: 2.5px; border-radius: 0 0 3px 0; }
+  @keyframes scanLine {
+    0% { top: 18px; } 100% { top: 134px; }
+  }
+  .scan-line {
+    position: absolute; left: 12px; right: 12px; height: 2px;
+    background: linear-gradient(90deg, transparent, var(--green), transparent);
+    animation: scanLine 1.8s ease-in-out infinite alternate;
+    border-radius: 1px;
+  }
+  .ocr-processing {
+    display: none;
+    flex-direction: column; align-items: center; gap: 8px;
+  }
+  .ocr-processing.show { display: flex; }
+  .ocr-spinner {
+    width: 40px; height: 40px;
+    border: 3px solid rgba(29,185,84,0.2);
+    border-top-color: var(--green);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .ocr-label { font-size: 12px; color: var(--green); font-weight: 600; }
+  .ocr-results { display: none; }
+  .ocr-results.show { display: block; }
+  .ocr-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 20px; margin-bottom: 6px;
+  }
+  .ocr-detected { font-size: 12px; color: var(--green); font-weight: 700; display: flex; align-items: center; gap: 5px; }
+  .ocr-edit-btn {
+    font-size: 12px; color: var(--slate); font-weight: 600;
+    background: none; border: none; cursor: pointer;
+  }
+  .receipt-item-list { padding: 0 16px; }
+  .receipt-item-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 0; border-bottom: 1px solid var(--border);
+  }
+  .ri-check {
+    width: 22px; height: 22px; border-radius: 6px;
+    background: var(--green); display: flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 12px; flex-shrink: 0; cursor: pointer;
+  }
+  .ri-check.unchecked { background: var(--border); color: transparent; }
+  .ri-name { flex: 1; font-size: 13px; font-weight: 600; color: var(--navy); }
+  .ri-qty { font-size: 12px; color: var(--muted); }
+  .ri-price { font-size: 14px; font-weight: 700; color: var(--navy); }
+  .receipt-total-bar {
+    margin: 10px 16px;
+    background: var(--white); border-radius: 14px; padding: 14px 16px;
+    display: flex; justify-content: space-between; align-items: center;
+    box-shadow: var(--shadow);
+  }
+  .receipt-total-label { font-size: 13px; font-weight: 700; color: var(--navy); }
+  .receipt-total-val { font-family: 'Fraunces', serif; font-size: 22px; color: var(--navy); }
+  .auto-split-section { padding: 0 16px 10px; }
+  .auto-split-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .auto-split-title { font-size: 14px; font-weight: 700; color: var(--navy); }
+  .auto-split-mode {
+    display: flex; gap: 6px;
+  }
+  .split-mode-btn {
+    padding: 5px 12px; border-radius: 20px;
+    font-size: 11px; font-weight: 700;
+    cursor: pointer; border: 1.5px solid var(--border);
+    background: var(--white); color: var(--slate);
+    transition: all 0.15s;
+  }
+  .split-mode-btn.active { background: var(--green); color: #fff; border-color: var(--green); }
+  .member-assign-list { display: flex; flex-direction: column; gap: 8px; }
+  .member-assign-row {
+    background: var(--white); border-radius: 14px; padding: 12px 14px;
+    display: flex; align-items: center; gap: 10px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  }
+  .assign-av { width: 34px; height: 34px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: #fff; }
+  .assign-info { flex: 1; }
+  .assign-name { font-size: 13px; font-weight: 700; color: var(--navy); }
+  .assign-items { font-size: 11px; color: var(--muted); margin-top: 1px; }
+  .assign-amount { font-size: 16px; font-weight: 800; color: var(--navy); }
+  .assign-amount.highlight { color: var(--green); }
+
+  /* ============================================================
+     SCREEN 6: AI ROOMMATE
+     ============================================================ */
+  #screen-ai { background: var(--navy); }
+  .ai-header {
+    background: var(--navy); padding: 50px 20px 16px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .ai-avatar-big {
+    width: 44px; height: 44px;
+    background: linear-gradient(135deg, var(--green), #0d8f3c);
+    border-radius: 16px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px;
+    box-shadow: 0 4px 16px rgba(29,185,84,0.4);
+  }
+  .ai-header-info {}
+  .ai-header-name { font-size: 16px; font-weight: 700; color: #fff; }
+  .ai-header-status { font-size: 11px; color: var(--green); display: flex; align-items: center; gap: 4px; }
+  .ai-status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); }
+  .chat-area {
+    background: #f0f4f8;
+    border-radius: 28px 28px 0 0;
+    min-height: 600px;
+    padding: 20px 16px 100px;
+    margin-top: 8px;
+  }
+  .chat-msg { display: flex; gap: 8px; margin-bottom: 14px; }
+  .chat-msg.user { flex-direction: row-reverse; }
+  .chat-bubble {
+    max-width: 75%; padding: 11px 14px;
+    border-radius: 18px; font-size: 13px; line-height: 1.5;
+  }
+  .chat-msg.ai .chat-bubble { background: var(--white); color: var(--navy); border-radius: 4px 18px 18px 18px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+  .chat-msg.user .chat-bubble { background: var(--green); color: #fff; border-radius: 18px 4px 18px 18px; }
+  .chat-avatar-sm {
+    width: 30px; height: 30px; border-radius: 10px;
+    background: linear-gradient(135deg, var(--green), #0d8f3c);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; flex-shrink: 0; margin-top: 2px;
+  }
+  .suggestion-card {
+    background: var(--white); border-radius: 16px;
+    padding: 14px; margin: 10px 0; max-width: 80%;
+    box-shadow: var(--shadow);
+  }
+  .suggestion-card .s-title { font-size: 12px; font-weight: 700; color: var(--green); margin-bottom: 6px; }
+  .suggestion-card .s-body { font-size: 12px; color: var(--navy); line-height: 1.5; }
+  .suggestion-card .s-action {
+    margin-top: 10px; background: var(--green-muted); color: #16864a;
+    border: none; border-radius: 10px; padding: 8px 14px;
+    font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 700;
+    cursor: pointer;
+  }
+  .chat-input-bar {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    background: var(--white); padding: 12px 16px 28px;
+    display: flex; gap: 10px; align-items: center;
+    border-top: 1px solid var(--border);
+  }
+  .chat-input {
+    flex: 1; background: var(--bg); border: 1.5px solid var(--border);
+    border-radius: 24px; padding: 10px 16px;
+    font-family: 'DM Sans', sans-serif; font-size: 13px;
+    outline: none; color: var(--navy);
+  }
+  .chat-send {
+    width: 40px; height: 40px; background: var(--green);
+    border-radius: 50%; border: none; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; color: #fff; flex-shrink: 0;
+  }
+  .chat-suggested-prompts { display: flex; flex-wrap: wrap; gap: 7px; margin: 12px 0 0; }
+  .prompt-chip {
+    background: rgba(29,185,84,0.1); border: 1px solid rgba(29,185,84,0.25);
+    border-radius: 20px; padding: 6px 12px;
+    font-size: 12px; font-weight: 600; color: #16864a;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .prompt-chip:hover { background: rgba(29,185,84,0.2); }
+
+  /* ============================================================
+     SCREEN 7: GAMIFICATION / STREAKS
+     ============================================================ */
+  #screen-game { background: var(--bg); }
+  .game-hero {
+    background: linear-gradient(140deg, #0d2b1a, #0f3520, #143c25);
+    padding: 50px 20px 28px;
+    border-radius: 0 0 32px 32px;
+  }
+  .game-hero-title { font-family: 'Fraunces', serif; font-size: 26px; color: #fff; margin-bottom: 4px; }
+  .game-hero-sub { font-size: 13px; color: rgba(255,255,255,0.5); margin-bottom: 20px; }
+  .streak-display { display: flex; align-items: center; gap: 16px; }
+  .streak-flame { font-size: 48px; filter: drop-shadow(0 0 12px rgba(255,140,0,0.6)); }
+  .streak-info {}
+  .streak-count { font-family: 'Fraunces', serif; font-size: 52px; color: #fff; line-height: 1; }
+  .streak-label { font-size: 13px; color: rgba(255,255,255,0.6); margin-top: 2px; }
+  .streak-days { display: flex; gap: 6px; margin-top: 12px; }
+  .streak-day {
+    width: 32px; height: 32px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 700;
+  }
+  .streak-day.done { background: var(--green); color: #fff; }
+  .streak-day.today { background: rgba(29,185,84,0.3); color: var(--green); border: 2px solid var(--green); }
+  .streak-day.miss { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.3); }
+  .progress-rings { display: flex; gap: 14px; padding: 16px 20px 0; flex-wrap: wrap; }
+  .ring-card {
+    background: var(--white);
+    border-radius: 18px; padding: 16px;
+    box-shadow: var(--shadow); flex: 1; min-width: 140px;
+  }
+  .ring-title { font-size: 12px; font-weight: 700; color: var(--muted); margin-bottom: 12px; }
+  .ring-visual { display: flex; align-items: center; gap: 12px; }
+  .ring-svg { flex-shrink: 0; }
+  .ring-stats {}
+  .ring-pct { font-size: 22px; font-weight: 800; color: var(--navy); }
+  .ring-sublabel { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .challenge-list { padding: 0 16px 16px; }
+  .challenge-card {
+    background: var(--white); border-radius: 18px;
+    padding: 14px 16px; margin-bottom: 10px;
+    display: flex; align-items: center; gap: 12px;
+    box-shadow: var(--shadow); cursor: pointer;
+    border: 2px solid transparent;
+    transition: all 0.2s;
+  }
+  .challenge-card:hover { border-color: var(--green); }
+  .challenge-card.joined { border-color: var(--green); background: var(--green-muted); }
+  .challenge-icon { font-size: 28px; }
+  .challenge-info { flex: 1; }
+  .challenge-name { font-size: 14px; font-weight: 700; color: var(--navy); }
+  .challenge-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .challenge-reward {
+    background: var(--green-muted); color: #16864a;
+    padding: 4px 10px; border-radius: 20px;
+    font-size: 11px; font-weight: 700;
+  }
+  .badge-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; padding: 0 16px 16px; }
+  .badge-item { text-align: center; }
+  .badge-icon { font-size: 30px; margin-bottom: 4px; filter: grayscale(0); }
+  .badge-icon.locked { filter: grayscale(1); opacity: 0.4; }
+  .badge-name { font-size: 10px; font-weight: 600; color: var(--slate); }
+
+  /* ============================================================
+     SCREEN 8: PREMIUM / BLOCKCHAIN
+     ============================================================ */
+  #screen-premium { background: var(--bg); }
+  .premium-hero {
+    background: linear-gradient(140deg, #0d1b2a, #162a3d);
+    padding: 50px 20px 28px;
+    border-radius: 0 0 28px 28px;
+    text-align: center;
+  }
+  .premium-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: rgba(255,215,0,0.15); border: 1px solid rgba(255,215,0,0.3);
+    border-radius: 20px; padding: 5px 14px;
+    color: #ffd700; font-size: 12px; font-weight: 700;
+    margin-bottom: 16px;
+  }
+  .premium-hero-title { font-family: 'Fraunces', serif; font-size: 28px; color: #fff; margin-bottom: 8px; }
+  .premium-hero-sub { font-size: 13px; color: rgba(255,255,255,0.55); }
+  .plan-cards { display: flex; flex-direction: column; gap: 12px; padding: 16px; }
+  .plan-card {
+    background: var(--white); border-radius: 20px;
+    padding: 18px; box-shadow: var(--shadow);
+    border: 2px solid transparent; cursor: pointer;
+    transition: all 0.2s;
+    position: relative; overflow: hidden;
+  }
+  .plan-card.popular {
+    border-color: var(--green);
+  }
+  .plan-card.selected { border-color: var(--navy); }
+  .popular-badge {
+    position: absolute; top: 12px; right: 12px;
+    background: var(--green); color: #fff;
+    font-size: 10px; font-weight: 700;
+    padding: 3px 10px; border-radius: 20px;
+  }
+  .plan-name { font-size: 16px; font-weight: 800; color: var(--navy); margin-bottom: 4px; }
+  .plan-price { font-family: 'Fraunces', serif; font-size: 30px; color: var(--navy); }
+  .plan-price span { font-size: 14px; font-weight: 400; color: var(--muted); }
+  .plan-features { margin-top: 12px; display: flex; flex-direction: column; gap: 7px; }
+  .plan-feat { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--slate); }
+  .plan-feat-check { color: var(--green); font-size: 14px; }
+  .blockchain-panel {
+    margin: 0 16px 14px;
+    background: linear-gradient(135deg, #0a1628, #0f2340);
+    border-radius: 20px; padding: 18px;
+    border: 1px solid rgba(29,185,84,0.2);
+  }
+  .blockchain-title { font-size: 14px; font-weight: 700; color: #fff; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
+  .blockchain-sub { font-size: 12px; color: rgba(255,255,255,0.5); margin-bottom: 14px; line-height: 1.5; }
+  .chain-tx-list { display: flex; flex-direction: column; gap: 8px; }
+  .chain-tx {
+    background: rgba(255,255,255,0.05);
+    border-radius: 12px; padding: 10px 12px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .chain-icon { font-size: 16px; }
+  .chain-info { flex: 1; }
+  .chain-name { font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.8); }
+  .chain-hash { font-size: 10px; color: rgba(255,255,255,0.35); font-family: monospace; margin-top: 2px; }
+  .chain-status { color: var(--green); font-size: 14px; }
+
+  /* ============================================================
+     SCREEN 9: SETTLE UP
+     ============================================================ */
+  #screen-settle { background: var(--bg); }
+  .settle-hero {
+    background: linear-gradient(135deg, #0d2b1a, #0f3520);
+    padding: 50px 20px 24px;
+    border-radius: 0 0 28px 28px;
+    text-align: center;
+  }
+  .settle-amount-display { font-family: 'Fraunces', serif; font-size: 48px; color: #fff; margin: 8px 0 4px; }
+  .settle-to { font-size: 14px; color: rgba(255,255,255,0.6); margin-bottom: 16px; }
+  .settle-to strong { color: #fff; }
+  .payment-methods { padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+  .payment-method {
+    background: var(--white); border-radius: 16px;
+    padding: 14px 16px; display: flex; align-items: center; gap: 12px;
+    cursor: pointer; border: 2px solid transparent;
+    box-shadow: var(--shadow); transition: all 0.2s;
+  }
+  .payment-method:hover { border-color: var(--green); }
+  .payment-method.selected { border-color: var(--green); background: var(--green-muted); }
+  .pm-icon { font-size: 24px; width: 40px; text-align: center; }
+  .pm-info { flex: 1; }
+  .pm-name { font-size: 14px; font-weight: 700; color: var(--navy); }
+  .pm-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .pm-radio { width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--border); display: flex; align-items: center; justify-content: center; }
+  .pm-radio.checked { border-color: var(--green); background: var(--green); }
+  .pm-radio.checked::after { content: '✓'; color: #fff; font-size: 11px; }
+  .settle-success {
+    display: none;
+    flex-direction: column; align-items: center; justify-content: center;
+    padding: 40px 32px;
+    text-align: center;
+  }
+  .settle-success.show { display: flex; }
+  .success-circle {
+    width: 90px; height: 90px;
+    background: var(--green); border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 42px; margin-bottom: 20px;
+    box-shadow: 0 12px 36px rgba(29,185,84,0.35);
+  }
+  .success-title { font-family: 'Fraunces', serif; font-size: 28px; color: var(--navy); margin-bottom: 8px; }
+  .success-sub { font-size: 14px; color: var(--muted); line-height: 1.6; }
+  .tx-id { background: var(--bg); border-radius: 10px; padding: 8px 14px; font-family: monospace; font-size: 12px; color: var(--slate); margin-top: 12px; }
+
+  /* ============================================================
+     RECEIPT EDIT MODE
+     ============================================================ */
+  .ri-name-input, .ri-price-input {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px; font-weight: 600; color: var(--navy);
+    background: var(--bg); border: 1.5px solid var(--green);
+    border-radius: 8px; padding: 4px 8px; outline: none;
+  }
+  .ri-name-input { flex: 1; min-width: 0; }
+  .ri-price-input { width: 64px; text-align: right; }
+  .ri-delete-btn {
+    width: 26px; height: 26px; border-radius: 50%;
+    background: #fdf0ee; border: 1.5px solid rgba(231,76,60,0.25);
+    color: var(--red); font-size: 15px; line-height: 1;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; transition: all 0.15s;
+  }
+  .ri-delete-btn:hover { background: var(--red); color: #fff; border-color: var(--red); }
+  .receipt-item-row.editing { background: rgba(29,185,84,0.05); border-radius: 10px; padding: 10px 8px; }
+  @keyframes strikeOut {
+    from { opacity: 1; max-height: 50px; margin: 0; padding: 10px 0; }
+    to { opacity: 0; max-height: 0; margin: 0; padding: 0; overflow: hidden; }
+  }
+  .receipt-item-row.deleting { animation: strikeOut 0.22s ease forwards; pointer-events: none; }
+  @keyframes flashSaved {
+    0% { background: rgba(29,185,84,0.18); }
+    100% { background: transparent; }
+  }
+  .receipt-item-row.just-saved { animation: flashSaved 0.5s ease; }
+
+  /* ============================================================
+     FLOW NAVIGATOR (right side panel)
+     ============================================================ */
+  .flow-nav {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 16px;
+    padding: 14px 12px;
+    width: 160px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .flow-nav-title { font-size: 10px; font-weight: 700; color: rgba(255,255,255,0.3); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 2px; }
+  .flow-steps-row { display: flex; flex-direction: column; gap: 4px; }
+  .flow-step-btn {
+    width: 100%;
+    padding: 7px 10px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 10px;
+    color: rgba(255,255,255,0.5);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px; font-weight: 600;
+    cursor: pointer; transition: all 0.2s;
+    text-align: left;
+  }
+  .flow-step-btn:hover { background: rgba(29,185,84,0.15); color: var(--green); border-color: rgba(29,185,84,0.3); }
+  .flow-step-btn.current { background: var(--green); color: #fff; border-color: var(--green); }
+  .prev-next { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+  .pn-btn {
+    width: 100%; padding: 8px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 10px; color: rgba(255,255,255,0.7);
+    font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 600;
+    cursor: pointer; transition: all 0.2s;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+  }
+  .pn-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
+  .pn-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+  /* ============================================================
+     TRANSITIONS
+     ============================================================ */
+  .screen { transition: opacity 0.25s ease; }
+  @keyframes slideUp {
+    from { transform: translateY(20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+  .screen.active > * { animation: slideUp 0.3s ease forwards; }
+  .screen.active > *:nth-child(2) { animation-delay: 0.05s; }
+  .screen.active > *:nth-child(3) { animation-delay: 0.1s; }
+  .screen.active > *:nth-child(4) { animation-delay: 0.15s; }
+
+  /* Voted overlay */
+  .voted-overlay {
+    display: none; position: absolute; inset: 0;
+    background: rgba(13,27,42,0.85);
+    z-index: 200; flex-direction: column;
+    align-items: center; justify-content: center;
+    border-radius: 48px;
+  }
+  .voted-overlay.show { display: flex; }
+  .voted-result { text-align: center; }
+  .voted-emoji { font-size: 64px; margin-bottom: 16px; }
+  .voted-title { font-family: 'Fraunces', serif; font-size: 26px; color: #fff; margin-bottom: 8px; }
+  .voted-sub { font-size: 14px; color: rgba(255,255,255,0.6); }
+  .voted-close {
+    margin-top: 24px; background: var(--green); color: #fff;
+    border: none; border-radius: 14px; padding: 12px 32px;
+    font-family: 'DM Sans', sans-serif; font-size: 15px; font-weight: 700;
+    cursor: pointer;
+  }
+
+  @keyframes typingDot {
+    0%, 60%, 100% { opacity: 0.3; transform: scale(1); }
+    30% { opacity: 1; transform: scale(1.3); }
+  }
+  @keyframes popIn {
+    from { transform: scale(0.5); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+  }
+  @media (max-width: 900px) {
+    html, body { overflow: auto; }
+    .main-layout { grid-template-columns: 1fr; overflow: visible; }
+    .story-panel { max-height: 200px; }
+    .phone-area { width: 100%; }
+    .prototype-shell { height: auto; overflow: visible; padding: 12px; }
+  }
+</style>
+</head>
+<body>
+<div class="prototype-shell">
+
+  <!-- HEADER -->
+  <div class="prototype-header">
+    <div class="proto-logo"><span>Split</span>Stack</div>
+    <div style="display:flex;gap:10px;align-items:center;">
+      <div class="proto-label">Interactive Prototype</div>
+
+    </div>
+  </div>
+
+  <!-- SCENARIO NAV -->
+  <div class="scenario-nav">
+    <button class="scenario-btn active" onclick="loadScenario(0)">🏠 College Roommates</button>
+    <button class="scenario-btn" onclick="loadScenario(1)">✈️ Group Travel</button>
+    <button class="scenario-btn" onclick="loadScenario(2)">🧾 Receipt Scanning</button>
+    <button class="scenario-btn" onclick="loadScenario(3)">🤖 AI Insights</button>
+    <button class="scenario-btn" onclick="loadScenario(4)">🏆 Gamification</button>
+  </div>
+
+  <!-- MAIN LAYOUT -->
+  <div class="main-layout">
+
+    <!-- LEFT: STORY PANEL -->
+    <div class="story-panel" id="storyPanel">
+      <div class="story-title" id="scenarioTitle">A Day in the Life</div>
+      <div class="story-subtitle" id="scenarioSubtitle">Follow Maya's journey managing shared apartment expenses with her three roommates.</div>
+      <div class="story-steps" id="storySteps"></div>
+      <div class="story-divider"></div>
+      <div class="story-persona" id="personaCard">
+        <div class="persona-name" id="personaName">👩‍🎓 Maya Chen, 21</div>
+        <div class="persona-quote" id="personaQuote">"I hate the awkward 'hey, you still owe me' texts. There has to be a better way."</div>
+      </div>
+    </div>
+
+    <!-- RIGHT: PHONE + FLOW NAV -->
+    <div class="phone-area">
+    <div class="phone-frame-wrapper">
+      <div class="phone-frame" id="phoneFrame">
+        <div class="phone-notch"></div>
+
+        <!-- ============ SCREEN 5: RECEIPT SCANNER ============ -->
+        <div class="screen" id="screen-receipt">
+          <div class="scanner-hero">
+            <div style="height:44px;display:flex;align-items:center;gap:12px;padding:0 4px;">
+              <button class="back-btn" onclick="goToScreen('screen-group')" style="background:rgba(255,255,255,0.1);color:#fff;">‹</button>
+              <div>
+                <div class="scanner-title">Scan Receipt</div>
+                <div class="scanner-sub">OCR detects items &amp; splits automatically</div>
+              </div>
+            </div>
+
+            <div class="scanner-viewfinder" id="scannerViewfinder">
+              <!-- Receipt preview (before scan) -->
+              <div id="receiptPreview">
+                <div class="scanner-receipt-preview">
+                  <div class="rp-store">TRADER JOE'S</div>
+                  <div class="rp-item"><span>Almond Milk</span><span>$3.99</span></div>
+                  <div class="rp-item"><span>Sourdough Bread</span><span>$4.49</span></div>
+                  <div class="rp-item"><span>Eggs 12ct</span><span>$5.29</span></div>
+                  <div class="rp-item"><span>Pasta x2</span><span>$3.98</span></div>
+                  <div class="rp-item"><span>Olive Oil</span><span>$8.99</span></div>
+                  <div class="rp-item"><span>Orange Juice</span><span>$5.49</span></div>
+                  <div class="rp-item"><span>Chicken Breast</span><span>$12.99</span></div>
+                  <div class="rp-total"><span>TOTAL</span><span>$45.22</span></div>
+                </div>
+                <div class="scan-corner tl"></div>
+                <div class="scan-corner tr"></div>
+                <div class="scan-corner bl"></div>
+                <div class="scan-corner br"></div>
+                <div class="scan-line"></div>
+              </div>
+              <!-- Processing state -->
+              <div class="ocr-processing" id="ocrProcessing">
+                <div class="ocr-spinner"></div>
+                <div class="ocr-label">Reading receipt…</div>
+              </div>
+            </div>
+
+            <div style="display:flex;gap:8px;margin-top:12px;">
+              <button onclick="triggerScan()" style="flex:1;background:var(--green);color:#fff;border:none;border-radius:12px;padding:11px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:700;cursor:pointer;" id="scanBtn">📷 Scan Receipt</button>
+              <button style="flex:1;background:rgba(255,255,255,0.1);color:rgba(255,255,255,0.8);border:1px solid rgba(255,255,255,0.15);border-radius:12px;padding:11px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer;">📁 Upload Photo</button>
+            </div>
+          </div>
+
+          <!-- OCR Results (hidden until scan) -->
+          <div class="ocr-results" id="ocrResults">
+            <div style="padding:14px 16px 6px;">
+              <div class="ocr-header">
+                <div class="ocr-detected" id="ocrItemCount">✅ 7 items detected · Trader Joe's</div>
+                <button class="ocr-edit-btn" id="editModeBtn" onclick="toggleEditMode()">✏️ Edit</button>
+              </div>
+            </div>
+
+            <div class="receipt-item-list" id="receiptItemList">
+              <!-- items rendered by JS -->
+            </div>
+
+            <!-- Add item row (shown in edit mode) -->
+            <div id="addItemRow" style="display:none;padding:6px 16px 2px;">
+              <button onclick="addReceiptItem()" style="width:100%;background:var(--green-muted);border:1.5px dashed var(--green);border-radius:12px;padding:10px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:700;color:#16864a;cursor:pointer;">+ Add Item</button>
+            </div>
+
+            <div class="receipt-total-bar">
+              <div class="receipt-total-label">Receipt Total</div>
+              <div class="receipt-total-val" id="receiptTotalDisplay">$45.22</div>
+            </div>
+
+            <div class="auto-split-section">
+              <div class="auto-split-header">
+                <div class="auto-split-title">Auto Split: Apartment 4B</div>
+                <div class="auto-split-mode">
+                  <button class="split-mode-btn active" onclick="setSplitMode(this)">Equal</button>
+                  <button class="split-mode-btn" onclick="setSplitMode(this)">By Item</button>
+                </div>
+              </div>
+              <div class="member-assign-list" id="memberAssignList">
+                <div class="member-assign-row">
+                  <div class="assign-av c1">M</div>
+                  <div class="assign-info">
+                    <div class="assign-name">Maya (you)</div>
+                    <div class="assign-items" id="assignItems0">All 7 items · 25%</div>
+                  </div>
+                  <div class="assign-amount highlight" id="assignAmt0">$11.31</div>
+                </div>
+                <div class="member-assign-row">
+                  <div class="assign-av c2">A</div>
+                  <div class="assign-info">
+                    <div class="assign-name">Alex Chen</div>
+                    <div class="assign-items" id="assignItems1">All 7 items · 25%</div>
+                  </div>
+                  <div class="assign-amount" id="assignAmt1">$11.31</div>
+                </div>
+                <div class="member-assign-row">
+                  <div class="assign-av c3">S</div>
+                  <div class="assign-info">
+                    <div class="assign-name">Sarah Jones</div>
+                    <div class="assign-items" id="assignItems2">All 7 items · 25%</div>
+                  </div>
+                  <div class="assign-amount" id="assignAmt2">$11.31</div>
+                </div>
+                <div class="member-assign-row">
+                  <div class="assign-av c4">D</div>
+                  <div class="assign-info">
+                    <div class="assign-name">David Lee</div>
+                    <div class="assign-items" id="assignItems3">All 7 items · 25%</div>
+                  </div>
+                  <div class="assign-amount" id="assignAmt3">$11.29</div>
+                </div>
+              </div>
+            </div>
+
+            <div style="padding:14px 16px 24px;">
+              <button class="btn-primary" id="confirmReceiptBtn" onclick="confirmReceipt()">Confirm &amp; Log Expense</button>
+            </div>
+          </div>
+
+          <!-- Empty state before scan -->
+          <div id="preScanHint" style="padding:28px 20px;text-align:center;">
+            <div style="font-size:48px;margin-bottom:12px;">🧾</div>
+            <div style="font-size:15px;font-weight:700;color:var(--navy);margin-bottom:6px;">Point camera at your receipt</div>
+            <div style="font-size:13px;color:var(--muted);line-height:1.6;">SplitStack reads every line item and suggests who owes what — no manual entry needed.</div>
+          </div>
+        </div>
+        <div class="screen active" id="screen-splash">
+          <div class="status-bar dark">
+            <span>9:41</span>
+            <div class="status-icons">📶 🔋</div>
+          </div>
+          <div class="splash-bg">
+            <div class="splash-logo-mark">💸</div>
+            <div class="splash-title">Split<span>Stack</span></div>
+            <div class="splash-tagline">Split Smart. Live Better.</div>
+            <div class="splash-features">
+              <div class="splash-feat"><div class="splash-feat-icon">🤖</div><div class="splash-feat-text"><strong>AI Roommate</strong>Smart insights for your shared expenses</div></div>
+              <div class="splash-feat"><div class="splash-feat-icon">🗳️</div><div class="splash-feat-text"><strong>Democratic Voting</strong>Group approval for big purchases</div></div>
+              <div class="splash-feat"><div class="splash-feat-icon">🔗</div><div class="splash-feat-text"><strong>Blockchain Audit</strong>Tamper-proof expense history</div></div>
+            </div>
+            <div class="splash-cta" style="width:100%;">
+              <button class="btn-primary" onclick="goToScreen('screen-home')">Get Started →</button>
+              <div style="text-align:center;margin-top:12px;font-size:12px;color:rgba(255,255,255,0.4);">Already have an account? <span style="color:var(--green);cursor:pointer;">Sign in</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ============ SCREEN 2: HOME HUB ============ -->
+        <div class="screen" id="screen-home">
+          <div class="home-header">
+            <div style="height:50px;"></div>
+            <div class="home-greeting">Good morning 👋</div>
+            <div class="home-name">Maya Chen</div>
+            <div class="home-summary">
+              <div class="summary-item"><div class="summary-val green">$142</div><div class="summary-lbl">Owed to you</div></div>
+              <div class="summary-item"><div class="summary-val red">$38</div><div class="summary-lbl">You owe</div></div>
+              <div class="summary-item"><div class="summary-val">3</div><div class="summary-lbl">Active groups</div></div>
+            </div>
+          </div>
+
+          <div class="ai-banner" onclick="goToScreen('screen-ai')">
+            <div class="ai-icon">🤖</div>
+            <div class="ai-msg">
+              <div class="ai-msg-title">AI Roommate has a tip ✨</div>
+              <div class="ai-msg-text">You and Alex both pay for Spotify — combining saves $14/mo</div>
+            </div>
+            <div class="ai-arrow">›</div>
+          </div>
+
+          <div class="section-header"><div class="section-title">Your Groups</div><div class="section-link" onclick="goToScreen('screen-group')">See all</div></div>
+
+          <div class="group-card" onclick="goToScreen('screen-group')">
+            <div class="group-card-top">
+              <div class="group-icon">🏠</div>
+              <div>
+                <div class="group-name">Apartment 4B</div>
+                <div class="group-meta">4 members · 12 expenses this month</div>
+              </div>
+              <div style="margin-left:auto;"><span class="tag tag-amber">1 pending vote</span></div>
+            </div>
+            <div class="group-balance-bar"><div class="group-balance-fill" style="width:68%"></div></div>
+            <div class="group-footer">
+              <div class="group-owed positive">You are owed <span class="amount">$142.50</span></div>
+              <div style="font-size:12px;color:var(--muted);">$1,250 total</div>
+            </div>
+          </div>
+
+          <div class="group-card" onclick="goToScreen('screen-group')">
+            <div class="group-card-top">
+              <div class="group-icon" style="background:#eef4ff;">✈️</div>
+              <div>
+                <div class="group-name">Spring Break 2026</div>
+                <div class="group-meta">5 members · Planning phase</div>
+              </div>
+            </div>
+            <div class="group-balance-bar"><div class="group-balance-fill" style="width:30%;background:#6c63ff;"></div></div>
+            <div class="group-footer">
+              <div class="group-owed negative">You owe <span class="amount">$38.00</span></div>
+              <div style="font-size:12px;color:var(--muted);">$450 total</div>
+            </div>
+          </div>
+
+          <div class="section-header"><div class="section-title">🔥 Your Streak</div><div class="section-link" onclick="goToScreen('screen-game')">Details</div></div>
+          <div class="card">
+            <div style="display:flex;align-items:center;gap:14px;">
+              <div style="font-size:36px;">🔥</div>
+              <div>
+                <div style="font-size:22px;font-weight:800;color:var(--navy);">12 days</div>
+                <div style="font-size:12px;color:var(--muted);">Logging streak — keep it up!</div>
+              </div>
+              <div style="margin-left:auto;">
+                <svg width="50" height="50" viewBox="0 0 50 50">
+                  <circle cx="25" cy="25" r="20" fill="none" stroke="#e2eaf0" stroke-width="5"/>
+                  <circle cx="25" cy="25" r="20" fill="none" stroke="#1DB954" stroke-width="5" stroke-dasharray="125.6" stroke-dashoffset="37.7" transform="rotate(-90 25 25)" stroke-linecap="round"/>
+                </svg>
+              </div>
+            </div>
+          </div>
+
+          <div class="bottom-nav" id="bottomNavHome" style="position:absolute;">
+            <div class="nav-item active"><div class="nav-icon">🏠</div>Home</div>
+            <div class="nav-item" onclick="goToScreen('screen-group')"><div class="nav-icon">👥</div>Groups</div>
+            <div class="nav-item" onclick="goToScreen('screen-add-expense')"><div class="nav-icon">➕</div>Add</div>
+            <div class="nav-item" onclick="goToScreen('screen-ai')"><div class="nav-icon">🤖</div>AI</div>
+            <div class="nav-item" onclick="goToScreen('screen-game')"><div class="nav-icon">🏆</div>Goals</div>
+          </div>
+        </div>
+
+        <!-- ============ SCREEN 3: GROUP DETAIL ============ -->
+        <div class="screen" id="screen-group">
+          <div class="group-hero">
+            <div style="height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 4px;">
+              <button class="back-btn" onclick="goToScreen('screen-home')" style="background:rgba(255,255,255,0.1);color:#fff;">‹</button>
+              <span style="color:rgba(255,255,255,0.7);font-size:12px;">Apartment 4B</span>
+              <button style="background:none;border:none;color:rgba(255,255,255,0.7);font-size:18px;cursor:pointer;">⋯</button>
+            </div>
+            <div class="group-hero-top">
+              <div class="group-hero-icon">🏠</div>
+              <div class="group-hero-info">
+                <div class="group-hero-name">Apartment 4B</div>
+                <div class="group-hero-sub">4 members · Since Aug 2025</div>
+              </div>
+            </div>
+            <div class="balance-cards">
+              <div class="bal-card"><div class="bal-val green">+$142</div><div class="bal-lbl">You're owed</div></div>
+              <div class="bal-card"><div class="bal-val">$1,250</div><div class="bal-lbl">Total spend</div></div>
+              <div class="bal-card"><div class="bal-val">$312</div><div class="bal-lbl">Per person</div></div>
+            </div>
+          </div>
+
+          <div class="members-row">
+            <div class="member-chip"><div class="member-av c1">M</div><span class="member-chip-name">Maya</span></div>
+            <div class="member-chip"><div class="member-av c2">A</div><span class="member-chip-name">Alex</span></div>
+            <div class="member-chip"><div class="member-av c3">S</div><span class="member-chip-name">Sarah</span></div>
+            <div class="member-chip"><div class="member-av c4">D</div><span class="member-chip-name">David</span></div>
+          </div>
+
+          <div class="vote-banner" onclick="goToScreen('screen-receipt')" style="background:#eef4ff;border-color:#a0c0f0;">
+            <div class="vote-banner-title" style="color:#1a4080;">📷 New: Scan a Receipt</div>
+            <div class="vote-banner-sub" style="color:#2563eb;">OCR auto-detects every item and splits it — tap to try</div>
+            <div class="vote-progress" style="margin-top:6px;">
+              <div style="font-size:11px;color:#5080b0;">Last scan: Trader Joe's · $45.22 · Oct 14</div>
+            </div>
+          </div>
+
+          <div class="section-header"><div class="section-title">Recent Expenses</div><div class="section-link">Filter</div></div>
+
+          <div class="expense-row" onclick="goToScreen('screen-settle')">
+            <div class="expense-cat-icon bg-green">🛒</div>
+            <div class="expense-info">
+              <div class="expense-name">Grocery Run</div>
+              <div class="expense-sub">Maya paid · Oct 16</div>
+            </div>
+            <div class="expense-amount">
+              <div class="expense-total">$87.50</div>
+              <div class="expense-my-share" style="color:var(--green);">+$65.63 owed to you</div>
+            </div>
+          </div>
+
+          <div class="expense-row">
+            <div class="expense-cat-icon bg-blue">💡</div>
+            <div class="expense-info">
+              <div class="expense-name">Electric Bill</div>
+              <div class="expense-sub">Alex paid · Oct 14</div>
+            </div>
+            <div class="expense-amount">
+              <div class="expense-total">$124.00</div>
+              <div class="expense-my-share" style="color:var(--red);">-$31.00 you owe</div>
+            </div>
+          </div>
+
+          <div class="expense-row">
+            <div class="expense-cat-icon bg-amber">🌮</div>
+            <div class="expense-info">
+              <div class="expense-name">Taco Tuesday</div>
+              <div class="expense-sub">Sarah paid · Oct 12</div>
+            </div>
+            <div class="expense-amount">
+              <div class="expense-total">$64.00</div>
+              <div class="expense-my-share" style="color:var(--red);">-$16.00 you owe</div>
+            </div>
+          </div>
+
+          <div class="expense-row">
+            <div class="expense-cat-icon bg-red">📺</div>
+            <div class="expense-info">
+              <div class="expense-name">Netflix (shared)</div>
+              <div class="expense-sub">Maya paid · Oct 1</div>
+            </div>
+            <div class="expense-amount">
+              <div class="expense-total">$22.99</div>
+              <div class="expense-my-share" style="color:var(--green);">+$17.24 owed to you</div>
+            </div>
+          </div>
+
+          <div style="height:20px;"></div>
+
+          <button class="fab" onclick="goToScreen('screen-add-expense')">+</button>
+          <div class="bottom-nav" style="position:absolute;">
+            <div class="nav-item" onclick="goToScreen('screen-home')"><div class="nav-icon">🏠</div>Home</div>
+            <div class="nav-item active"><div class="nav-icon">👥</div>Groups</div>
+            <div class="nav-item" onclick="goToScreen('screen-add-expense')"><div class="nav-icon">➕</div>Add</div>
+            <div class="nav-item" onclick="goToScreen('screen-ai')"><div class="nav-icon">🤖</div>AI</div>
+            <div class="nav-item" onclick="goToScreen('screen-game')"><div class="nav-icon">🏆</div>Goals</div>
+          </div>
+        </div>
+
+        <!-- ============ SCREEN 4: ADD EXPENSE ============ -->
+        <div class="screen" id="screen-add-expense">
+          <div class="add-header">
+            <div style="height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 4px;">
+              <button class="back-btn" onclick="goToScreen('screen-group')" style="background:rgba(255,255,255,0.1);color:#fff;">‹</button>
+              <span style="color:rgba(255,255,255,0.7);font-size:14px;font-weight:600;">Add Expense</span>
+              <div style="width:34px;"></div>
+            </div>
+            <div class="add-amount-field">
+              <span class="amount-prefix">$</span>
+              <span class="amount-input-display" id="amountDisplay">45</span><span class="amount-cents">.00</span>
+            </div>
+            <div style="text-align:center;padding-bottom:8px;">
+              <span class="tag tag-green">🛒 Groceries</span>
+            </div>
+          </div>
+
+          <div style="padding:14px 16px 4px;">
+            <label class="form-label">Description</label>
+            <input class="form-input" type="text" value="Trader Joe's Grocery Run" placeholder="What was this for?">
+          </div>
+
+          <div style="padding:0 16px 8px;"><label class="form-label">Category</label></div>
+          <div class="cat-grid">
+            <div class="cat-item selected" onclick="selectCat(this)"><div class="cat-emoji">🛒</div>Groceries</div>
+            <div class="cat-item" onclick="selectCat(this)"><div class="cat-emoji">💡</div>Utilities</div>
+            <div class="cat-item" onclick="selectCat(this)"><div class="cat-emoji">🌮</div>Dining</div>
+            <div class="cat-item" onclick="selectCat(this)"><div class="cat-emoji">🚗</div>Transport</div>
+            <div class="cat-item" onclick="selectCat(this)"><div class="cat-emoji">📺</div>Subscriptions</div>
+            <div class="cat-item" onclick="selectCat(this)"><div class="cat-emoji">🛋️</div>Household</div>
+            <div class="cat-item" onclick="selectCat(this)"><div class="cat-emoji">🎉</div>Events</div>
+            <div class="cat-item" onclick="selectCat(this)"><div class="cat-emoji">➕</div>Custom</div>
+          </div>
+
+          <div style="padding:0 16px 8px;"><label class="form-label">Split Method</label></div>
+          <div class="split-options">
+            <div class="split-opt selected" onclick="selectSplit(this)"><div class="split-icon">⚖️</div>Equal</div>
+            <div class="split-opt" onclick="selectSplit(this)"><div class="split-icon">%</div>Percent</div>
+            <div class="split-opt" onclick="selectSplit(this)"><div class="split-icon">✏️</div>Custom</div>
+          </div>
+
+          <div class="member-split-list">
+            <div class="member-split-row"><div class="member-av c1">M</div><div class="split-member-name">Maya (you)</div><div class="split-amount-badge">$11.25</div></div>
+            <div class="member-split-row"><div class="member-av c2">A</div><div class="split-member-name">Alex Chen</div><div class="split-amount-badge">$11.25</div></div>
+            <div class="member-split-row"><div class="member-av c3">S</div><div class="split-member-name">Sarah Jones</div><div class="split-amount-badge">$11.25</div></div>
+            <div class="member-split-row"><div class="member-av c4">D</div><div class="split-member-name">David Lee</div><div class="split-amount-badge">$11.25</div></div>
+          </div>
+
+          <div class="receipt-upload" onclick="goToScreen('screen-receipt')">
+            <div class="receipt-icon">📷</div>
+            <div>
+              <div class="receipt-text">Scan Receipt Instead</div>
+              <div class="receipt-sub">OCR auto-detects items &amp; splits — tap to try</div>
+            </div>
+            <div style="color:var(--green);font-size:18px;">›</div>
+          </div>
+
+          <div style="padding:0 16px 20px;">
+            <button class="btn-primary" onclick="goToScreen('screen-group');showToast('Expense added! Group members notified 📬')">Log Expense</button>
+          </div>
+        </div>
+
+        <!-- ============ SCREEN 6: AI ROOMMATE ============ -->
+        <div class="screen" id="screen-ai" style="background:var(--navy);">
+          <div class="ai-header">
+            <button class="back-btn" onclick="goToScreen('screen-home')" style="background:rgba(255,255,255,0.1);color:#fff;">‹</button>
+            <div class="ai-avatar-big">🤖</div>
+            <div class="ai-header-info">
+              <div class="ai-header-name">AI Roommate</div>
+              <div class="ai-header-status"><div class="ai-status-dot"></div>Online · Knows your finances</div>
+            </div>
+          </div>
+          <div class="chat-area" id="chatArea">
+
+            <!-- MSG GROUP 1: greeting (always shown) -->
+            <div class="chat-msg ai" id="aiMsg1">
+              <div class="chat-avatar-sm">🤖</div>
+              <div>
+                <div class="chat-bubble">Hey Maya! 👋 I've been analyzing Apartment 4B's spending. Want to hear what I found?</div>
+                <div class="chat-suggested-prompts">
+                  <div class="prompt-chip" onclick="sendPromptChip(this,'subscriptions')">Save on subscriptions?</div>
+                  <div class="prompt-chip" onclick="sendPromptChip(this,'owes')">Who owes the most?</div>
+                  <div class="prompt-chip" onclick="sendPromptChip(this,'trends')">Spending trends</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- MSG GROUP 2: subscription convo (hidden until step 2) -->
+            <div id="aiMsgGroup2" style="display:none;">
+              <div class="chat-msg user"><div class="chat-bubble">Save on subscriptions?</div></div>
+              <div class="chat-msg ai">
+                <div class="chat-avatar-sm">🤖</div>
+                <div>
+                  <div class="chat-bubble">I found something interesting! 🎵</div>
+                  <div class="suggestion-card">
+                    <div class="s-title">💡 Subscription Opportunity</div>
+                    <div class="s-body">You and Alex both pay for Spotify ($11.99/ea). Switching to a Duo plan ($14.99) would save your group <strong>$9/month</strong> — that's $108/year!</div>
+                    <button class="s-action" onclick="showToast('Suggestion saved! Sharing with group 📤')">View Suggestion →</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- MSG GROUP 3: who owes convo (hidden until step 3) -->
+            <div id="aiMsgGroup3" style="display:none;">
+              <div class="chat-msg user"><div class="chat-bubble">Who owes the most this month?</div></div>
+              <div class="chat-msg ai">
+                <div class="chat-avatar-sm">🤖</div>
+                <div>
+                  <div class="chat-bubble">Based on current balances in Apartment 4B:<br><br>🥇 Alex owes <strong>$98.50</strong><br>🥈 Sarah owes <strong>$47.25</strong><br>🥉 David owes <strong>$12.00</strong><br><br>You're owed the most — $142.50 total! 💪</div>
+                  <div style="margin-top:8px;">
+                    <button class="s-action" style="background:rgba(29,185,84,0.15);color:var(--green);border:none;border-radius:10px;padding:8px 14px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:700;cursor:pointer;" onclick="goToScreen('screen-settle')">Send reminder to Alex →</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- MSG GROUP 4: anomaly alert (hidden until step 4) -->
+            <div id="aiMsgGroup4" style="display:none;">
+              <div class="chat-msg ai">
+                <div class="chat-avatar-sm">🤖</div>
+                <div>
+                  <div class="chat-bubble" style="background:#fff8e6;color:#8a4800;border-radius:4px 18px 18px 18px;">⚠️ <strong>Anomaly detected!</strong> Your group spent 43% more on groceries this week vs your $62 monthly average.<br><br>Top driver: 3 Trader Joe's runs in 5 days. Hosting a party? 🎉</div>
+                  <div class="suggestion-card" style="margin-top:8px;">
+                    <div class="s-title" style="color:#e67e22;">📊 Spending Breakdown</div>
+                    <div class="s-body">
+                      <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border);font-size:12px;"><span>Groceries this week</span><span style="font-weight:700;color:var(--red);">$89.20</span></div>
+                      <div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px;"><span>Monthly avg / week</span><span style="font-weight:700;">$60.50</span></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Typing indicator -->
+            <div id="aiTyping" style="display:none;" class="chat-msg ai">
+              <div class="chat-avatar-sm">🤖</div>
+              <div class="chat-bubble" style="padding:14px 16px;">
+                <div style="display:flex;gap:5px;align-items:center;">
+                  <div style="width:7px;height:7px;border-radius:50%;background:var(--muted);animation:typingDot 1s infinite;"></div>
+                  <div style="width:7px;height:7px;border-radius:50%;background:var(--muted);animation:typingDot 1s 0.2s infinite;"></div>
+                  <div style="width:7px;height:7px;border-radius:50%;background:var(--muted);animation:typingDot 1s 0.4s infinite;"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="chat-input-bar">
+              <input class="chat-input" type="text" placeholder="Ask about your expenses..." id="chatInput">
+              <button class="chat-send" onclick="sendChat()">›</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ============ SCREEN 7: GAMIFICATION ============ -->
+        <div class="screen" id="screen-game">
+          <div class="game-hero">
+            <div style="height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 4px;">
+              <button class="back-btn" onclick="goToScreen('screen-home')" style="background:rgba(255,255,255,0.1);color:#fff;">‹</button>
+              <span style="color:rgba(255,255,255,0.7);font-size:14px;font-weight:600;">Goals & Streaks</span>
+              <div style="width:34px;"></div>
+            </div>
+            <div class="game-hero-title">Your Progress</div>
+            <div class="game-hero-sub">Keep logging to earn rewards</div>
+            <div class="streak-display">
+              <div class="streak-flame">🔥</div>
+              <div class="streak-info">
+                <div class="streak-count">12</div>
+                <div class="streak-label">Day logging streak</div>
+                <div class="streak-days">
+                  <div class="streak-day done">M</div>
+                  <div class="streak-day done">T</div>
+                  <div class="streak-day done">W</div>
+                  <div class="streak-day done">T</div>
+                  <div class="streak-day done">F</div>
+                  <div class="streak-day today">S</div>
+                  <div class="streak-day miss">S</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="section-header"><div class="section-title">Progress Rings</div><div class="section-link">Manage</div></div>
+          <div class="progress-rings">
+            <div class="ring-card">
+              <div class="ring-title">VACATION FUND</div>
+              <div class="ring-visual">
+                <svg class="ring-svg" width="54" height="54" viewBox="0 0 54 54">
+                  <circle cx="27" cy="27" r="22" fill="none" stroke="#e2eaf0" stroke-width="6"/>
+                  <circle cx="27" cy="27" r="22" fill="none" stroke="#1DB954" stroke-width="6" stroke-dasharray="138.2" stroke-dashoffset="48.4" transform="rotate(-90 27 27)" stroke-linecap="round"/>
+                </svg>
+                <div class="ring-stats">
+                  <div class="ring-pct">65%</div>
+                  <div class="ring-sublabel">$325 of $500</div>
+                </div>
+              </div>
+            </div>
+            <div class="ring-card">
+              <div class="ring-title">SPENDING LIMIT</div>
+              <div class="ring-visual">
+                <svg class="ring-svg" width="54" height="54" viewBox="0 0 54 54">
+                  <circle cx="27" cy="27" r="22" fill="none" stroke="#e2eaf0" stroke-width="6"/>
+                  <circle cx="27" cy="27" r="22" fill="none" stroke="#f39c12" stroke-width="6" stroke-dasharray="138.2" stroke-dashoffset="20.7" transform="rotate(-90 27 27)" stroke-linecap="round"/>
+                </svg>
+                <div class="ring-stats">
+                  <div class="ring-pct">85%</div>
+                  <div class="ring-sublabel">$425 of $500</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="section-header"><div class="section-title">Active Challenges</div><div class="section-link">Browse</div></div>
+          <div class="challenge-list">
+            <div class="challenge-card joined" id="challengeCard1">
+              <div class="challenge-icon">🏆</div>
+              <div class="challenge-info">
+                <div class="challenge-name">No Dining Out Week</div>
+                <div class="challenge-sub" id="challengeSub1">5 days left · 3/4 members joined</div>
+              </div>
+              <div class="challenge-reward" id="challengeReward1">🏅 +50 pts</div>
+            </div>
+            <div class="challenge-card" id="challengeCard2" onclick="joinChallenge(2)">
+              <div class="challenge-icon">💰</div>
+              <div class="challenge-info">
+                <div class="challenge-name">Save $200 Together</div>
+                <div class="challenge-sub" id="challengeSub2">Group savings goal · 2 weeks</div>
+              </div>
+              <div class="challenge-reward" id="challengeReward2">🌟 +100 pts</div>
+            </div>
+            <div class="challenge-card" id="challengeCard3" onclick="joinChallenge(3)">
+              <div class="challenge-icon">⚡</div>
+              <div class="challenge-info">
+                <div class="challenge-name">Log Every Day</div>
+                <div class="challenge-sub" id="challengeSub3">7-day perfect streak</div>
+              </div>
+              <div class="challenge-reward" id="challengeReward3">🔥 +75 pts</div>
+            </div>
+          </div>
+
+          <!-- Badge unlock overlay (shown after joining challenge) -->
+          <div id="badgeUnlockOverlay" style="display:none;position:absolute;inset:0;background:rgba(13,27,42,0.88);z-index:200;border-radius:48px;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:32px;">
+            <div style="font-size:64px;margin-bottom:4px;animation:popIn 0.4s cubic-bezier(0.34,1.56,0.64,1) forwards;">🏅</div>
+            <div style="font-family:'Fraunces',serif;font-size:24px;color:#fff;margin-bottom:8px;">Badge Unlocked!</div>
+            <div style="font-size:13px;color:rgba(255,255,255,0.6);line-height:1.6;margin-bottom:6px;">You joined <strong style="color:var(--green);">Save $200 Together</strong><br>+100 pts added to your score</div>
+            <div style="background:rgba(29,185,84,0.15);border:1px solid rgba(29,185,84,0.3);border-radius:14px;padding:14px 20px;margin:12px 0;width:100%;">
+              <div style="font-size:11px;color:rgba(255,255,255,0.5);margin-bottom:4px;">TOTAL POINTS</div>
+              <div style="font-family:'Fraunces',serif;font-size:36px;color:var(--green);">425</div>
+              <div style="font-size:11px;color:rgba(255,255,255,0.4);">+100 from this challenge</div>
+            </div>
+            <button onclick="closeBadgeOverlay()" style="background:var(--green);color:#fff;border:none;border-radius:14px;padding:12px 32px;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:700;cursor:pointer;margin-top:4px;">Keep Going! 🚀</button>
+          </div>
+
+          <div class="section-header"><div class="section-title">Your Badges</div></div>
+          <div class="badge-grid">
+            <div class="badge-item"><div class="badge-icon">🌟</div><div class="badge-name">Early Bird</div></div>
+            <div class="badge-item"><div class="badge-icon">🔥</div><div class="badge-name">10-Day Streak</div></div>
+            <div class="badge-item"><div class="badge-icon">🤝</div><div class="badge-name">Team Player</div></div>
+            <div class="badge-item"><div class="badge-icon locked">💎</div><div class="badge-name">Debt-Free</div></div>
+            <div class="badge-item"><div class="badge-icon locked">🏅</div><div class="badge-name">Saver Pro</div></div>
+            <div class="badge-item"><div class="badge-icon locked">🚀</div><div class="badge-name">30-Day Legend</div></div>
+            <div class="badge-item"><div class="badge-icon">📊</div><div class="badge-name">Analyzer</div></div>
+            <div class="badge-item"><div class="badge-icon locked">👑</div><div class="badge-name">Group King</div></div>
+          </div>
+
+          <div style="height:100px;"></div>
+          <div class="bottom-nav" style="position:absolute;">
+            <div class="nav-item" onclick="goToScreen('screen-home')"><div class="nav-icon">🏠</div>Home</div>
+            <div class="nav-item" onclick="goToScreen('screen-group')"><div class="nav-icon">👥</div>Groups</div>
+            <div class="nav-item" onclick="goToScreen('screen-add-expense')"><div class="nav-icon">➕</div>Add</div>
+            <div class="nav-item" onclick="goToScreen('screen-ai')"><div class="nav-icon">🤖</div>AI</div>
+            <div class="nav-item active"><div class="nav-icon">🏆</div>Goals</div>
+          </div>
+        </div>
+
+        <!-- ============ SCREEN 8: PREMIUM ============ -->
+        <div class="screen" id="screen-premium">
+          <div class="premium-hero">
+            <div style="height:44px;display:flex;align-items:center;gap:12px;padding:0 4px;">
+              <button class="back-btn" onclick="goToScreen('screen-home')" style="background:rgba(255,255,255,0.1);color:#fff;">‹</button>
+            </div>
+            <div class="premium-badge">⭐ Premium Plans</div>
+            <div class="premium-hero-title">Unlock the Full Power</div>
+            <div class="premium-hero-sub">AI insights, blockchain verification & more</div>
+          </div>
+
+          <div class="plan-cards">
+            <div class="plan-card" onclick="selectPlan(this)">
+              <div class="plan-name">Free Tier</div>
+              <div class="plan-price">$0<span>/month</span></div>
+              <div class="plan-features">
+                <div class="plan-feat"><span class="plan-feat-check">✓</span>Unlimited groups</div>
+                <div class="plan-feat"><span class="plan-feat-check">✓</span>Core expense splitting</div>
+                <div class="plan-feat"><span class="plan-feat-check">✓</span>Basic AI (5 msgs/day)</div>
+                <div class="plan-feat" style="color:var(--muted);"><span style="color:var(--muted);">✗</span>Advanced analytics</div>
+              </div>
+            </div>
+
+            <div class="plan-card popular" onclick="selectPlan(this)">
+              <div class="popular-badge">Most Popular</div>
+              <div class="plan-name">SplitStack Pro</div>
+              <div class="plan-price">$4.99<span>/month</span></div>
+              <div class="plan-features">
+                <div class="plan-feat"><span class="plan-feat-check">✓</span>Everything in Free</div>
+                <div class="plan-feat"><span class="plan-feat-check">✓</span>Unlimited AI chat</div>
+                <div class="plan-feat"><span class="plan-feat-check">✓</span>Advanced analytics</div>
+                <div class="plan-feat"><span class="plan-feat-check">✓</span>Custom categories</div>
+                <div class="plan-feat"><span class="plan-feat-check">✓</span>Priority support</div>
+              </div>
+              <div style="margin-top:14px;">
+                <button class="btn-primary" onclick="showToast('Subscribed to Pro! ⭐ Welcome to premium.');event.stopPropagation()">Subscribe — $4.99/mo</button>
+              </div>
+            </div>
+
+            <div class="plan-card" onclick="selectPlan(this)">
+              <div class="plan-name">SplitStack Team</div>
+              <div class="plan-price">$9.99<span>/month</span></div>
+              <div class="plan-features">
+                <div class="plan-feat"><span class="plan-feat-check">✓</span>Everything in Pro</div>
+                <div class="plan-feat"><span class="plan-feat-check">✓</span>Blockchain verification</div>
+                <div class="plan-feat"><span class="plan-feat-check">✓</span>Advanced admin controls</div>
+                <div class="plan-feat"><span class="plan-feat-check">✓</span>Deep group insights</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="blockchain-panel">
+            <div class="blockchain-title">🔗 Blockchain Audit Trail</div>
+            <div class="blockchain-sub">Every transaction gets a cryptographic hash stored on Polygon Layer 2 — creating a tamper-proof record. Your raw data stays private; only hashes go on-chain.</div>
+            <div class="chain-tx-list">
+              <div class="chain-tx"><div class="chain-icon">✅</div><div class="chain-info"><div class="chain-name">Grocery Run · $87.50</div><div class="chain-hash">0x3f8a2...b91c</div></div><div class="chain-status">🔗</div></div>
+              <div class="chain-tx"><div class="chain-icon">✅</div><div class="chain-info"><div class="chain-name">Electric Bill · $124.00</div><div class="chain-hash">0x7d21e...44ff</div></div><div class="chain-status">🔗</div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ============ SCREEN 9: SETTLE UP ============ -->
+        <div class="screen" id="screen-settle">
+          <div class="settle-hero">
+            <div style="height:44px;display:flex;align-items:center;gap:12px;padding:0 4px;">
+              <button class="back-btn" onclick="goToScreen('screen-group')" style="background:rgba(255,255,255,0.1);color:#fff;">‹</button>
+              <span style="color:rgba(255,255,255,0.7);font-size:14px;font-weight:600;">Settle Up</span>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:center;gap:10px;margin-top:8px;">
+              <div class="member-av c2" style="width:40px;height:40px;font-size:16px;">A</div>
+              <div style="color:rgba(255,255,255,0.5);font-size:18px;">→</div>
+              <div class="member-av c1" style="width:40px;height:40px;font-size:16px;">M</div>
+            </div>
+            <div class="settle-amount-display">$98.50</div>
+            <div class="settle-to">Alex Chen → <strong>Maya Chen</strong></div>
+            <div><span class="tag" style="background:rgba(255,255,255,0.1);color:rgba(255,255,255,0.7);">Covers 3 expenses · Apartment 4B</span></div>
+          </div>
+
+          <div id="settleForm">
+            <div style="padding:16px 16px 8px;font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;">Pay Externally</div>
+            <div style="padding:0 16px 10px;font-size:12px;color:var(--muted);line-height:1.5;">SplitStack doesn't process payments. Choose an app below, send the money, then mark as settled.</div>
+            <div class="payment-methods">
+              <div class="payment-method selected" onclick="selectPayment(this)">
+                <div class="pm-icon">💸</div>
+                <div class="pm-info"><div class="pm-name">Venmo</div><div class="pm-sub">Open Venmo → send $98.50 → mark done</div></div>
+                <div class="pm-radio checked"></div>
+              </div>
+              <div class="payment-method" onclick="selectPayment(this)">
+                <div class="pm-icon">🅿️</div>
+                <div class="pm-info"><div class="pm-name">PayPal</div><div class="pm-sub">Open PayPal → send $98.50 → mark done</div></div>
+                <div class="pm-radio"></div>
+              </div>
+              <div class="payment-method" onclick="selectPayment(this)">
+                <div class="pm-icon">💚</div>
+                <div class="pm-info"><div class="pm-name">Cash App</div><div class="pm-sub">Open Cash App → send $98.50 → mark done</div></div>
+                <div class="pm-radio"></div>
+              </div>
+              <div class="payment-method" onclick="selectPayment(this)">
+                <div class="pm-icon">🏦</div>
+                <div class="pm-info"><div class="pm-name">Zelle</div><div class="pm-sub">Send via your bank app → mark done</div></div>
+                <div class="pm-radio"></div>
+              </div>
+              <div class="payment-method" onclick="selectPayment(this)">
+                <div class="pm-icon">💵</div>
+                <div class="pm-info"><div class="pm-name">Cash</div><div class="pm-sub">Paid in person — mark as settled</div></div>
+                <div class="pm-radio"></div>
+              </div>
+            </div>
+
+            <div style="margin:0 16px 16px;background:var(--white);border-radius:14px;padding:14px;box-shadow:var(--shadow);">
+              <div style="display:flex;justify-content:space-between;font-size:13px;padding:5px 0;border-bottom:1px solid var(--border);"><span style="color:var(--muted);">Amount to send</span><span style="font-weight:700;">$98.50</span></div>
+              <div style="display:flex;justify-content:space-between;font-size:13px;padding:5px 0;border-bottom:1px solid var(--border);"><span style="color:var(--muted);">SplitStack fee</span><span style="font-weight:700;color:var(--green);">$0.00</span></div>
+              <div style="display:flex;justify-content:space-between;font-size:14px;padding:7px 0;font-weight:800;color:var(--navy);"><span>Total</span><span>$98.50</span></div>
+            </div>
+
+            <div style="padding:0 16px 24px;display:flex;flex-direction:column;gap:8px;">
+              <button class="btn-primary" onclick="completeSettle()">✓ Mark as Settled</button>
+              <div style="text-align:center;font-size:11px;color:var(--muted);">Tap after sending money in your external app</div>
+            </div>
+          </div>
+
+          <div class="settle-success" id="settleSuccess">
+            <div class="success-circle">✓</div>
+            <div class="success-title">All Settled Up!</div>
+            <div class="success-sub">Payment to Alex Chen has been marked as settled.<br>Group balance updated for everyone.</div>
+            <div class="tx-id">Settled via Venmo · Oct 16, 2025</div>
+            <div style="margin-top:20px;display:flex;gap:10px;width:100%;">
+              <button class="btn-secondary" onclick="goToScreen('screen-group')" style="flex:1;">Back to Group</button>
+              <button class="btn-primary" onclick="goToScreen('screen-home')" style="flex:1;">Home</button>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- end phone-frame -->
+
+    </div><!-- end phone-frame-wrapper -->
+
+      <!-- FLOW NAV — right side -->
+      <div class="flow-nav">
+        <div class="flow-nav-title">Screen Navigation</div>
+        <div class="flow-steps-row" id="flowStepsRow"></div>
+        <div class="prev-next">
+          <button class="pn-btn" id="prevBtn" onclick="prevScreen()">← Prev</button>
+          <button class="pn-btn" id="nextBtn" onclick="nextScreen()">Next →</button>
+        </div>
+      </div>
+
+    </div><!-- end phone-area -->
+  </div><!-- end main-layout -->
+
+</div><!-- end prototype-shell -->
+
+<!-- TOAST -->
+<div id="toast" style="
+  position:fixed; bottom:40px; left:50%; transform:translateX(-50%) translateY(20px);
+  background:rgba(13,27,42,0.92); color:#fff; padding:12px 20px; border-radius:30px;
+  font-family:'DM Sans',sans-serif; font-size:13px; font-weight:600;
+  backdrop-filter:blur(12px); border:1px solid rgba(255,255,255,0.12);
+  opacity:0; transition:all 0.3s; z-index:9999; white-space:nowrap;
+  pointer-events:none;
+"></div>
+
+<script>
+  // ============================================================
+  // SCREEN MANAGEMENT
+  // ============================================================
+  const SCREENS = [
+    { id: 'screen-splash', name: 'Splash', icon: '💸' },
+    { id: 'screen-home', name: 'Home Hub', icon: '🏠' },
+    { id: 'screen-group', name: 'Group Detail', icon: '👥' },
+    { id: 'screen-add-expense', name: 'Add Expense', icon: '➕' },
+    { id: 'screen-receipt', name: 'Receipt Scanner', icon: '🧾' },
+    { id: 'screen-ai', name: 'AI Chat', icon: '🤖' },
+    { id: 'screen-game', name: 'Gamification', icon: '🏆' },
+    { id: 'screen-premium', name: 'Premium', icon: '⭐' },
+    { id: 'screen-settle', name: 'Settle Up', icon: '💳' },
+  ];
+
+  let storyDriving = false; // prevent goToScreen from resetting state during story step navigation
+  let currentScreenIndex = 0;
+  let visitedScreens = new Set([0]);
+
+  function goToScreen(screenId) {
+    const idx = SCREENS.findIndex(s => s.id === screenId);
+    if (idx === -1) return;
+    document.querySelectorAll('.screen').forEach(s => {
+      s.classList.remove('active');
+      s.style.display = 'none';
+    });
+    const el = document.getElementById(screenId);
+    if (el) {
+      el.style.display = 'block';
+      setTimeout(() => el.classList.add('active'), 10);
+    }
+    currentScreenIndex = idx;
+    visitedScreens.add(idx);
+    updateFlowNav();
+    updateStoryPanel();
+    // Scroll phone to top
+    if (el) el.scrollTop = 0;
+    // Reset AI chat state on direct navigation (story steps override this themselves)
+    if (screenId === 'screen-ai' && !storyDriving) {
+      setTimeout(() => setAiState(1), 20);
+    }
+    // Reset receipt scanner state
+    if (screenId === 'screen-receipt') {
+      scanState = 0;
+      const btn = document.getElementById('scanBtn');
+      if (btn) { btn.disabled = false; btn.textContent = '📷 Scan Receipt'; }
+      const rp = document.getElementById('receiptPreview');
+      if (rp) rp.style.display = 'block';
+      const op = document.getElementById('ocrProcessing');
+      if (op) op.classList.remove('show');
+      const or2 = document.getElementById('ocrResults');
+      if (or2) or2.classList.remove('show');
+      const ph = document.getElementById('preScanHint');
+      if (ph) ph.style.display = 'block';
+      // Exit edit mode and re-render items
+      editMode = false;
+      const editBtn = document.getElementById('editModeBtn');
+      if (editBtn) { editBtn.textContent = '✏️ Edit'; editBtn.style.color = ''; editBtn.style.fontWeight = ''; }
+      const addRow = document.getElementById('addItemRow');
+      if (addRow) addRow.style.display = 'none';
+      renderReceiptItems();
+    }
+    // Reset settle state
+    if (screenId === 'screen-settle') {
+      const sf = document.getElementById('settleForm');
+      if (sf) sf.style.display = 'block';
+      const ss = document.getElementById('settleSuccess');
+      if (ss) ss.classList.remove('show');
+    }
+  }
+
+  function prevScreen() {
+    if (currentScreenIndex > 0) {
+      goToScreen(SCREENS[currentScreenIndex - 1].id);
+    }
+  }
+  function nextScreen() {
+    if (currentScreenIndex < SCREENS.length - 1) {
+      goToScreen(SCREENS[currentScreenIndex + 1].id);
+    }
+  }
+
+  function updateFlowNav() {
+    const row = document.getElementById('flowStepsRow');
+    row.innerHTML = '';
+    SCREENS.forEach((s, i) => {
+      const btn = document.createElement('button');
+      btn.className = 'flow-step-btn' + (i === currentScreenIndex ? ' current' : '');
+      btn.textContent = s.icon + ' ' + s.name;
+      btn.onclick = () => goToScreen(s.id);
+      row.appendChild(btn);
+    });
+    document.getElementById('prevBtn').disabled = currentScreenIndex === 0;
+    document.getElementById('nextBtn').disabled = currentScreenIndex === SCREENS.length - 1;
+  }
+
+  // ============================================================
+  // SCENARIOS
+  // ============================================================
+  const SCENARIOS = [
+    {
+      title: "🏠 College Roommates",
+      subtitle: "Maya splits rent, groceries & utilities with 3 roommates in Apartment 4B. Follow her Monday morning routine.",
+      persona: { name: "👩‍🎓 Maya Chen, 21", quote: '"I hate manual entry. I just want to snap a photo and have everything split automatically."' },
+      steps: [
+        { screen: 'screen-splash', name: 'App Opens', desc: 'Maya launches SplitStack for the first time' },
+        { screen: 'screen-home', name: 'Home Hub', desc: 'She sees her balance: owed $142, owes $38' },
+        { screen: 'screen-group', name: 'Apartment 4B', desc: 'She checks the group and taps the scanner prompt' },
+        { screen: 'screen-receipt', name: 'Scan Receipt', desc: 'Snaps Trader Joe\'s receipt — OCR reads every item' },
+        { screen: 'screen-add-expense', name: 'Manual Add', desc: 'For quick entries she uses the manual form too' },
+        { screen: 'screen-settle', name: 'Settle with Alex', desc: 'Sends $98.50 via Venmo and marks as settled' },
+      ]
+    },
+    {
+      title: "✈️ Group Travel",
+      subtitle: "5 friends planning Spring Break 2026. Track deposits, hotels, and shared activities without spreadsheet chaos.",
+      persona: { name: "🌴 Jordan Kim, 23", quote: '"Organizing a group trip budget with 5 people is a logistical nightmare. SplitStack handles it all."' },
+      steps: [
+        { screen: 'screen-home', name: 'View Trips', desc: 'Jordan checks the Spring Break group' },
+        { screen: 'screen-group', name: 'Trip Group', desc: 'Reviews hotel deposits and activity costs' },
+        { screen: 'screen-receipt', name: 'Scan Restaurant Bill', desc: 'Snaps the dinner receipt — items auto-detected' },
+        { screen: 'screen-add-expense', name: 'Log Hotel', desc: 'Adds hotel deposit split 5 ways manually' },
+        { screen: 'screen-ai', name: 'Ask AI', desc: 'AI suggests combining car rental costs' },
+        { screen: 'screen-settle', name: 'Final Settlement', desc: 'Trip\'s over — settle up via Cash App' },
+      ]
+    },
+    {
+      title: "🧾 Receipt Scanning",
+      subtitle: "Maya just got back from Trader Joe's. She snaps the receipt and SplitStack detects all 7 items instantly.",
+      persona: { name: "🛒 Maya Chen, 21", quote: '"Zero typing. I scan the receipt, confirm the items, and the split is done before I put my bag down."' },
+      steps: [
+        { screen: 'screen-group', name: 'Group Detail', desc: 'Maya taps the scan receipt prompt in the group' },
+        { screen: 'screen-receipt', name: 'Camera Opens', desc: 'Viewfinder appears — Maya aims at the receipt' },
+        { screen: 'screen-receipt', name: 'OCR Processes', desc: 'AI reads 7 line items from Trader Joe\'s receipt' },
+        { screen: 'screen-receipt', name: 'Auto Split', desc: 'Items split equally — or assign per person' },
+        { screen: 'screen-group', name: 'Logged!', desc: 'Expense appears in group with all items listed' },
+      ]
+    },
+    {
+      title: "🤖 AI Insights",
+      subtitle: "The AI Roommate proactively finds savings opportunities — like redundant subscriptions — before anyone notices.",
+      persona: { name: "💡 Sarah Jones, 24", quote: '"I had no idea we were paying for three separate streaming services that could be shared. The AI caught it immediately."' },
+      steps: [
+        { screen: 'screen-home', name: 'AI Alert Banner', desc: 'AI surfaces a subscription insight on home' },
+        { screen: 'screen-ai', name: 'Open AI Chat', desc: 'Sarah asks about group spending' },
+        { screen: 'screen-ai', name: 'Subscription Tip', desc: 'AI finds $14/mo savings on Spotify' },
+        { screen: 'screen-ai', name: 'Anomaly Alert', desc: 'AI flags unusual grocery spike this week' },
+        { screen: 'screen-premium', name: 'Upgrade for More', desc: 'Unlimited AI chat with Pro plan' },
+      ]
+    },
+    {
+      title: "🏆 Gamification",
+      subtitle: "David keeps his 12-day logging streak alive and joins a group savings challenge to earn badges.",
+      persona: { name: "🔥 David Lee, 20", quote: '"I\'m honestly competitive. The streak counter and badges make me actually want to log expenses every day."' },
+      steps: [
+        { screen: 'screen-home', name: 'See Streak', desc: 'David checks his 12-day streak on home' },
+        { screen: 'screen-game', name: 'Goals Screen', desc: 'Views progress rings and active challenges' },
+        { screen: 'screen-game', name: 'Join Challenge', desc: 'Joins the "No Dining Out Week" challenge' },
+        { screen: 'screen-receipt', name: 'Scan to Keep Streak', desc: 'Scans today\'s receipt — streak continues!' },
+        { screen: 'screen-home', name: 'Updated Home', desc: 'Streak updated to 13 days, badge unlocked!' },
+      ]
+    },
+  ];
+
+  let currentScenario = 0;
+  let activeStep = 0;
+
+  function loadScenario(idx) {
+    currentScenario = idx;
+    activeStep = 0;
+    document.querySelectorAll('.scenario-btn').forEach((b, i) => b.classList.toggle('active', i === idx));
+    // Reset challenge state
+    [1,2,3].forEach(id => {
+      if (id === 1) return; // card 1 always joined
+      challengeJoined[id] = false;
+      const card = document.getElementById('challengeCard' + id);
+      const sub = document.getElementById('challengeSub' + id);
+      if (card) { card.classList.remove('joined'); card.onclick = () => joinChallenge(id); }
+      if (id === 2 && sub) sub.textContent = 'Group savings goal · 2 weeks';
+      if (id === 3 && sub) sub.textContent = '7-day perfect streak';
+    });
+    document.getElementById('badgeUnlockOverlay').style.display = 'none';
+    renderStoryPanel();
+    goToScreen(SCENARIOS[idx].steps[0].screen);
+  }
+
+  function renderStoryPanel() {
+    const s = SCENARIOS[currentScenario];
+    document.getElementById('scenarioTitle').textContent = s.title;
+    document.getElementById('scenarioSubtitle').textContent = s.subtitle;
+    document.getElementById('personaName').textContent = s.persona.name;
+    document.getElementById('personaQuote').textContent = s.persona.quote;
+    const stepsEl = document.getElementById('storySteps');
+    stepsEl.innerHTML = '';
+    s.steps.forEach((step, i) => {
+      const div = document.createElement('div');
+      div.className = 'story-step' + (i === activeStep ? ' active' : '') + (i < activeStep ? ' visited' : '');
+      div.onclick = () => clickStoryStep(i);
+      div.innerHTML = `
+        <div class="step-dot">${i + 1}</div>
+        <div class="step-info">
+          <div class="step-name">${step.name}</div>
+          <div class="step-desc">${step.desc}</div>
+        </div>`;
+      stepsEl.appendChild(div);
+    });
+  }
+
+  function clickStoryStep(idx) {
+    const s = SCENARIOS[currentScenario];
+    activeStep = idx;
+    renderStoryPanel();
+    const step = s.steps[idx];
+    storyDriving = true;
+    goToScreen(step.screen);
+    storyDriving = false;
+    // Trigger sub-states based on scenario + step
+    if (currentScenario === 3) { // AI Insights scenario
+      if (idx === 1) setAiState(1);       // step 2: open AI — greeting only
+      else if (idx === 2) { setAiState(1); setTimeout(() => revealAiMessage(2), 300); } // step 3: subscription tip
+      else if (idx === 3) { setAiState(2); setTimeout(() => revealAiMessage(4), 300); } // step 4: anomaly alert
+    }
+    if (currentScenario === 4) { // Gamification scenario
+      if (idx === 2) { // step 3: join challenge — trigger it
+        setTimeout(() => joinChallenge(2), 400);
+      }
+    }
+  }
+
+  function updateStoryPanel() {
+    // Only auto-update the highlight if the current screen uniquely maps to one step.
+    // If multiple steps share the same screen (e.g. AI chat steps 2/3/4), leave
+    // activeStep alone so clickStoryStep's explicit assignment isn't overridden.
+    if (storyDriving) return;
+    const s = SCENARIOS[currentScenario];
+    const currentScreen = SCREENS[currentScreenIndex].id;
+    const matches = s.steps.reduce((acc, st, i) => { if (st.screen === currentScreen) acc.push(i); return acc; }, []);
+    if (matches.length === 1) {
+      activeStep = matches[0];
+      renderStoryPanel();
+    }
+    // If multiple steps share the screen, keep whatever activeStep was last set
+    // by clickStoryStep and just re-render to ensure highlight is correct.
+    else if (matches.length > 1 && matches.includes(activeStep)) {
+      renderStoryPanel();
+    }
+  }
+
+  // ============================================================
+  // INTERACTIONS
+  // ============================================================
+  function selectCat(el) {
+    document.querySelectorAll('.cat-item').forEach(c => c.classList.remove('selected'));
+    el.classList.add('selected');
+  }
+  function selectSplit(el) {
+    document.querySelectorAll('.split-opt').forEach(s => s.classList.remove('selected'));
+    el.classList.add('selected');
+  }
+  function selectPayment(el) {
+    document.querySelectorAll('.payment-method').forEach(p => {
+      p.classList.remove('selected');
+      p.querySelector('.pm-radio').classList.remove('checked');
+    });
+    el.classList.add('selected');
+    el.querySelector('.pm-radio').classList.add('checked');
+  }
+  function selectPlan(el) {
+    document.querySelectorAll('.plan-card').forEach(p => p.classList.remove('selected'));
+    el.classList.add('selected');
+  }
+  // ============================================================
+  // RECEIPT SCANNER — data-driven editable items
+  // ============================================================
+  let receiptItems = [
+    { id: 1, name: 'Almond Milk',     qty: 1, price: 3.99, included: true },
+    { id: 2, name: 'Sourdough Bread', qty: 1, price: 4.49, included: true },
+    { id: 3, name: 'Eggs 12ct',       qty: 1, price: 5.29, included: true },
+    { id: 4, name: 'Pasta',           qty: 2, price: 3.98, included: true },
+    { id: 5, name: 'Olive Oil',       qty: 1, price: 8.99, included: true },
+    { id: 6, name: 'Orange Juice',    qty: 1, price: 5.49, included: true },
+    { id: 7, name: 'Chicken Breast',  qty: 1, price: 12.99, included: true },
+  ];
+  let nextItemId = 8;
+  let editMode = false;
+  let currentSplitMode = 'equal';
+
+  function renderReceiptItems() {
+    const list = document.getElementById('receiptItemList');
+    if (!list) return;
+    list.innerHTML = '';
+    const active = receiptItems.filter(i => i.included !== false || editMode);
+    active.forEach(item => {
+      const row = document.createElement('div');
+      row.className = 'receipt-item-row' + (editMode ? ' editing' : '');
+      row.id = 'item-row-' + item.id;
+
+      if (editMode) {
+        row.innerHTML = `
+          <div class="ri-check ${item.included ? '' : 'unchecked'}" onclick="toggleItemById(${item.id})">${item.included ? '✓' : ''}</div>
+          <input class="ri-name-input" value="${item.name}" onchange="updateItemName(${item.id}, this.value)" onblur="flashSaved(${item.id})">
+          <input class="ri-price-input" value="$${item.price.toFixed(2)}" onchange="updateItemPrice(${item.id}, this.value)" onblur="flashSaved(${item.id})">
+          <button class="ri-delete-btn" onclick="deleteItem(${item.id})">×</button>`;
+      } else {
+        if (!item.included) return; // skip unchecked in view mode
+        row.innerHTML = `
+          <div class="ri-check" onclick="toggleItemById(${item.id})">✓</div>
+          <div class="ri-name">${item.name}</div>
+          <div class="ri-qty">×${item.qty}</div>
+          <div class="ri-price">$${item.price.toFixed(2)}</div>`;
+      }
+      list.appendChild(row);
+    });
+    recalcTotal();
+  }
+
+  function toggleItemById(id) {
+    const item = receiptItems.find(i => i.id === id);
+    if (!item) return;
+    item.included = !item.included;
+    renderReceiptItems();
+  }
+
+  function updateItemName(id, val) {
+    const item = receiptItems.find(i => i.id === id);
+    if (item) item.name = val.trim() || item.name;
+  }
+
+  function updateItemPrice(id, val) {
+    const item = receiptItems.find(i => i.id === id);
+    if (!item) return;
+    const num = parseFloat(val.replace(/[^0-9.]/g, ''));
+    if (!isNaN(num)) { item.price = num; recalcTotal(); }
+  }
+
+  function flashSaved(id) {
+    const row = document.getElementById('item-row-' + id);
+    if (row) { row.classList.remove('just-saved'); void row.offsetWidth; row.classList.add('just-saved'); }
+  }
+
+  function deleteItem(id) {
+    const row = document.getElementById('item-row-' + id);
+    if (row) {
+      row.classList.add('deleting');
+      setTimeout(() => {
+        receiptItems = receiptItems.filter(i => i.id !== id);
+        renderReceiptItems();
+        updateOcrCount();
+      }, 230);
+    }
+  }
+
+  function addReceiptItem() {
+    receiptItems.push({ id: nextItemId++, name: 'New Item', qty: 1, price: 0.00, included: true });
+    renderReceiptItems();
+    updateOcrCount();
+    // Focus the new name input
+    setTimeout(() => {
+      const inputs = document.querySelectorAll('.ri-name-input');
+      if (inputs.length) inputs[inputs.length - 1].focus(), inputs[inputs.length - 1].select();
+    }, 50);
+  }
+
+  function toggleEditMode() {
+    editMode = !editMode;
+    const btn = document.getElementById('editModeBtn');
+    const addRow = document.getElementById('addItemRow');
+    if (editMode) {
+      btn.textContent = '✅ Done';
+      btn.style.color = 'var(--green)';
+      btn.style.fontWeight = '700';
+      addRow.style.display = 'block';
+    } else {
+      btn.textContent = '✏️ Edit';
+      btn.style.color = '';
+      btn.style.fontWeight = '';
+      addRow.style.display = 'none';
+      updateOcrCount();
+      showToast('Items saved ✓');
+    }
+    renderReceiptItems();
+  }
+
+  function updateOcrCount() {
+    const active = receiptItems.filter(i => i.included !== false).length;
+    const el = document.getElementById('ocrItemCount');
+    if (el) el.textContent = `✅ ${active} item${active !== 1 ? 's' : ''} · Trader Joe's`;
+  }
+
+  function recalcTotal() {
+    const total = receiptItems
+      .filter(i => i.included !== false)
+      .reduce((sum, i) => sum + i.price, 0);
+    const el = document.getElementById('receiptTotalDisplay');
+    if (el) el.textContent = '$' + total.toFixed(2);
+    recalcSplit(total);
+  }
+
+  function recalcSplit(total) {
+    if (total === undefined) {
+      total = receiptItems.filter(i => i.included !== false).reduce((s, i) => s + i.price, 0);
+    }
+    const members = 4;
+    const each = total / members;
+    // Distribute rounding penny
+    const amounts = Array.from({length: members}, (_, i) => {
+      return i < members - 1 ? each : total - each * (members - 1);
+    });
+    for (let i = 0; i < members; i++) {
+      const amtEl = document.getElementById('assignAmt' + i);
+      const subEl = document.getElementById('assignItems' + i);
+      const count = receiptItems.filter(it => it.included !== false).length;
+      if (amtEl) amtEl.textContent = '$' + Math.abs(amounts[i]).toFixed(2);
+      if (subEl && currentSplitMode === 'equal') subEl.textContent = `All ${count} items · 25%`;
+    }
+  }
+
+  function setSplitMode(el) {
+    document.querySelectorAll('.split-mode-btn').forEach(b => b.classList.remove('active'));
+    el.classList.add('active');
+    currentSplitMode = el.textContent.trim().toLowerCase();
+    if (currentSplitMode === 'by item') {
+      const byItem = [
+        ['Chicken, Pasta, OJ', '$22.47'],
+        ['Bread, Olive Oil',   '$13.48'],
+        ['Eggs, Milk',         '$9.28'],
+        ['Pasta',              '$1.99'],
+      ];
+      byItem.forEach(([items, amt], i) => {
+        const sub = document.getElementById('assignItems' + i);
+        const amtEl = document.getElementById('assignAmt' + i);
+        if (sub) sub.textContent = items;
+        if (amtEl) amtEl.textContent = amt;
+      });
+    } else {
+      recalcSplit();
+    }
+  }
+
+  function confirmReceipt() {
+    if (editMode) { toggleEditMode(); return; }
+    const total = receiptItems.filter(i => i.included !== false).reduce((s, i) => s + i.price, 0);
+    goToScreen('screen-group');
+    showToast(`Receipt logged! $${total.toFixed(2)} split 4 ways 🧾`);
+  }
+
+  let scanState = 0;
+  function triggerScan() {
+    if (scanState !== 0) return;
+    scanState = 1;
+    const btn = document.getElementById('scanBtn');
+    btn.disabled = true;
+    btn.textContent = 'Scanning…';
+    document.getElementById('receiptPreview').style.display = 'none';
+    document.getElementById('preScanHint').style.display = 'none';
+    document.getElementById('ocrProcessing').classList.add('show');
+    document.getElementById('ocrResults').classList.remove('show');
+    setTimeout(() => {
+      document.getElementById('ocrProcessing').classList.remove('show');
+      document.getElementById('receiptPreview').style.display = 'block';
+      document.getElementById('ocrResults').classList.add('show');
+      btn.textContent = '📷 Scan Again';
+      btn.disabled = false;
+      scanState = 0;
+      editMode = false;
+      // Reset items to defaults
+      receiptItems = [
+        { id: 1, name: 'Almond Milk',     qty: 1, price: 3.99,  included: true },
+        { id: 2, name: 'Sourdough Bread', qty: 1, price: 4.49,  included: true },
+        { id: 3, name: 'Eggs 12ct',       qty: 1, price: 5.29,  included: true },
+        { id: 4, name: 'Pasta',           qty: 2, price: 3.98,  included: true },
+        { id: 5, name: 'Olive Oil',       qty: 1, price: 8.99,  included: true },
+        { id: 6, name: 'Orange Juice',    qty: 1, price: 5.49,  included: true },
+        { id: 7, name: 'Chicken Breast',  qty: 1, price: 12.99, included: true },
+      ];
+      nextItemId = 8;
+      renderReceiptItems();
+      updateOcrCount();
+      showToast('7 items detected from Trader Joe\'s 🧾');
+    }, 2000);
+  }
+
+  // ============================================================
+  // AI CHAT — sub-states & progressive reveal
+  // ============================================================
+  let aiChatState = 1; // which message groups are revealed (1 = only greeting)
+
+  function setAiState(level) {
+    // level 1: greeting only, 2: subscription, 3: owes, 4: anomaly
+    aiChatState = level;
+    document.getElementById('aiMsgGroup2').style.display = level >= 2 ? 'block' : 'none';
+    document.getElementById('aiMsgGroup3').style.display = level >= 3 ? 'block' : 'none';
+    document.getElementById('aiMsgGroup4').style.display = level >= 4 ? 'block' : 'none';
+    // Scroll chat to bottom
+    setTimeout(() => {
+      const ca = document.getElementById('chatArea');
+      if (ca) ca.scrollTop = ca.scrollHeight;
+    }, 50);
+  }
+
+  function revealAiMessage(level) {
+    document.getElementById('aiTyping').style.display = 'flex';
+    const ca = document.getElementById('chatArea');
+    if (ca) ca.scrollTop = ca.scrollHeight;
+    setTimeout(() => {
+      document.getElementById('aiTyping').style.display = 'none';
+      setAiState(level);
+    }, 1200);
+  }
+
+  function sendPromptChip(el, type) {
+    el.style.opacity = '0.5';
+    el.style.pointerEvents = 'none';
+    if (type === 'subscriptions') revealAiMessage(2);
+    else if (type === 'owes') revealAiMessage(3);
+    else if (type === 'trends') revealAiMessage(4);
+  }
+
+  function sendChat() {
+    const input = document.getElementById('chatInput');
+    const val = input.value.trim();
+    if (!val) return;
+    // Append user bubble
+    const ca = document.getElementById('chatArea');
+    const userDiv = document.createElement('div');
+    userDiv.className = 'chat-msg user';
+    userDiv.innerHTML = `<div class="chat-bubble">${val}</div>`;
+    ca.insertBefore(userDiv, document.getElementById('aiTyping'));
+    input.value = '';
+    // Show typing then respond
+    document.getElementById('aiTyping').style.display = 'flex';
+    ca.scrollTop = ca.scrollHeight;
+    setTimeout(() => {
+      document.getElementById('aiTyping').style.display = 'none';
+      const aiDiv = document.createElement('div');
+      aiDiv.className = 'chat-msg ai';
+      const replies = [
+        "Great question! Based on your group's patterns, I'd recommend setting a weekly grocery budget of $65 to stay on track. 📊",
+        "I can see that! Your group's total spending is $1,250 this month. The biggest category is utilities at 34%. 💡",
+        "Looking at trends, October is 12% higher than September. The main driver is dining out — 8 expenses vs 3 last month. 🍕",
+        "Your group is doing well overall! Only 2 unresolved balances outstanding right now. 🎉",
+      ];
+      const r = replies[Math.floor(Math.random() * replies.length)];
+      aiDiv.innerHTML = `<div class="chat-avatar-sm">🤖</div><div><div class="chat-bubble">${r}</div></div>`;
+      ca.insertBefore(aiDiv, document.getElementById('aiTyping'));
+      ca.scrollTop = ca.scrollHeight;
+    }, 1200);
+  }
+
+  // ============================================================
+  // GAMIFICATION — challenge joining
+  // ============================================================
+  const challengeJoined = { 1: true, 2: false, 3: false };
+
+  function joinChallenge(id) {
+    if (challengeJoined[id]) return;
+    challengeJoined[id] = true;
+    const card = document.getElementById('challengeCard' + id);
+    const sub = document.getElementById('challengeSub' + id);
+    card.classList.add('joined');
+    card.onclick = null;
+    sub.textContent = 'Joined! · You\'re in — let\'s go! 🎯';
+    if (id === 2) {
+      // Show badge unlock overlay
+      const overlay = document.getElementById('badgeUnlockOverlay');
+      overlay.style.display = 'flex';
+    } else {
+      showToast('Challenge joined! Keep up the streak 🔥');
+    }
+  }
+
+  function closeBadgeOverlay() {
+    document.getElementById('badgeUnlockOverlay').style.display = 'none';
+    // Unlock the saver pro badge visually
+    const badges = document.querySelectorAll('.badge-icon.locked');
+    if (badges.length > 0) {
+      badges[0].classList.remove('locked');
+      badges[0].style.animation = 'popIn 0.4s cubic-bezier(0.34,1.56,0.64,1)';
+    }
+  }
+
+  // ============================================================
+  // SETTLE
+  // ============================================================
+  function completeSettle() {
+    document.getElementById('settleForm').style.display = 'none';
+    document.getElementById('settleSuccess').classList.add('show');
+  }
+
+  // TOAST
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.style.opacity = '1';
+    t.style.transform = 'translateX(-50%) translateY(0)';
+    setTimeout(() => {
+      t.style.opacity = '0';
+      t.style.transform = 'translateX(-50%) translateY(20px)';
+    }, 2800);
+  }
+
+  // ============================================================
+  // PHONE SCALING — fit the 812px phone into available height
+  // ============================================================
+  function scalePhone() {
+    const frame = document.getElementById('phoneFrame');
+    if (!frame) return;
+    const area = frame.closest('.phone-area');
+    const wrapper = frame.closest('.phone-frame-wrapper');
+    if (!area) return;
+
+    const phoneNativeH = 812;
+    const phoneNativeW = 375;
+
+    // Available height = phone-area height (which is flex:1 in main-layout)
+    const availH = area.clientHeight - 8;
+    const scaleH = availH / phoneNativeH;
+    // Don't exceed native size
+    const scale = Math.min(scaleH, 1);
+
+    frame.style.transform = `scale(${scale})`;
+    frame.style.transformOrigin = 'top center';
+
+    // Set wrapper height so it only occupies scaled visual height
+    const scaledH = Math.round(phoneNativeH * scale);
+    const scaledW = Math.round(phoneNativeW * scale);
+    if (wrapper) {
+      wrapper.style.height = scaledH + 'px';
+      wrapper.style.width = scaledW + 'px';
+    }
+  }
+  window.addEventListener('resize', scalePhone);
+
+  // ============================================================
+  // INIT
+  // ============================================================
+  renderStoryPanel();
+  updateFlowNav();
+  renderReceiptItems();
+  goToScreen('screen-splash');
+  scalePhone();
+</script>
+</body>
+</html>
