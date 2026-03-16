@@ -49,7 +49,7 @@ npm run dev
 
 You should see:
 ```
-🚀 SplitStack API running at http://localhost:3001
+SplitStack API running at http://localhost:3001
 ```
 
 > Verify it works: open http://localhost:3001/api/health in your browser.
