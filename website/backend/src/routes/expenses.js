@@ -50,9 +50,12 @@ router.get('/', (req, res) => {
   const result = expenses.map((expense) => {
     const splits = db
       .prepare(`
-        SELECT es.*, m.name as member_name, m.initials
+        SELECT es.*, m.name as member_name, m.initials,
+               p.id as paid_by_member_id, p.name as paid_by_name, p.initials as paid_by_initials
         FROM expense_splits es
         JOIN members m ON m.id = es.member_id
+        JOIN expenses e ON e.id = es.expense_id
+        JOIN members p ON p.id = e.paid_by
         WHERE es.expense_id = ?
       `)
       .all(expense.id)
@@ -80,9 +83,12 @@ router.get('/:id', (req, res) => {
 
   const splits = db
     .prepare(`
-      SELECT es.*, m.name as member_name, m.initials
+      SELECT es.*, m.name as member_name, m.initials,
+             p.id as paid_by_member_id, p.name as paid_by_name, p.initials as paid_by_initials
       FROM expense_splits es
       JOIN members m ON m.id = es.member_id
+      JOIN expenses e ON e.id = es.expense_id
+      JOIN members p ON p.id = e.paid_by
       WHERE es.expense_id = ?
     `)
     .all(expense.id)
@@ -196,9 +202,12 @@ router.post('/', (req, res) => {
 
   const savedSplits = db
     .prepare(`
-      SELECT es.*, m.name as member_name, m.initials
+      SELECT es.*, m.name as member_name, m.initials,
+             p.id as paid_by_member_id, p.name as paid_by_name, p.initials as paid_by_initials
       FROM expense_splits es
       JOIN members m ON m.id = es.member_id
+      JOIN expenses e ON e.id = es.expense_id
+      JOIN members p ON p.id = e.paid_by
       WHERE es.expense_id = ?
     `)
     .all(expenseId)

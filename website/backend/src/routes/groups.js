@@ -18,9 +18,11 @@ router.get('/', (req, res) => {
       .all(group.id)
 
     const totalSpend = expenses.reduce((sum, e) => sum + e.amount, 0)
+    console.log(groups)
 
     return { ...group, members, totalSpend }
   })
+
 
   res.json(result)
 })
@@ -83,7 +85,7 @@ router.post('/', (req, res) => {
 // ── POST /api/groups/:id/members ─────────────────────────────────────────────
 // Adds a member to a group
 router.post('/:id/members', (req, res) => {
-  const { name } = req.body
+  const { name, user_id } = req.body
 
   if (!name || name.trim() === '') {
     return res.status(400).json({ error: 'Member name is required' })
@@ -106,8 +108,8 @@ router.post('/:id/members', (req, res) => {
     .join('')
 
   const result = db
-    .prepare('INSERT INTO members (group_id, name, initials) VALUES (?, ?, ?)')
-    .run(req.params.id, name.trim(), initials)
+    .prepare('INSERT INTO members (group_id, name, initials, user_id) VALUES (?, ?, ?, ?)')
+    .run(req.params.id, name.trim(), initials, user_id || null)
 
   const member = db
     .prepare('SELECT * FROM members WHERE id = ?')

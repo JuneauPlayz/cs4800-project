@@ -12,6 +12,14 @@ db.pragma('foreign_keys = ON')
 // ── Create tables ────────────────────────────────────────────────────────────
 
 db.exec(`
+  CREATE TABLE IF NOT EXISTS users (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    name          TEXT    NOT NULL,
+    email         TEXT    NOT NULL UNIQUE,
+    password_hash TEXT    NOT NULL,
+    created_at    TEXT    DEFAULT (datetime('now'))
+  );
+
   CREATE TABLE IF NOT EXISTS groups (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     name        TEXT    NOT NULL,
@@ -24,6 +32,7 @@ db.exec(`
     group_id    INTEGER NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
     name        TEXT    NOT NULL,
     initials    TEXT    NOT NULL,
+    user_id     INTEGER REFERENCES users(id) ON DELETE SET NULL,
     created_at  TEXT    DEFAULT (datetime('now'))
   );
 
@@ -45,6 +54,11 @@ db.exec(`
     amount_owed REAL    NOT NULL
   );
 `)
+
+// ── Migrate existing databases ───────────────────────────────────────────────
+try {
+  db.exec('ALTER TABLE members ADD COLUMN user_id INTEGER REFERENCES users(id) ON DELETE SET NULL')
+} catch { /* column already exists */ }
 
 console.log('Database ready at', DB_PATH)
 

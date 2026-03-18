@@ -1,14 +1,28 @@
 const BASE_URL = 'http://localhost:3001/api'
 
+function getToken() {
+  return localStorage.getItem('splitstack_token')
+}
+
 async function request(path, options = {}) {
+  const token = getToken()
   const res = await fetch(`${BASE_URL}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
     ...options,
   })
   const data = await res.json()
   if (!res.ok) throw new Error(data.error || 'Request failed')
   return data
 }
+
+// ── Auth ──────────────────────────────────────────────────────────────────────
+export const login = (email, password) =>
+  request('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) })
+export const register = (name, email, password) =>
+  request('/auth/register', { method: 'POST', body: JSON.stringify({ name, email, password }) })
 
 // ── Groups ────────────────────────────────────────────────────────────────────
 export const getGroups = () => request('/groups')
@@ -19,10 +33,10 @@ export const deleteGroup = (id) =>
   request(`/groups/${id}`, { method: 'DELETE' })
 
 // ── Members ───────────────────────────────────────────────────────────────────
-export const addMember = (groupId, name) =>
+export const addMember = (groupId, name, userId = null) =>
   request(`/groups/${groupId}/members`, {
     method: 'POST',
-    body: JSON.stringify({ name }),
+    body: JSON.stringify({ name, user_id: userId }),
   })
 export const removeMember = (groupId, memberId) =>
   request(`/groups/${groupId}/members/${memberId}`, { method: 'DELETE' })

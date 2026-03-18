@@ -50,6 +50,9 @@ function parseAmount(value) {
 }
 
 export default function App() {
+  const [currentUser, setCurrentUser] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('splitstack_user')) } catch { return null }
+  })
   const [activeScreen, setActiveScreen] = useState('dashboard')
   const [groups, setGroups] = useState([])
   const [activeGroupId, setActiveGroupId] = useState(null)
@@ -70,12 +73,16 @@ export default function App() {
   const [newGroupLocation, setNewGroupLocation] = useState('')
   const [showMemberModal, setShowMemberModal] = useState(false)
   const [newMemberName, setNewMemberName] = useState('')
+  const [isNewMemberMe, setIsNewMemberMe] = useState(false)
 
   // Scanner
   const [scannerStatus, setScannerStatus] = useState('idle')
   const [receiptMerchant, setReceiptMerchant] = useState('')
   const [receiptDate, setReceiptDate] = useState('')
   const [receiptItems, setReceiptItems] = useState([])
+
+  // Owed breakdown modal
+  const [showOwedModal, setShowOwedModal] = useState(false)
 
   // Settle + chat
   const [settleMethod, setSettleMethod] = useState('Venmo')
@@ -85,6 +92,19 @@ export default function App() {
   const [chatInput, setChatInput] = useState('')
   const [toast, setToast] = useState('')
   const toastRef = useRef(null)
+
+  // ── Auth ──────────────────────────────────────────────────────────────────────
+  function handleLogin(user, token) {
+    localStorage.setItem('splitstack_user', JSON.stringify(user))
+    localStorage.setItem('splitstack_token', token)
+    setCurrentUser(user)
+  }
+
+  function handleLogout() {
+    localStorage.removeItem('splitstack_user')
+    localStorage.removeItem('splitstack_token')
+    setCurrentUser(null)
+  }
 
   // ── Load data ─────────────────────────────────────────────────────────────────
   useEffect(() => { loadGroups() }, [])
@@ -148,11 +168,12 @@ export default function App() {
     if (!newMemberName.trim()) return showToast('Name is required')
     if (!activeGroupId) return showToast('Select a group first')
     try {
-      const member = await api.addMember(activeGroupId, newMemberName)
+      const member = await api.addMember(activeGroupId, newMemberName, isNewMemberMe ? currentUser?.id : null)
       setGroups((prev) =>
         prev.map((g) => g.id === activeGroupId ? { ...g, members: [...g.members, member] } : g)
       )
       setNewMemberName('')
+      setIsNewMemberMe(false)
       setShowMemberModal(false)
       showToast(`${member.name} added`)
     } catch (err) { showToast(err.message) }
@@ -174,13 +195,15 @@ export default function App() {
     if (parseAmount(amount) <= 0) return showToast('Enter a valid amount')
     if (!description.trim()) return showToast('Enter a description')
     if (!paidBy) return showToast('Select who paid')
+    const resolvedPaidBy = parseInt(paidBy)
+    if (!resolvedPaidBy) return showToast('Select who paid')
     try {
       const expense = await api.createExpense({
         group_id: activeGroupId,
         description,
         amount: parseAmount(amount),
         category,
-        paid_by: parseInt(paidBy),
+        paid_by: resolvedPaidBy,
         split_method: splitMethod,
       })
       setExpenses((prev) => [expense, ...prev])
@@ -255,6 +278,8 @@ export default function App() {
     goals: 'Goals and Progress', settle: 'Settle Up',
   }[activeScreen]
 
+  if (!currentUser) return <LoginScreen onLogin={handleLogin} />
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -289,9 +314,10 @@ export default function App() {
           <div className="topbar-actions">
             <button className="primary-button" type="button" onClick={() => setShowGroupModal(true)}>+ New Group</button>
             <div className="profile-chip">
-              <span className="profile-avatar">SS</span>
-              <span>SplitStack</span>
+              <span className="profile-avatar">{currentUser.name.slice(0, 2).toUpperCase()}</span>
+              <span>{currentUser.name}</span>
             </div>
+            <button className="secondary-button" type="button" onClick={handleLogout}>Log out</button>
           </div>
         </header>
 
@@ -299,9 +325,9 @@ export default function App() {
           {loading
             ? <div className="empty-state"><strong>Connecting to backend…</strong><p>Make sure the backend is running on port 3001.</p></div>
             : <>
-              {activeScreen === 'dashboard' && <DashboardScreen dashboardOwe={dashboardOwe} dashboardOwed={dashboardOwed} groups={groups} activities={expenses.slice(0, 5)} onOpenGroup={(id) => { setActiveGroupId(id); setActiveScreen('groups') }} onOpenScanner={() => setActiveScreen('scanner')} onOpenExpense={() => setActiveScreen('addexpense')} onOpenSettle={() => setActiveScreen('settle')} onNewGroup={() => setShowGroupModal(true)} />}
-              {activeScreen === 'groups' && <GroupsScreen groups={groups} activeGroup={activeGroup} expenses={expenses} balances={balances} onSelectGroup={(id) => setActiveGroupId(id)} onOpenScanner={() => setActiveScreen('scanner')} onOpenSettle={() => setActiveScreen('settle')} onAddMember={() => setShowMemberModal(true)} onRemoveMember={handleRemoveMember} onDeleteExpense={handleDeleteExpense} onDeleteGroup={handleDeleteGroup} />}
-              {activeScreen === 'addexpense' && <AddExpenseScreen amount={amount} description={description} category={category} categories={categories} paidBy={paidBy} splitMethod={splitMethod} activeGroup={activeGroup} expenseSplit={expenseSplit} onAmountChange={setAmount} onDescriptionChange={setDescription} onCategoryChange={setCategory} onPaidByChange={setPaidBy} onSplitMethodChange={setSplitMethod} onOpenScanner={() => setActiveScreen('scanner')} onSaveExpense={handleSaveExpense} />}
+              {activeScreen === 'dashboard' && <DashboardScreen dashboardOwe={dashboardOwe} dashboardOwed={dashboardOwed} balances={balances} groups={groups} activities={expenses.slice(0, 5)} onOpenGroup={(id) => { setActiveGroupId(id); setActiveScreen('groups') }} onOpenScanner={() => setActiveScreen('scanner')} onOpenExpense={() => setActiveScreen('addexpense')} onOpenSettle={() => setActiveScreen('settle')} onNewGroup={() => setShowGroupModal(true)} onShowOwed={() => setShowOwedModal(true)} />}
+              {activeScreen === 'groups' && <GroupsScreen groups={groups} activeGroup={activeGroup} expenses={expenses} balances={balances} currentUser={currentUser} onSelectGroup={(id) => setActiveGroupId(id)} onOpenScanner={() => setActiveScreen('scanner')} onOpenSettle={() => setActiveScreen('settle')} onAddMember={() => setShowMemberModal(true)} onRemoveMember={handleRemoveMember} onDeleteExpense={handleDeleteExpense} onDeleteGroup={handleDeleteGroup} />}
+              {activeScreen === 'addexpense' && <AddExpenseScreen amount={amount} description={description} category={category} categories={categories} paidBy={paidBy} splitMethod={splitMethod} activeGroup={activeGroup} expenseSplit={expenseSplit} currentUser={currentUser} onAmountChange={setAmount} onDescriptionChange={setDescription} onCategoryChange={setCategory} onPaidByChange={setPaidBy} onSplitMethodChange={setSplitMethod} onOpenScanner={() => setActiveScreen('scanner')} onSaveExpense={handleSaveExpense} />}
               {activeScreen === 'scanner' && <ReceiptScannerScreen activeGroup={activeGroup} scannerStatus={scannerStatus} merchant={receiptMerchant} date={receiptDate} items={receiptItems} total={receiptItems.reduce((s, i) => i.included ? s + i.price : s, 0)} split={splitEvenly(receiptItems.reduce((s, i) => i.included ? s + i.price : s, 0), activeGroup.members.length)} onScan={startReceiptScan} onReset={() => { setScannerStatus('idle'); setReceiptItems([]); showToast('Scanner reset.') }} onToggleItem={(id) => setReceiptItems((items) => items.map((i) => i.id === id ? { ...i, included: !i.included } : i))} onUpdateItem={(id, field, val) => setReceiptItems((items) => items.map((i) => i.id === id ? { ...i, [field]: field === 'price' ? parseFloat(val) || 0 : val } : i))} onApply={applyReceiptToExpense} />}
               {activeScreen === 'aichat' && <AiChatScreen messages={chatMessages} chatInput={chatInput} onInputChange={setChatInput} onSend={() => addChatMessage(chatInput)} onQuickReply={addChatMessage} />}
               {activeScreen === 'subscriptions' && <SubscriptionsScreen />}
@@ -336,6 +362,34 @@ export default function App() {
         </div>
       )}
 
+      {showOwedModal && (
+        <div className="modal-backdrop" onClick={() => setShowOwedModal(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h3>Who is owed money</h3>
+            <p style={{ marginBottom: 12, color: 'var(--text-muted, #888)', fontSize: '0.9rem' }}>
+              Members with a positive balance have paid more than their share.
+            </p>
+            {balances.filter((b) => b.net_balance > 0).length ? (
+              <div className="split-list">
+                {balances.filter((b) => b.net_balance > 0).map((b) => (
+                  <div key={b.member_id} className="split-row">
+                    <div className="member-pill">
+                      <span className="mini-avatar">{b.initials}</span>{b.name}
+                    </div>
+                    <strong style={{ color: 'var(--mint-dark)' }}>+{formatCurrency(b.net_balance)}</strong>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <EmptyState title="No one is owed money" text="Add expenses to see balances here." />
+            )}
+            <div className="button-row" style={{ marginTop: 16 }}>
+              <button className="secondary-button" type="button" onClick={() => setShowOwedModal(false)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showMemberModal && (
         <div className="modal-backdrop" onClick={() => setShowMemberModal(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
@@ -345,10 +399,14 @@ export default function App() {
                 <span>Full name</span>
                 <input value={newMemberName} placeholder="e.g. Alex Johnson" onChange={(e) => setNewMemberName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAddMember()} autoFocus />
               </label>
+              <label className="field" style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <input type="checkbox" checked={isNewMemberMe} onChange={(e) => setIsNewMemberMe(e.target.checked)} />
+                <span>This is me ({currentUser.name})</span>
+              </label>
             </div>
             <div className="button-row">
               <button className="primary-button" type="button" onClick={handleAddMember}>Add member</button>
-              <button className="secondary-button" type="button" onClick={() => setShowMemberModal(false)}>Cancel</button>
+              <button className="secondary-button" type="button" onClick={() => { setShowMemberModal(false); setIsNewMemberMe(false) }}>Cancel</button>
             </div>
           </div>
         </div>
@@ -357,7 +415,7 @@ export default function App() {
   )
 }
 
-function DashboardScreen({ dashboardOwe, dashboardOwed, groups, activities, onOpenGroup, onOpenScanner, onOpenExpense, onOpenSettle, onNewGroup }) {
+function DashboardScreen({ dashboardOwe, dashboardOwed, balances, groups, activities, onOpenGroup, onOpenScanner, onOpenExpense, onOpenSettle, onNewGroup, onShowOwed }) {
   return (
     <div className="screen-stack">
       <section className="hero-card">
@@ -368,8 +426,10 @@ function DashboardScreen({ dashboardOwe, dashboardOwed, groups, activities, onOp
         </div>
         <div className="hero-stats">
           <StatCard label="You owe" value={formatCurrency(dashboardOwe)} tone="negative" />
-          <StatCard label="Owed to you" value={formatCurrency(dashboardOwed)} tone="positive" />
-          <StatCard label="Net balance" value={formatCurrency(dashboardOwed - dashboardOwe)} tone="neutral" />
+          <button type="button" onClick={onShowOwed} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }} title="Click to see who is owed money">
+            <StatCard label="Owed to you" value={formatCurrency(dashboardOwed)} tone="positive" />
+          </button>
+          <StatCard label="Net balance" value={formatCurrency(dashboardOwed - dashboardOwe)} tone="neutral" /> 
         </div>
       </section>
 
@@ -439,7 +499,7 @@ function DashboardScreen({ dashboardOwe, dashboardOwed, groups, activities, onOp
   )
 }
 
-function GroupsScreen({ groups, activeGroup, expenses, balances, onSelectGroup, onOpenScanner, onOpenSettle, onAddMember, onRemoveMember, onDeleteExpense, onDeleteGroup }) {
+function GroupsScreen({ groups, activeGroup, expenses, balances, currentUser, onSelectGroup, onOpenScanner, onOpenSettle, onAddMember, onRemoveMember, onDeleteExpense, onDeleteGroup }) {
   return (
     <div className="screen-stack">
       <section className="group-hero">
@@ -518,7 +578,7 @@ function GroupsScreen({ groups, activeGroup, expenses, balances, onSelectGroup, 
                 <div className="expense-icon mint">{e.category?.slice(0, 2).toUpperCase()}</div>
                 <div className="expense-copy">
                   <div className="expense-name">{e.description}</div>
-                  <div className="expense-detail">{e.category} · paid by {e.paidByMember?.name || '—'}</div>
+                  <div className="expense-detail">{e.category} · paid by {e.paidByMember?.user_id === currentUser?.id ? 'You' : (e.paidByMember?.name || '—')}</div>
                 </div>
                 <div className="expense-amount-box">
                   <div className="expense-total">{formatCurrency(e.amount)}</div>
@@ -533,7 +593,7 @@ function GroupsScreen({ groups, activeGroup, expenses, balances, onSelectGroup, 
   )
 }
 
-function AddExpenseScreen({ amount, description, category, categories, paidBy, splitMethod, activeGroup, expenseSplit, onAmountChange, onDescriptionChange, onCategoryChange, onPaidByChange, onSplitMethodChange, onOpenScanner, onSaveExpense }) {
+function AddExpenseScreen({ amount, description, category, categories, paidBy, splitMethod, activeGroup, expenseSplit, currentUser, onAmountChange, onDescriptionChange, onCategoryChange, onPaidByChange, onSplitMethodChange, onOpenScanner, onSaveExpense }) {
   return (
     <div className="screen-stack narrow-stack">
       <section className="panel">
@@ -544,7 +604,11 @@ function AddExpenseScreen({ amount, description, category, categories, paidBy, s
             <span>Paid by</span>
             <select value={paidBy} onChange={(e) => onPaidByChange(e.target.value)}>
               <option value="">Select member</option>
-              {activeGroup.members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+              {activeGroup.members.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}{m.user_id === currentUser?.id ? ' (You)' : ''}
+                </option>
+              ))}
             </select>
           </label>
           <label className="field full-width"><span>Description</span><input value={description} placeholder="e.g. Grocery run" onChange={(e) => onDescriptionChange(e.target.value)} /></label>
@@ -717,6 +781,84 @@ function StatCard({ label, value, tone }) {
   return (
     <div className={`stat-card ${tone}`}>
       <span>{label}</span><strong>{value}</strong>
+    </div>
+  )
+}
+
+function LoginScreen({ onLogin }) {
+  const [tab, setTab] = useState('login')
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  async function handleSubmit() {
+    setError('')
+    if (!email || !password) return setError('Email and password are required')
+    if (tab === 'register' && !name) return setError('Name is required')
+    setLoading(true)
+    try {
+      const result = tab === 'login'
+        ? await api.login(email, password)
+        : await api.register(name, email, password)
+      onLogin(result.user, result.token)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #2dd4bf, #6b7280)' }}>
+      <div style={{ width: '100%', maxWidth: 400, padding: '2rem', background: 'var(--surface, #1a1d27)', borderRadius: 16, boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}>
+        <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+            <div className="brand-mark" style={{ width: 36, height: 36, fontSize: '0.9rem' }}>SS</div>
+            <span className="brand-name" style={{ fontSize: '1.4rem' }}>SplitStack</span>
+          </div>
+          <p style={{ color: 'var(--text-muted, #888)', fontSize: '0.9rem', margin: 0 }}>Shared expense management</p>
+        </div>
+
+        <div style={{ display: 'flex', gap: 4, marginBottom: '1.5rem', background: 'var(--bg, #0f1117)', borderRadius: 8, padding: 4 }}>
+          {['login', 'register'].map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => { setTab(t); setError('') }}
+              style={{
+                flex: 1, padding: '0.5rem', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 600, fontSize: '0.9rem',
+                background: tab === t ? 'var(--surface, #1a1d27)' : 'transparent',
+                color: tab === t ? 'var(--text, #fff)' : 'var(--text-muted, #888)',
+              }}
+            >
+              {t === 'login' ? 'Log in' : 'Register'}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {tab === 'register' && (
+            <label className="field">
+              <span>Full name</span>
+              <input value={name} placeholder="Alex Johnson" onChange={(e) => setName(e.target.value)} autoFocus={tab === 'register'} />
+            </label>
+          )}
+          <label className="field">
+            <span>Email</span>
+            <input type="email" value={email} placeholder="you@example.com" onChange={(e) => setEmail(e.target.value)} autoFocus={tab === 'login'} onKeyDown={(e) => e.key === 'Enter' && handleSubmit()} />
+          </label>
+          <label className="field">
+            <span>Password</span>
+            <input type="password" value={password} placeholder="••••••••" onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSubmit()} />
+          </label>
+          {error && <p style={{ color: 'var(--coral, #f87171)', fontSize: '0.875rem', margin: 0 }}>{error}</p>}
+          <button className="primary-button" type="button" onClick={handleSubmit} disabled={loading} style={{ marginTop: 4 }}>
+            {loading ? 'Please wait…' : tab === 'login' ? 'Log in' : 'Create account'}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
