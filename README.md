@@ -95,3 +95,29 @@ Then open **http://localhost:5173/** in your browser.
 npx vite --port 3000        # frontend
 PORT=3002 npm run dev       # backend
 ```
+
+---
+
+## Demo Accounts
+
+You can sign in with one of the seeded accounts:
+
+- `jordan@splitstack.app` / `demo123`
+- `marcus@splitstack.app` / `demo123`
+- `priya@splitstack.app` / `demo123`
+- `sam@splitstack.app` / `demo123`
+
+You can also register a new account. If that email was invited to a group before registration, the invite will appear after sign in.
+
+---
+
+## Included Features
+
+- Real email/password registration and login
+- Persistent user-specific sessions in the frontend
+- Group creation, editing, and invite acceptance
+- Real member-aware expenses with equal / percent / custom split methods
+- Auto-created votes when an expense exceeds the group voting threshold
+- Group-specific challenges with contributions from accepted members
+- User-specific notifications and settings
+- AI assistant responses based on live app data
