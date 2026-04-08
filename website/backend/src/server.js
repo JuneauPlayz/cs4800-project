@@ -19,6 +19,7 @@ import {
   getUserById,
   getVotes,
   leaveGroup,
+  deleteGroup,
   markNotificationRead,
   respondToInvite,
   respondToVote,
@@ -93,6 +94,13 @@ app.put('/api/groups/:id', (req, res) => {
   res.json({ group });
 });
 
+
+
+app.delete('/api/groups/:id', (req, res) => {
+  const result = deleteGroup(req.params.id, req.user.id);
+  if (!result?.ok) return res.status(400).json({ message: result?.message || 'Unable to delete this group.' });
+  res.json(result);
+});
 
 app.delete('/api/groups/:id/membership', (req, res) => {
   const result = leaveGroup(req.params.id, req.user.id);
