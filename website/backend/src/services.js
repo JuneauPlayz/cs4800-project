@@ -65,8 +65,8 @@ function replaceGroupMembers(groupId, memberNames = []) {
   return members;
 }
 
-export function getCurrentUser() {
-  return db.prepare('SELECT id, name, email, initials, avatar_color as avatarColor FROM users WHERE id = ?').get('u1');
+export function getCurrentUser(userId) {
+  return db.prepare('SELECT id, name, email, initials, avatar_color as avatarColor FROM users WHERE id = ?').get(userId);
 }
 
 export function getMembersByGroup(groupId) {
@@ -79,25 +79,41 @@ export function getMembersByGroup(groupId) {
   `).all(groupId);
 }
 
-export function getGroups() {
-  const groups = db.prepare('SELECT id, name, type, emoji, threshold, blockchain_enabled as blockchainEnabled, created_at as createdAt FROM groups_table ORDER BY created_at ASC').all();
+export function getGroups(userId) {
+  const groups = db.prepare(`
+    SELECT gt.id, gt.name, gt.type, gt.emoji, gt.threshold, gt.blockchain_enabled as blockchainEnabled, gt.created_at as createdAt
+    FROM groups_table gt
+    JOIN group_members gm ON gm.group_id = gt.id AND gm.user_id = ?
+    ORDER BY gt.created_at ASC
+  `).all(userId);
+  const pendingInviteStmt = db.prepare(`
+    SELECT id, invited_email as invitedEmail, created_at as createdAt
+    FROM group_invitations
+    WHERE group_id = ? AND status = 'pending'
+    ORDER BY created_at ASC
+  `);
   return groups.map((group) => ({
     ...group,
     blockchainEnabled: Boolean(group.blockchainEnabled),
-    members: getMembersByGroup(group.id)
+    members: getMembersByGroup(group.id),
+    pendingInvitations: pendingInviteStmt.all(group.id)
   }));
 }
 
-export function getExpenses() {
+export function getExpenses(userId) {
   const expenses = db.prepare(`
-    SELECT e.id, e.group_id as groupId, e.description, e.amount, e.category, e.paid_by as paidBy,
+    SELECT DISTINCT e.id, e.group_id as groupId, e.description, e.amount, e.category, e.paid_by as paidBy,
            e.split_method as splitMethod, e.expense_date as expenseDate, e.blockchain_enabled as blockchainEnabled,
-           e.merchant, e.receipt_url as receiptUrl, e.created_at as createdAt,
+           e.merchant, e.receipt_url as receiptUrl, e.reason, e.vote_id as voteId, e.created_at as createdAt,
            u.name as paidByName, u.initials as paidByInitials
     FROM expenses e
     JOIN users u ON u.id = e.paid_by
+    JOIN group_members gm ON gm.group_id = e.group_id AND gm.user_id = ?
+    WHERE e.vote_id IS NULL OR EXISTS (
+      SELECT 1 FROM votes v WHERE v.id = e.vote_id AND v.status = 'approved'
+    )
     ORDER BY e.expense_date DESC, e.created_at DESC
-  `).all();
+  `).all(userId);
 
   const splitStmt = db.prepare(`SELECT user_id as userId, amount FROM expense_splits WHERE expense_id = ?`);
   return expenses.map((expense) => ({
@@ -107,12 +123,13 @@ export function getExpenses() {
   }));
 }
 
-export function getVotes() {
+export function getVotes(userId) {
   const voteStmt = db.prepare(`
     SELECT v.id, v.group_id as groupId, v.requested_by as requestedBy, v.description, v.amount, v.category,
            v.reason, v.status, v.created_at as createdAt, u.name as requestedByName
     FROM votes v
     JOIN users u ON u.id = v.requested_by
+    JOIN group_members gm ON gm.group_id = v.group_id AND gm.user_id = ?
     ORDER BY CASE v.status WHEN 'pending' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END, v.created_at DESC
   `);
   const decisionStmt = db.prepare(`
@@ -122,15 +139,28 @@ export function getVotes() {
     WHERE d.vote_id = ?
     ORDER BY d.decided_at ASC
   `);
-  return voteStmt.all().map((vote) => ({
-    ...vote,
-    decisions: decisionStmt.all(vote.id)
-  }));
+  const memberCountStmt = db.prepare(`SELECT COUNT(*) as count FROM group_members WHERE group_id = ?`);
+  return voteStmt.all(userId).map((vote) => {
+    const decisions = decisionStmt.all(vote.id);
+    const memberCount = memberCountStmt.get(vote.groupId).count;
+    return { ...vote, decisions, memberCount };
+  });
 }
 
-export function calculateBalances() {
-  const users = db.prepare('SELECT id, name, initials, avatar_color as avatarColor FROM users').all();
-  const expenses = getExpenses();
+export function calculateBalances(userId) {
+  const expenses = getExpenses(userId);
+  // Only include users who appear in these expenses
+  const involvedUserIds = new Set([
+    ...expenses.map((e) => e.paidBy),
+    ...expenses.flatMap((e) => e.splits.map((s) => s.userId))
+  ]);
+  const users = involvedUserIds.size
+    ? db.prepare(`SELECT id, name, initials, avatar_color as avatarColor FROM users WHERE id IN (${[...involvedUserIds].map(() => '?').join(',')})`)
+        .all(...involvedUserIds)
+    : [];
+  const groupNames = Object.fromEntries(
+    db.prepare('SELECT id, name FROM groups_table').all().map((g) => [g.id, g.name])
+  );
   const summary = Object.fromEntries(users.map((user) => [user.id, { ...user, paid: 0, owed: 0, net: 0 }]));
 
   expenses.forEach((expense) => {
@@ -147,31 +177,55 @@ export function calculateBalances() {
     user.net = Number((user.paid - user.owed).toFixed(2));
   });
 
-  const currentUser = summary.u1;
-  const people = Object.values(summary)
-    .filter((user) => user.id !== 'u1')
-    .map((user) => ({
-      ...user,
-      direction: user.net >= 0 ? 'owed' : 'owes'
-    }))
-    .sort((a, b) => Math.abs(b.net) - Math.abs(a.net));
+  const owedToYouMap = {};
+  const youOweMap = {};
 
-  const totalOwed = Number(Object.values(summary).filter((user) => user.net > 0).reduce((sum, user) => sum + user.net, 0).toFixed(2));
-  const totalOwe = Number(Math.abs(Object.values(summary).filter((user) => user.net < 0).reduce((sum, user) => sum + user.net, 0)).toFixed(2));
+  expenses.forEach((expense) => {
+    expense.splits.forEach((split) => {
+      if (split.userId === expense.paidBy) return;
+      if (expense.paidBy === userId && split.userId !== userId && summary[split.userId]) {
+        if (!owedToYouMap[split.userId]) owedToYouMap[split.userId] = { ...summary[split.userId], amount: 0, groups: [] };
+        owedToYouMap[split.userId].amount += split.amount;
+        if (!owedToYouMap[split.userId].groups.find((g) => g.id === expense.groupId)) {
+          owedToYouMap[split.userId].groups.push({ id: expense.groupId, name: groupNames[expense.groupId] || expense.groupId });
+        }
+      }
+      if (split.userId === userId && expense.paidBy !== userId && summary[expense.paidBy]) {
+        if (!youOweMap[expense.paidBy]) youOweMap[expense.paidBy] = { ...summary[expense.paidBy], amount: 0, groups: [] };
+        youOweMap[expense.paidBy].amount += split.amount;
+        if (!youOweMap[expense.paidBy].groups.find((g) => g.id === expense.groupId)) {
+          youOweMap[expense.paidBy].groups.push({ id: expense.groupId, name: groupNames[expense.groupId] || expense.groupId });
+        }
+      }
+    });
+  });
+
+  const owedToYou = Object.values(owedToYouMap).map((p) => ({ ...p, amount: Number(p.amount.toFixed(2)) })).sort((a, b) => b.amount - a.amount);
+  const youOwe = Object.values(youOweMap).map((p) => ({ ...p, amount: Number(p.amount.toFixed(2)) })).sort((a, b) => b.amount - a.amount);
+  const totalOwedToYou = Number(owedToYou.reduce((sum, p) => sum + p.amount, 0).toFixed(2));
+  const totalYouOwe = Number(youOwe.reduce((sum, p) => sum + p.amount, 0).toFixed(2));
+
+  const currentUser = summary[userId] ?? { paid: 0, owed: 0, net: 0 };
+  const people = Object.values(summary)
+    .filter((user) => user.id !== userId)
+    .map((user) => ({ ...user, direction: user.net >= 0 ? 'owed' : 'owes' }))
+    .sort((a, b) => Math.abs(b.net) - Math.abs(a.net));
 
   return {
     byMember: summary,
     currentUser,
     net: Number((currentUser.paid - currentUser.owed).toFixed(2)),
-    totalOwed,
-    totalOwe,
+    totalOwedToYou,
+    totalYouOwe,
+    owedToYou,
+    youOwe,
     settleCount: people.filter((person) => person.net !== 0).length,
     people
   };
 }
 
-export function getAnalytics() {
-  const expenses = getExpenses();
+export function getAnalytics(userId) {
+  const expenses = getExpenses(userId);
   const monthTotal = Number(expenses.reduce((sum, expense) => sum + expense.amount, 0).toFixed(2));
   const byCategory = Object.values(expenses.reduce((acc, expense) => {
     acc[expense.category] ??= { category: expense.category, total: 0 };
@@ -179,7 +233,7 @@ export function getAnalytics() {
     return acc;
   }, {})).map((item) => ({ ...item, total: Number(item.total.toFixed(2)) })).sort((a, b) => b.total - a.total);
 
-  const byGroup = getGroups().map((group) => ({
+  const byGroup = getGroups(userId).map((group) => ({
     id: group.id,
     name: group.name,
     total: Number(expenses.filter((expense) => expense.groupId === group.id).reduce((sum, expense) => sum + expense.amount, 0).toFixed(2))
@@ -217,8 +271,8 @@ export function getNotifications() {
     .map((notification) => ({ ...notification, unread: Boolean(notification.unread) }));
 }
 
-export function getSettings() {
-  return db.prepare('SELECT user_id as userId, email_votes as emailVotes, email_balance as emailBalance, push_settlements as pushSettlements, ai_proactive as aiProactive FROM user_settings WHERE user_id = ?').get('u1');
+export function getSettings(userId) {
+  return db.prepare('SELECT user_id as userId, email_votes as emailVotes, email_balance as emailBalance, push_settlements as pushSettlements, ai_proactive as aiProactive FROM user_settings WHERE user_id = ?').get(userId);
 }
 
 export function upsertSettings(nextSettings) {
@@ -226,24 +280,24 @@ export function upsertSettings(nextSettings) {
     INSERT INTO user_settings (user_id, email_votes, email_balance, push_settlements, ai_proactive)
     VALUES (@userId, @emailVotes, @emailBalance, @pushSettlements, @aiProactive)
     ON CONFLICT(user_id) DO UPDATE SET
-      email_votes = excluded.emailVotes,
-      email_balance = excluded.emailBalance,
-      push_settlements = excluded.pushSettlements,
-      ai_proactive = excluded.aiProactive
+      email_votes = excluded.email_votes,
+      email_balance = excluded.email_balance,
+      push_settlements = excluded.push_settlements,
+      ai_proactive = excluded.ai_proactive
   `).run(nextSettings);
-  return getSettings();
+  return getSettings(nextSettings.userId);
 }
 
-export function createGroup(payload) {
+export function createGroup(payload, creatorId) {
   const id = `g${Date.now()}`;
   const createdAt = new Date().toISOString().slice(0, 10);
-  db.prepare(`INSERT INTO groups_table (id, name, type, emoji, threshold, blockchain_enabled, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`) 
+  db.prepare(`INSERT INTO groups_table (id, name, type, emoji, threshold, blockchain_enabled, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`)
     .run(id, payload.name, payload.type ?? 'custom', payload.emoji ?? '👥', Number(payload.threshold ?? 0), 0, createdAt);
 
-  const memberNames = normalizeMemberNames(payload.memberNames);
-  replaceGroupMembers(id, memberNames.length ? memberNames : ['Jordan Lee']);
+  // Always add creator as owner only; others join via invitation acceptance
+  db.prepare('INSERT OR REPLACE INTO group_members (group_id, user_id, role) VALUES (?, ?, ?)').run(id, creatorId, 'Owner');
 
-  return getGroups().find((group) => group.id === id);
+  return getGroups(creatorId).find((group) => group.id === id);
 }
 
 export function updateGroup(groupId, payload) {
@@ -258,12 +312,19 @@ export function updateGroup(groupId, payload) {
   db.prepare('UPDATE groups_table SET name = ?, type = ?, emoji = ?, threshold = ? WHERE id = ?')
     .run(nextName, nextType, nextEmoji, nextThreshold, groupId);
 
-  if (payload.memberNames) {
-    db.prepare('DELETE FROM group_members WHERE group_id = ?').run(groupId);
-    replaceGroupMembers(groupId, payload.memberNames);
-  }
+  // Return the group as visible to the first member (owner)
+  const owner = db.prepare('SELECT user_id FROM group_members WHERE group_id = ? ORDER BY CASE role WHEN \'Owner\' THEN 0 ELSE 1 END LIMIT 1').get(groupId);
+  return getGroups(owner?.user_id ?? groupId).find((group) => group.id === groupId) ?? null;
+}
 
-  return getGroups().find((group) => group.id === groupId);
+export function leaveGroup(groupId, userId) {
+  const membership = db.prepare('SELECT role FROM group_members WHERE group_id = ? AND user_id = ?').get(groupId, userId);
+  if (!membership) throw new Error('You are not a member of this group.');
+
+  db.prepare('DELETE FROM group_members WHERE group_id = ? AND user_id = ?').run(groupId, userId);
+  db.prepare('DELETE FROM group_invitations WHERE group_id = ? AND invited_user_id = ?').run(groupId, userId);
+
+  return { left: true };
 }
 
 export function createExpense(payload) {
@@ -272,9 +333,18 @@ export function createExpense(payload) {
   const expenseDate = payload.expenseDate ?? createdAt.slice(0, 10);
   const groupMembers = getMembersByGroup(payload.groupId);
   const memberIds = groupMembers.map((member) => member.id);
+  // Determine if this expense needs a vote before being counted
+  const group = db.prepare('SELECT threshold FROM groups_table WHERE id = ?').get(payload.groupId);
+  const needsVote = group && Number(payload.threshold ?? payload.amount) > 0 && payload.amount > group.threshold;
+
+  let voteId = null;
+  if (needsVote) {
+    voteId = `v${Date.now()}`;
+  }
+
   const insertExpense = db.prepare(`
-    INSERT INTO expenses (id, group_id, description, amount, category, paid_by, split_method, expense_date, blockchain_enabled, merchant, receipt_url, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO expenses (id, group_id, description, amount, category, paid_by, split_method, expense_date, blockchain_enabled, merchant, receipt_url, reason, vote_id, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   insertExpense.run(
     id,
@@ -288,6 +358,8 @@ export function createExpense(payload) {
     payload.blockchainEnabled ? 1 : 0,
     payload.merchant ?? null,
     payload.receiptUrl ?? null,
+    payload.reason ?? null,
+    voteId,
     createdAt
   );
 
@@ -304,20 +376,20 @@ export function createExpense(payload) {
     });
   }
 
-  const group = db.prepare('SELECT threshold FROM groups_table WHERE id = ?').get(payload.groupId);
   let triggeredVote = null;
-  if (group && payload.amount > group.threshold) {
-    const voteId = `v${Date.now()}`;
+  if (needsVote) {
     db.prepare(`
       INSERT INTO votes (id, group_id, requested_by, description, amount, category, reason, status, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(voteId, payload.groupId, payload.paidBy ?? 'u1', payload.description, payload.amount, payload.category, payload.reason ?? 'Auto-created from expense above threshold.', 'pending', createdAt);
-    db.prepare(`INSERT INTO vote_decisions (vote_id, user_id, decision, decided_at) VALUES (?, ?, ?, ?)`) 
+    db.prepare(`INSERT INTO vote_decisions (vote_id, user_id, decision, decided_at) VALUES (?, ?, ?, ?)`)
       .run(voteId, payload.paidBy ?? 'u1', 'yes', createdAt);
     triggeredVote = voteId;
   }
 
-  return { expense: getExpenses().find((expense) => expense.id === id), triggeredVote };
+  // Return null for the expense if it's pending a vote (not yet visible in balances)
+  const savedExpense = needsVote ? null : getExpenses(payload.paidBy).find((expense) => expense.id === id);
+  return { expense: savedExpense, triggeredVote };
 }
 
 export function respondToVote(voteId, decision, userId = 'u1') {
@@ -344,21 +416,26 @@ export function respondToVote(voteId, decision, userId = 'u1') {
   `).get(voteId).count;
 
   let status = 'pending';
-  if (yes >= Math.ceil(groupSize / 2)) status = 'approved';
-  if (no >= Math.ceil(groupSize / 2)) status = 'declined';
+  if (no >= 1) status = 'declined';
+  else if (yes >= groupSize) status = 'approved';
 
   db.prepare('UPDATE votes SET status = ? WHERE id = ?').run(status, voteId);
-  return getVotes().find((vote) => vote.id === voteId);
+  // Find the vote's group owner to pass a valid userId to getVotes
+  const vote = db.prepare('SELECT group_id FROM votes WHERE id = ?').get(voteId);
+  const owner = vote ? db.prepare('SELECT user_id FROM group_members WHERE group_id = ? LIMIT 1').get(vote.group_id) : null;
+  const allVotes = owner ? getVotes(owner.user_id) : [];
+  return allVotes.find((v) => v.id === voteId) ?? null;
 }
 
-export function generateAiReply(question) {
-  const balances = calculateBalances();
-  const analytics = getAnalytics();
-  const pendingVotes = getVotes().filter((vote) => vote.status === 'pending');
+export function generateAiReply(question, userId) {
+  const balances = calculateBalances(userId);
+  const analytics = getAnalytics(userId);
+  const pendingVotes = getVotes(userId).filter((vote) => vote.status === 'pending');
   const lower = question.toLowerCase();
 
   if (lower.includes('owe')) {
     const top = balances.people[0];
+    if (!top) return `You have no shared balances yet. Your net balance is ${moneyLike(balances.net)}.`;
     return `${top.name} has the largest current imbalance at ${moneyLike(top.net)}. Your overall net balance is ${moneyLike(balances.net)}.`;
   }
   if (lower.includes('grocery')) {
@@ -366,7 +443,7 @@ export function generateAiReply(question) {
     return `Groceries total ${moneyLike(groceries?.total ?? 0)} this month. The largest category overall is ${analytics.byCategory[0]?.category} at ${moneyLike(analytics.byCategory[0]?.total ?? 0)}.`;
   }
   if (lower.includes('pending vote') || lower.includes('vote')) {
-    if (!pendingVotes.length) return 'There are no pending votes right now. Everything above each group’s voting threshold has already been resolved.';
+    if (!pendingVotes.length) return "There are no pending votes right now. Everything above each group’s voting threshold has already been resolved.";
     const vote = pendingVotes[0];
     return `The current pending vote is for ${vote.description} at ${moneyLike(vote.amount)} in ${vote.category}. ${vote.decisions.length} decision(s) have been logged so far.`;
   }
@@ -375,4 +452,61 @@ export function generateAiReply(question) {
 
 function moneyLike(value) {
   return `$${Math.abs(Number(value || 0)).toFixed(2)}`;
+}
+
+export function sendInvitation(groupId, invitedByUserId, invitedEmail) {
+  const email = invitedEmail.toLowerCase().trim();
+  const group = db.prepare('SELECT id, name FROM groups_table WHERE id = ?').get(groupId);
+  if (!group) throw new Error('Group not found.');
+
+  const invitedUser = db.prepare('SELECT id FROM users WHERE lower(email) = ?').get(email);
+  if (invitedUser) {
+    const alreadyMember = db.prepare('SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?').get(groupId, invitedUser.id);
+    if (alreadyMember) throw new Error('This user is already a member of the group.');
+  }
+
+  const existing = db.prepare('SELECT id FROM group_invitations WHERE group_id = ? AND invited_email = ? AND status = ?').get(groupId, email, 'pending');
+  if (existing) throw new Error('An invite has already been sent to this email for this group.');
+
+  const id = `inv${Date.now()}`;
+  db.prepare('INSERT INTO group_invitations (id, group_id, invited_by, invited_email, invited_user_id, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .run(id, groupId, invitedByUserId, email, invitedUser?.id ?? null, 'pending', new Date().toISOString());
+
+  return { id, groupId, invitedEmail: email, status: 'pending' };
+}
+
+export function getPendingInvitations(userId) {
+  const user = db.prepare('SELECT email FROM users WHERE id = ?').get(userId);
+  if (!user) return [];
+
+  return db.prepare(`
+    SELECT gi.id, gi.group_id as groupId, gi.invited_email as invitedEmail, gi.status, gi.created_at as createdAt,
+           gt.name as groupName, gt.emoji as groupEmoji, gt.type as groupType,
+           u.name as invitedByName
+    FROM group_invitations gi
+    JOIN groups_table gt ON gt.id = gi.group_id
+    JOIN users u ON u.id = gi.invited_by
+    WHERE lower(gi.invited_email) = lower(?) AND gi.status = 'pending'
+    ORDER BY gi.created_at DESC
+  `).all(user.email);
+}
+
+export function respondToInvitation(invitationId, userId, decision) {
+  const invite = db.prepare('SELECT * FROM group_invitations WHERE id = ?').get(invitationId);
+  if (!invite) throw new Error('Invitation not found.');
+  if (invite.status !== 'pending') throw new Error('Invitation has already been responded to.');
+
+  const user = db.prepare('SELECT id, name, initials, avatar_color as avatarColor FROM users WHERE id = ?').get(userId);
+  if (!user) throw new Error('User not found.');
+
+  db.prepare('UPDATE group_invitations SET status = ?, invited_user_id = ? WHERE id = ?').run(decision, userId, invitationId);
+
+  if (decision === 'accepted') {
+    const alreadyMember = db.prepare('SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?').get(invite.group_id, userId);
+    if (!alreadyMember) {
+      db.prepare('INSERT INTO group_members (group_id, user_id, role) VALUES (?, ?, ?)').run(invite.group_id, userId, 'Member');
+    }
+  }
+
+  return { id: invitationId, status: decision };
 }

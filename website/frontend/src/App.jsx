@@ -4,6 +4,7 @@ const navMeta = {
   home: ['Balances', 'Your standing across all groups'],
   analytics: ['Analytics', 'Spending trends & group insights'],
   groups: ['Groups', 'Manage your shared workspaces'],
+  groupDetail: ['Group Expenses', 'All expenses under this group'],
   add: ['Add Expense', 'Log and split a shared cost'],
   scanner: ['Receipt Scanner', 'Auto-fill from a receipt photo'],
   vote: ['Group Voting', 'Democratic purchase approval'],
@@ -15,9 +16,11 @@ const navMeta = {
 const categoryOptions = ['Groceries', 'Dining', 'Utilities', 'Rent', 'Travel', 'Furniture', 'Streaming', 'Electronics', 'Household', 'Other'];
 const groupTypeEmoji = { roommates: '🏠', trip: '✈️', household: '🏡', custom: '👥' };
 
+let _currentUserId = 'u1';
+
 async function api(path, options = {}) {
   const response = await fetch(path, {
-    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+    headers: { 'Content-Type': 'application/json', 'X-User-Id': _currentUserId, ...(options.headers || {}) },
     ...options
   });
   if (!response.ok) {
@@ -40,11 +43,10 @@ function money(value) {
   return `$${Math.abs(Number(value || 0)).toFixed(2)}`;
 }
 
-function parseMemberNames(text = '') {
+function uniqueNames(members = []) {
   const seen = new Set();
-  return String(text)
-    .split(/\n|,/)
-    .map((value) => value.trim())
+  return members
+    .map((m) => m.name.trim())
     .filter(Boolean)
     .filter((name) => {
       const key = name.toLowerCase();
@@ -105,29 +107,32 @@ export default function App() {
   const [progress, setProgress] = useState(null);
   const [settings, setSettings] = useState(null);
   const [notifications, setNotifications] = useState([]);
+  const [invitations, setInvitations] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [authMode, setAuthMode] = useState('login');
   const [authForm, setAuthForm] = useState({ name: '', email: 'jordan@splitstack.app', password: 'demo123' });
-  const [expenseForm, setExpenseForm] = useState({ groupId: 'g1', description: '', amount: '', category: 'Groceries', splitMethod: 'equal', reason: '' });
+  const todayLocal = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+  const [expenseForm, setExpenseForm] = useState({ groupId: '', description: '', amount: '', category: 'Groceries', splitMethod: 'equal', reason: '', date: todayLocal(), receiptUrl: '', receiptMode: 'link' });
   const [splitInputs, setSplitInputs] = useState({ percent: {}, custom: {} });
   const [ocrPreview, setOcrPreview] = useState(null);
   const [chatMessages, setChatMessages] = useState([
-    { role: 'ai', text: 'Hi! I’m the SplitStack assistant. Ask me about balances, spending, votes, or saving ideas.' }
+    { role: 'ai', text: "Hi! I'm the SplitStack assistant. Ask me about balances, spending, votes, or saving ideas." }
   ]);
   const [chatInput, setChatInput] = useState('');
-  const [creatingGroup, setCreatingGroup] = useState({ id: null, name: '', type: 'roommates', threshold: '', memberNamesText: 'Jordan Lee, Marcus Chen, Priya Sharma' });
+  const [creatingGroup, setCreatingGroup] = useState({ id: null, name: '', type: 'roommates', threshold: '', members: [{ name: '', email: '' }] });
+  const [balanceModal, setBalanceModal] = useState(null);
+  const [selectedGroup, setSelectedGroup] = useState(null);
   const chatMessagesRef = useRef(null);
 
   const topMeta = navMeta[page];
-  const draftMemberNames = useMemo(() => parseMemberNames(creatingGroup.memberNamesText), [creatingGroup.memberNamesText]);
-  const isEditingGroup = Boolean(creatingGroup.id);
+const isEditingGroup = Boolean(creatingGroup.id);
 
-  async function loadAll() {
-    setLoading(true);
+  async function loadAll({ silent = false } = {}) {
+    if (!silent) setLoading(true);
     setError('');
     try {
-      const [dashboardData, groupsData, expensesData, votesData, analyticsData, progressData, settingsData, notificationsData] = await Promise.all([
+      const [dashboardData, groupsData, expensesData, votesData, analyticsData, progressData, settingsData, notificationsData, invitationsData] = await Promise.all([
         api('/api/dashboard'),
         api('/api/groups'),
         api('/api/expenses'),
@@ -135,7 +140,8 @@ export default function App() {
         api('/api/analytics'),
         api('/api/progress'),
         api('/api/settings'),
-        api('/api/notifications')
+        api('/api/notifications'),
+        api('/api/invitations')
       ]);
       setDashboard(dashboardData);
       setGroups(groupsData.groups);
@@ -145,11 +151,12 @@ export default function App() {
       setProgress(progressData);
       setSettings(settingsData.settings);
       setNotifications(notificationsData.notifications);
+      setInvitations(invitationsData.invitations);
       if (!session) setSession({ user: dashboardData.user, token: 'demo-token-splitstack' });
     } catch (nextError) {
       setError(nextError.message);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }
 
@@ -159,12 +166,27 @@ export default function App() {
   }, [session]);
 
   useEffect(() => {
+    if (groups.length && !expenseForm.groupId) {
+      setExpenseForm((current) => ({ ...current, groupId: groups[0].id }));
+    }
+  }, [groups, expenseForm.groupId]);
+
+  useEffect(() => {
     if (chatMessagesRef.current) {
       chatMessagesRef.current.scrollTop = chatMessagesRef.current.scrollHeight;
     }
   }, [chatMessages]);
 
   const currentGroup = useMemo(() => groups.find((group) => group.id === expenseForm.groupId) || groups[0], [groups, expenseForm.groupId]);
+
+  const currentMonth = new Date().toISOString().slice(0, 7);
+  const groupMonthlyTotals = useMemo(() => groups.map((group) => ({
+    ...group,
+    total: Number(expenses
+      .filter((e) => e.groupId === group.id && (e.expenseDate || '').slice(0, 7) === currentMonth)
+      .reduce((sum, e) => sum + e.amount, 0)
+      .toFixed(2))
+  })), [groups, expenses, currentMonth]);
   const amountNumber = Number(expenseForm.amount || 0);
   const memberCount = currentGroup?.members.length || 0;
   const equalShare = memberCount ? amountNumber / memberCount : 0;
@@ -228,7 +250,7 @@ export default function App() {
 
 
   function resetGroupForm() {
-    setCreatingGroup({ id: null, name: '', type: 'roommates', threshold: '', memberNamesText: 'Jordan Lee, Marcus Chen, Priya Sharma' });
+    setCreatingGroup({ id: null, name: '', type: 'roommates', threshold: '', members: [{ name: '', email: '' }] });
   }
 
   function startEditGroup(group) {
@@ -237,8 +259,37 @@ export default function App() {
       name: group.name,
       type: group.type,
       threshold: String(group.threshold ?? ''),
-      memberNamesText: group.members.map((member) => member.name).join(', ')
+      members: group.members.length
+        ? group.members.map((m) => ({ name: m.name, email: '' }))
+        : [{ name: '', email: '' }]
     });
+  }
+
+  function updateMemberRow(index, field, value) {
+    setCreatingGroup((prev) => {
+      const next = prev.members.map((m, i) => i === index ? { ...m, [field]: value } : m);
+      return { ...prev, members: next };
+    });
+  }
+
+  function addMemberRow() {
+    setCreatingGroup((prev) => ({ ...prev, members: [...prev.members, { name: '', email: '' }] }));
+  }
+
+  function removeMemberRow(index) {
+    setCreatingGroup((prev) => {
+      const next = prev.members.filter((_, i) => i !== index);
+      return { ...prev, members: next.length ? next : [{ name: '', email: '' }] };
+    });
+  }
+
+  async function respondInvitation(invitationId, decision) {
+    try {
+      await api(`/api/invitations/${invitationId}/respond`, { method: 'PUT', body: JSON.stringify({ decision }) });
+      await loadAll({ silent: true });
+    } catch (nextError) {
+      setError(nextError.message);
+    }
   }
 
   function applyEvenPercentSplit() {
@@ -259,6 +310,7 @@ export default function App() {
         ? { email: authForm.email.toLowerCase(), password: authForm.password }
         : { name: authForm.name, email: authForm.email.toLowerCase(), password: authForm.password };
       const data = await api(path, { method: 'POST', body: JSON.stringify(payload) });
+      _currentUserId = data.user.id;
       setSession(data);
       setPage('home');
     } catch (nextError) {
@@ -272,16 +324,28 @@ export default function App() {
         method: 'POST',
         body: JSON.stringify({ email: 'jordan@splitstack.app', password: 'demo123' })
       });
+      _currentUserId = data.user.id;
       setSession(data);
+      setPage('home');
     } catch (nextError) {
       setError(nextError.message);
     }
   }
 
   function logout() {
+    _currentUserId = 'u1';
     setSession(null);
+    setDashboard(null);
+    setGroups([]);
+    setExpenses([]);
+    setVotes([]);
+    setAnalytics(null);
+    setProgress(null);
+    setSettings(null);
+    setNotifications([]);
+    setInvitations([]);
     setPage('home');
-    setChatMessages([{ role: 'ai', text: 'Hi! I’m the SplitStack assistant. Ask me about balances, spending, votes, or saving ideas.' }]);
+    setChatMessages([{ role: 'ai', text: "Hi! I'm the SplitStack assistant. Ask me about balances, spending, votes, or saving ideas." }]);
   }
 
   async function submitExpense(event) {
@@ -309,18 +373,25 @@ export default function App() {
     }
 
     try {
-      await api('/api/expenses', {
+      const result = await api('/api/expenses', {
         method: 'POST',
         body: JSON.stringify({
           ...expenseForm,
+          expenseDate: expenseForm.date,
           amount: amountNumber,
-          paidBy: 'u1',
-          splits: normalizedSplits
+          paidBy: _currentUserId,
+          splits: normalizedSplits,
+          receiptUrl: expenseForm.receiptUrl.trim() || null
         })
       });
-      setExpenseForm((form) => ({ ...form, description: '', amount: '', reason: '' }));
-      setPage('home');
+      setExpenseForm((form) => ({ ...form, description: '', amount: '', reason: '', date: todayLocal(), receiptUrl: '', receiptMode: 'link' }));
       await loadAll();
+      if (result.triggeredVote) {
+        setPage('vote');
+        setError('This expense exceeds the group threshold. It will appear in balances only after all members approve it.');
+      } else {
+        setPage('home');
+      }
     } catch (nextError) {
       setError(nextError.message);
     }
@@ -407,13 +478,8 @@ export default function App() {
 
   async function addGroup(event) {
     event.preventDefault();
-    const memberNames = parseMemberNames(creatingGroup.memberNamesText);
     if (!creatingGroup.name.trim()) {
       setError('Please enter a group name.');
-      return;
-    }
-    if (!memberNames.length) {
-      setError('Add at least one group member name before saving.');
       return;
     }
     try {
@@ -421,14 +487,24 @@ export default function App() {
         name: creatingGroup.name.trim(),
         type: creatingGroup.type,
         threshold: creatingGroup.threshold === '' ? 0 : Number(creatingGroup.threshold),
-        emoji: groupTypeEmoji[creatingGroup.type] || '👥',
-        memberNames
+        emoji: groupTypeEmoji[creatingGroup.type] || '👥'
       };
       const method = isEditingGroup ? 'PUT' : 'POST';
       const path = isEditingGroup ? `/api/groups/${creatingGroup.id}` : '/api/groups';
-      await api(path, { method, body: JSON.stringify(payload) });
+      const result = await api(path, { method, body: JSON.stringify(payload) });
+      const groupId = result.group?.id ?? creatingGroup.id;
+      const inviteEmails = creatingGroup.members.map((m) => m.email.trim()).filter(Boolean);
+      const inviteErrors = [];
+      for (const email of inviteEmails) {
+        try {
+          await api(`/api/groups/${groupId}/invite`, { method: 'POST', body: JSON.stringify({ email }) });
+        } catch (err) {
+          inviteErrors.push(`${email}: ${err.message}`);
+        }
+      }
       resetGroupForm();
-      await loadAll();
+      await loadAll({ silent: true });
+      if (inviteErrors.length) setError(inviteErrors.join(' · '));
     } catch (nextError) {
       setError(nextError.message);
     }
@@ -543,52 +619,141 @@ export default function App() {
             {loading && <div className="loading-banner mb-4">Refreshing SplitStack data…</div>}
 
             {page === 'home' && dashboard && (
-              <div className="page show">
+              <div className="page show" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 <div className="balance-card">
                   <div className="bc-inner">
-                    <div className="bc-label">Net balance</div>
-                    <div className={`bc-amount ${dashboard.balances.net >= 0 ? 'pos' : 'neg'}`}>{dashboard.balances.net >= 0 ? '+' : '-'}{money(dashboard.balances.net)}</div>
+                    {dashboard.balances.totalOwedToYou === 0 && dashboard.balances.totalYouOwe === 0 ? (
+                      <div className="bc-settled">
+                        <div className="bc-settled-icon">✓</div>
+                        <div className="bc-settled-title">All settled up!</div>
+                        <div className="bc-settled-sub">No one owes anyone anything. You&apos;re all even.</div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="bc-label">Net balance</div>
+                        <div className={`bc-amount ${dashboard.balances.net >= 0 ? 'pos' : 'neg'}`}>{dashboard.balances.net >= 0 ? '+' : '-'}{money(Math.abs(dashboard.balances.net))}</div>
+                      </>
+                    )}
                     <div className="bc-row">
-                      <div className="bc-stat"><div className="bc-stat-val">{money(dashboard.balances.totalOwed)}</div><div className="bc-stat-lbl">Total owed to group</div></div>
-                      <div className="bc-stat"><div className="bc-stat-val">{money(dashboard.balances.totalOwe)}</div><div className="bc-stat-lbl">Total you owe</div></div>
-                      <div className="bc-stat"><div className="bc-stat-val">{dashboard.balances.settleCount}</div><div className="bc-stat-lbl">Members to settle</div></div>
+                      <div className="bc-stat bc-stat-btn" onClick={() => setPage('groups')}><div className="bc-stat-val">{groups.length}</div><div className="bc-stat-lbl">Groups</div></div>
+                      <div className="bc-stat"><div className="bc-stat-val">{dashboard.balances.settleCount}</div><div className="bc-stat-lbl">To settle</div></div>
                     </div>
                   </div>
                 </div>
 
                 <div className="g2">
-                  <div className="card">
-                    <div className="card-head">Per-member balances</div>
-                    {dashboard.balances.people.map((person) => (
-                      <div className="person-row" key={person.id}>
-                        <div className="ava-sm" style={{ background: person.avatarColor }}>{person.initials}</div>
-                        <div>
-                          <div className="p-name">{person.name}</div>
-                          <div className="p-group">{person.direction === 'owes' ? 'Needs to pay into the group' : 'Has covered more than their share'}</div>
-                        </div>
-                        <div className={`p-amount ${person.net < 0 ? 'red' : 'teal'}`}>{person.net < 0 ? '-' : '+'}{money(person.net)}</div>
-                      </div>
-                    ))}
+                  <div className="card settlements-card settlements-clickable" onClick={() => setBalanceModal('owedToYou')}>
+                    <div className="settlements-label teal">Owed to you</div>
+                    <div className="settlements-total teal">{money(dashboard.balances.totalOwedToYou)}</div>
+                    <div className="settlements-count">{dashboard.balances.owedToYou.length} {dashboard.balances.owedToYou.length === 1 ? 'person' : 'people'}</div>
                   </div>
-                  <div className="card">
-                    <div className="card-head">Recent activity</div>
-                    {expenses.slice(0, 6).map((expense) => {
+                  <div className="card settlements-card settlements-clickable" onClick={() => setBalanceModal('youOwe')}>
+                    <div className="settlements-label red">You owe others</div>
+                    <div className="settlements-total red">{money(dashboard.balances.totalYouOwe)}</div>
+                    <div className="settlements-count">{dashboard.balances.youOwe.length} {dashboard.balances.youOwe.length === 1 ? 'person' : 'people'}</div>
+                  </div>
+                </div>
+
+                {balanceModal && (
+                  <div className="modal-overlay" onClick={() => setBalanceModal(null)}>
+                    <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+                      <div className="modal-head">
+                        <span>{balanceModal === 'owedToYou' ? 'People who owe you' : 'People you owe'}</span>
+                        <button className="modal-close" onClick={() => setBalanceModal(null)}>✕</button>
+                      </div>
+                      <div className="settlements-list">
+                        {(balanceModal === 'owedToYou' ? dashboard.balances.owedToYou : dashboard.balances.youOwe).length === 0
+                          ? <div className="settlements-empty" style={{ padding: '24px 20px', textAlign: 'center' }}>{balanceModal === 'owedToYou' ? 'No one owes you right now.' : "You're all settled up!"}</div>
+                          : (balanceModal === 'owedToYou' ? dashboard.balances.owedToYou : dashboard.balances.youOwe).map((person) => (
+                            <div className="settlement-row" key={person.id} style={{ padding: '14px 20px' }}>
+                              <div className="ava-sm" style={{ background: person.avatarColor }}>{person.initials}</div>
+                              <div className="modal-person-info">
+                                <div className="p-name">{person.name}</div>
+                                <div className="modal-group-tags">{person.groups.map((g) => <span className="tag tag-muted" key={g.id}>{g.name}</span>)}</div>
+                              </div>
+                              <div className={`p-amount ${balanceModal === 'owedToYou' ? 'teal' : 'red'}`}>{money(person.amount)}</div>
+                            </div>
+                          ))
+                        }
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="card">
+                  <div className="card-head">
+                    <span>Spending by group</span>
+                    <span className="card-sub" style={{ margin: 0 }}>{new Date().toLocaleString('default', { month: 'long', year: 'numeric' })}</span>
+                  </div>
+                  {groupMonthlyTotals.map((group) => (
+                    <div className="group-spend-row group-spend-clickable" key={group.id} onClick={() => { setSelectedGroup(group); setPage('groupDetail'); }}>
+                      <div className="group-emoji">{group.emoji}</div>
+                      <div className="group-spend-info">
+                        <div className="p-name">{group.name}</div>
+                        <div className="p-group">{group.type}</div>
+                      </div>
+                      <div className={`p-amount ${group.total > 0 ? 'teal' : ''}`}>{group.total > 0 ? money(group.total) : <span style={{ color: 'var(--muted2)', fontSize: '13px' }}>No activity</span>}</div>
+                    </div>
+                  ))}
+                </div>
+
+
+                <div className="card">
+                  <div className="card-head">Recent activity</div>
+                  <div className="activity-scroll">
+                    {expenses.map((expense) => {
                       const expenseGroup = groups.find((group) => group.id === expense.groupId);
                       return (
-                      <div className="activity-row" key={expense.id}>
-                        <div className="act-icon">{expense.category.slice(0, 1)}</div>
-                        <div>
-                          <div className="act-name">{expense.description}</div>
-                          <div className="act-meta">{expense.category} · Paid by {expense.paidByName}</div>
+                        <div className="activity-row" key={expense.id}>
+                          <div className="act-icon">{expense.category.slice(0, 1)}</div>
+                          <div>
+                            <div className="act-name">{expense.description}</div>
+                            <div className="act-meta">{expense.category} · Paid by {expense.paidByName}</div>
+                          </div>
+                          <div>
+                            <div className="act-amt">{money(expense.amount)}</div>
+                            <div className="act-type">{expenseGroup?.name || 'Shared group'}</div>
+                          </div>
                         </div>
-                        <div>
-                          <div className="act-amt">{money(expense.amount)}</div>
-                          <div className="act-type">{expenseGroup?.name || 'Shared group'}</div>
-                        </div>
-                      </div>
-                    );
+                      );
                     })}
                   </div>
+                </div>
+              </div>
+            )}
+
+            {page === 'groupDetail' && selectedGroup && (
+              <div className="page show" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <button className="btn btn-secondary" style={{ alignSelf: 'flex-start' }} onClick={() => setPage('home')}>← Back</button>
+                <div className="card">
+                  <div className="card-head" style={{ alignItems: 'flex-start', flexDirection: 'column', gap: '4px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <span style={{ fontSize: '22px' }}>{selectedGroup.emoji}</span>
+                      <span>{selectedGroup.name}</span>
+                    </div>
+                    <div className="page-desc" style={{ margin: 0 }}>{selectedGroup.type} · {expenses.filter((e) => e.groupId === selectedGroup.id).length} expenses</div>
+                  </div>
+                  {expenses.filter((e) => e.groupId === selectedGroup.id).length === 0
+                    ? <div className="settlements-empty" style={{ padding: '24px 0' }}>No expenses in this group yet.</div>
+                    : expenses.filter((e) => e.groupId === selectedGroup.id).map((expense) => (
+                      <div className="activity-row" key={expense.id}>
+                        <div className="act-icon">{expense.category.slice(0, 1)}</div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div className="act-name">{expense.description}</div>
+                          <div className="act-meta">{expense.category} · Paid by {expense.paidByName}</div>
+                          {expense.receiptUrl && (
+                            expense.receiptUrl.startsWith('data:image') || expense.receiptUrl.match(/\.(jpg|jpeg|png|gif|webp)(\?|$)/i)
+                              ? <img src={expense.receiptUrl} alt="Receipt" className="receipt-thumb" />
+                              : <a href={expense.receiptUrl} target="_blank" rel="noreferrer" className="receipt-link">View receipt</a>
+                          )}
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <div className="act-amt">{money(expense.amount)}</div>
+                          <div className="act-type">{new Date(expense.expenseDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric'})}</div>
+                        </div>
+                      </div>
+                   ))
+                  }
                 </div>
               </div>
             )}
@@ -639,7 +804,18 @@ export default function App() {
                               <div className="group-name">{group.name}</div>
                               <div className="group-meta">{group.type} · {group.members.length} members</div>
                             </div>
-                            <button className="btn btn-secondary btn-sm" type="button" onClick={() => startEditGroup(group)}>Edit</button>
+                            <div className="group-actions">
+                              <button className="btn btn-secondary btn-sm" type="button" onClick={() => startEditGroup(group)}>Edit</button>
+                              <button className="btn btn-danger btn-sm" type="button" onClick={async () => {
+                                if (!window.confirm(`Leave "${group.name}"? You will be removed from the group.`)) return;
+                                try {
+                                  await api(`/api/groups/${group.id}`, { method: 'DELETE' });
+                                  await loadAll({ silent: true });
+                                } catch (err) {
+                                  setError(err.message);
+                                }
+                              }}>Leave</button>
+                            </div>
                           </div>
                           <div className="group-rule">
                             <strong>Voting threshold:</strong> Any purchase above this amount will trigger a group vote automatically.
@@ -647,7 +823,12 @@ export default function App() {
                           </div>
                           <div className="member-stack">
                             {group.members.map((member) => (
-                              <div className="member-pill" key={member.id}>{member.name}</div>
+                              <div className="member-pill" key={member.id} title={member.role}>{member.name}</div>
+                            ))}
+                            {(group.pendingInvitations ?? []).map((inv) => (
+                              <div className="member-pill member-pill-pending" key={inv.id} title="Invitation pending">
+                                {inv.invitedEmail} <span className="pill-status">pending</span>
+                              </div>
                             ))}
                           </div>
                         </div>
@@ -658,7 +839,7 @@ export default function App() {
                     <div className="card-head">{isEditingGroup ? 'Edit group' : 'Create a group'}</div>
                     <form onSubmit={addGroup} className="stack-form">
                       <label className="f-label">Group name</label>
-                      <input className="f-inp" placeholder="e.g. Summer Apartment" value={creatingGroup.name} onChange={(e) => setCreatingGroup({ ...creatingGroup, name: e.target.value })} />
+                      <input className="f-inp" placeholder="e.g. 301 Apartment" value={creatingGroup.name} onChange={(e) => setCreatingGroup({ ...creatingGroup, name: e.target.value })} />
                       <label className="f-label">Group type</label>
                       <select className="f-inp" value={creatingGroup.type} onChange={(e) => setCreatingGroup({ ...creatingGroup, type: e.target.value })}>
                         <option value="roommates">Roommates</option>
@@ -668,18 +849,30 @@ export default function App() {
                       </select>
                       <label className="f-label">Voting threshold</label>
                       <input className="f-inp" type="number" min="0" placeholder="Enter amount" value={creatingGroup.threshold} onChange={(e) => setCreatingGroup({ ...creatingGroup, threshold: e.target.value })} />
-                      <div className="scanner-hint">Any purchase above this amount will trigger a group vote automatically.</div>
+                      <p className="f-hint">Any purchase above this amount will trigger a group vote automatically.</p>
                       <label className="f-label">Group members</label>
-                      <textarea className="f-inp" rows="4" placeholder="Add names separated by commas or new lines" value={creatingGroup.memberNamesText} onChange={(e) => setCreatingGroup({ ...creatingGroup, memberNamesText: e.target.value })} />
-                      <div className="member-helper row-b">
-                        <span>{draftMemberNames.length} people ready to save</span>
-                        <span>{draftMemberNames.length ? 'Count updates automatically' : 'Add at least one name'}</span>
-                      </div>
-                      <div className="member-stack member-stack-edit">
-                        {draftMemberNames.map((name) => (
-                          <div className="member-pill" key={name}>{name}</div>
+                      <p className="f-hint">Fill in a name and optional email for each member. An invitation will be sent to any email you provide.</p>
+                      <div className="member-rows">
+                        {creatingGroup.members.map((member, index) => (
+                          <div className="member-row" key={index}>
+                            <input
+                              className="f-inp member-row-name"
+                              placeholder="Name"
+                              value={member.name}
+                              onChange={(e) => updateMemberRow(index, 'name', e.target.value)}
+                            />
+                            <input
+                              className="f-inp member-row-email"
+                              type="email"
+                              placeholder="Email (optional)"
+                              value={member.email}
+                              onChange={(e) => updateMemberRow(index, 'email', e.target.value)}
+                            />
+                            <button type="button" className="btn-icon-remove" onClick={() => removeMemberRow(index)} title="Remove">×</button>
+                          </div>
                         ))}
                       </div>
+                      <button type="button" className="btn btn-secondary btn-add-member" onClick={addMemberRow}>+ Add member</button>
                       <div className="form-actions">
                         <button className="btn btn-primary" type="submit">{isEditingGroup ? 'Save changes' : 'Create group'}</button>
                         {isEditingGroup ? <button className="btn btn-secondary" type="button" onClick={resetGroupForm}>Cancel</button> : null}
@@ -702,6 +895,8 @@ export default function App() {
                       </select>
                       <label className="f-label">Amount</label>
                       <div className="amt-wrap"><span className="amt-sym">$</span><input className="amt-inp" value={expenseForm.amount} onChange={(e) => setExpenseForm({ ...expenseForm, amount: e.target.value })} /></div>
+                      <label className="f-label">Date</label>
+                      <input className="f-inp" type="date" value={expenseForm.date} onChange={(e) => setExpenseForm({ ...expenseForm, date: e.target.value })} />
                       <label className="f-label">Description</label>
                       <input className="f-inp" value={expenseForm.description} onChange={(e) => setExpenseForm({ ...expenseForm, description: e.target.value })} />
                       <label className="f-label">Category</label>
@@ -764,6 +959,28 @@ export default function App() {
                           ))}
                         </div>
                       ) : null}
+                      <label className="f-label">Receipt / photo (optional)</label>
+                      <div className="receipt-tabs">
+                        <button type="button" className={`split-tab ${expenseForm.receiptMode === 'link' ? 'on' : ''}`} onClick={() => setExpenseForm({ ...expenseForm, receiptMode: 'link', receiptUrl: '' })}>Link</button>
+                        <button type="button" className={`split-tab ${expenseForm.receiptMode === 'photo' ? 'on' : ''}`} onClick={() => setExpenseForm({ ...expenseForm, receiptMode: 'photo', receiptUrl: '' })}>Upload photo</button>
+                      </div>
+                      {expenseForm.receiptMode === 'link' ? (
+                        <input className="f-inp" type="url" placeholder="https://..." value={expenseForm.receiptUrl} onChange={(e) => setExpenseForm({ ...expenseForm, receiptUrl: e.target.value })} />
+                      ) : (
+                        <input className="f-inp" type="file" accept="image/*" onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          const reader = new FileReader();
+                          reader.onload = (ev) => setExpenseForm((form) => ({ ...form, receiptUrl: ev.target.result }));
+                          reader.readAsDataURL(file);
+                        }} />
+                      )}
+                      {expenseForm.receiptUrl && expenseForm.receiptMode === 'photo' && (
+                        <div className="receipt-preview">
+                          <img src={expenseForm.receiptUrl} alt="Receipt preview" className="receipt-img" />
+                          <button type="button" className="btn btn-secondary btn-sm" onClick={() => setExpenseForm((form) => ({ ...form, receiptUrl: '' }))}>Remove</button>
+                        </div>
+                      )}
                       <label className="f-label">Reason for large purchase (optional)</label>
                       <textarea className="f-inp" rows="3" value={expenseForm.reason} onChange={(e) => setExpenseForm({ ...expenseForm, reason: e.target.value })} />
                       {currentGroup ? <div className="scanner-hint">This group requires a vote for expenses above {money(currentGroup.threshold)}.</div> : null}
@@ -830,6 +1047,9 @@ export default function App() {
                       <div className="vc-meta-item"><strong>{new Date(vote.createdAt).toLocaleDateString()}</strong>Created</div>
                     </div>
                     <div className="vc-voters">
+                      <div className="vc-tally">
+                        {vote.decisions.filter((d) => d.decision === 'yes').length} / {vote.memberCount} voted yes — unanimous approval required
+                      </div>
                       {vote.decisions.map((decision) => (
                         <div className="vc-voter" key={decision.userId}><span className="vote-dot" style={{ background: decision.decision === 'yes' ? '#22C55E' : '#EF4444' }} />{decision.name} voted {decision.decision}</div>
                       ))}
@@ -860,7 +1080,7 @@ export default function App() {
               <div className="page show" style={{ padding: 0 }}>
                 <div className="chat-wrap">
                   <div className="chat-quick">
-                    {['Who owes the most?', 'How much did we spend on groceries this month?', 'Any tips to reduce our shared expenses?', 'What’s the pending vote about?'].map((prompt) => (
+                    {['Who owes the most?', 'How much did we spend on groceries this month?', 'Any tips to reduce our shared expenses?', "What's the pending vote about?"].map((prompt) => (
                       <button className="cq-btn" key={prompt} onClick={() => { setChatInput(prompt); requestAnimationFrame(() => sendChat(prompt)); }}>{prompt}</button>
                     ))}
                   </div>
@@ -921,7 +1141,25 @@ export default function App() {
                         <div className="page-desc">{session.user.email}</div>
                       </div>
                     </div>
+                    {invitations.length > 0 && (
+                      <div className="mt-4">
+                        <div className="card-head">Group invitations</div>
+                        {invitations.map((invite) => (
+                          <div className="notification-row" key={invite.id}>
+                            <div style={{ flex: 1 }}>
+                              <div className="p-name">{invite.groupEmoji} {invite.groupName}</div>
+                              <div className="p-group">{invite.invitedByName} invited you · {invite.groupType}</div>
+                            </div>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                              <button className="btn btn-primary" style={{ padding: '6px 14px', fontSize: '12px' }} onClick={() => respondInvitation(invite.id, 'accepted')}>Accept</button>
+                              <button className="btn btn-secondary" style={{ padding: '6px 14px', fontSize: '12px' }} onClick={() => respondInvitation(invite.id, 'declined')}>Decline</button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                     <div className="notification-list mt-4">
+                      <div className="card-head">Notifications</div>
                       {notifications.map((item) => (
                         <div className="notification-row" key={item.id}>
                           <div>

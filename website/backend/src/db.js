@@ -49,6 +49,7 @@ function bootstrap() {
       blockchain_enabled INTEGER NOT NULL DEFAULT 0,
       merchant TEXT,
       receipt_url TEXT,
+      reason TEXT,
       created_at TEXT NOT NULL
     );
 
@@ -125,6 +126,16 @@ function bootstrap() {
       email_balance INTEGER NOT NULL DEFAULT 1,
       push_settlements INTEGER NOT NULL DEFAULT 1,
       ai_proactive INTEGER NOT NULL DEFAULT 1
+    );
+
+    CREATE TABLE IF NOT EXISTS group_invitations (
+      id TEXT PRIMARY KEY,
+      group_id TEXT NOT NULL,
+      invited_by TEXT NOT NULL,
+      invited_email TEXT NOT NULL,
+      invited_user_id TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at TEXT NOT NULL
     );
   `);
 
@@ -234,5 +245,14 @@ function bootstrap() {
 }
 
 bootstrap();
+
+// Migrations for existing databases
+const existingCols = db.pragma('table_info(expenses)').map((c) => c.name);
+if (!existingCols.includes('reason')) {
+  db.exec('ALTER TABLE expenses ADD COLUMN reason TEXT');
+}
+if (!existingCols.includes('vote_id')) {
+  db.exec('ALTER TABLE expenses ADD COLUMN vote_id TEXT');
+}
 
 export default db;

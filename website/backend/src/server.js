@@ -14,11 +14,19 @@ import {
   getNotifications,
   getProgress,
   updateGroup,
+  leaveGroup,
   getSettings,
   getVotes,
   respondToVote,
-  upsertSettings
+  upsertSettings,
+  sendInvitation,
+  getPendingInvitations,
+  respondToInvitation
 } from './services.js';
+
+function currentUserId(req) {
+  return req.headers['x-user-id'] || 'u1';
+}
 
 const app = express();
 const PORT = Number(process.env.PORT || 3001);
@@ -57,28 +65,29 @@ app.post('/api/auth/register', (req, res) => {
   }
 });
 
-app.get('/api/me', (_req, res) => {
-  res.json({ user: getCurrentUser() });
+app.get('/api/me', (req, res) => {
+  res.json({ user: getCurrentUser(currentUserId(req)) });
 });
 
-app.get('/api/dashboard', (_req, res) => {
+app.get('/api/dashboard', (req, res) => {
+  const uid = currentUserId(req);
   res.json({
-    user: getCurrentUser(),
-    balances: calculateBalances(),
+    user: getCurrentUser(uid),
+    balances: calculateBalances(uid),
     notifications: getNotifications(),
-    analytics: getAnalytics(),
-    pendingVotes: getVotes().filter((vote) => vote.status === 'pending').length
+    analytics: getAnalytics(uid),
+    pendingVotes: getVotes(uid).filter((vote) => vote.status === 'pending').length
   });
 });
 
-app.get('/api/groups', (_req, res) => {
-  res.json({ groups: getGroups() });
+app.get('/api/groups', (req, res) => {
+  res.json({ groups: getGroups(currentUserId(req)) });
 });
 
 app.post('/api/groups', (req, res) => {
   const { name, type = 'custom', emoji = '👥', threshold = 0, memberNames = [] } = req.body ?? {};
   if (!name?.trim()) return res.status(400).json({ message: 'Group name is required.' });
-  const group = createGroup({ name: name.trim(), type, emoji, threshold, memberNames });
+  const group = createGroup({ name: name.trim(), type, emoji, threshold, memberNames }, currentUserId(req));
   res.status(201).json({ group });
 });
 
@@ -88,12 +97,21 @@ app.put('/api/groups/:id', (req, res) => {
   res.json({ group });
 });
 
-app.get('/api/expenses', (_req, res) => {
-  res.json({ expenses: getExpenses() });
+app.delete('/api/groups/:id', (req, res) => {
+  try {
+    const result = leaveGroup(req.params.id, currentUserId(req));
+    res.json(result);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+app.get('/api/expenses', (req, res) => {
+  res.json({ expenses: getExpenses(currentUserId(req)) });
 });
 
 app.post('/api/expenses', (req, res) => {
-  const { groupId, description, amount, category, splitMethod = 'equal', paidBy = 'u1' } = req.body ?? {};
+  const { groupId, description, amount, category, splitMethod = 'equal', paidBy = currentUserId(req) } = req.body ?? {};
   if (!groupId || !description || !amount || !category) {
     return res.status(400).json({ message: 'groupId, description, amount, and category are required.' });
   }
@@ -117,8 +135,8 @@ app.post('/api/ocr/mock', (req, res) => {
   });
 });
 
-app.get('/api/votes', (_req, res) => {
-  res.json({ votes: getVotes() });
+app.get('/api/votes', (req, res) => {
+  res.json({ votes: getVotes(currentUserId(req)) });
 });
 
 app.post('/api/votes/:id/respond', (req, res) => {
@@ -126,12 +144,12 @@ app.post('/api/votes/:id/respond', (req, res) => {
   if (!['yes', 'no'].includes(decision)) {
     return res.status(400).json({ message: 'decision must be yes or no.' });
   }
-  const vote = respondToVote(req.params.id, decision, 'u1');
+  const vote = respondToVote(req.params.id, decision, currentUserId(req));
   res.json({ vote });
 });
 
-app.get('/api/analytics', (_req, res) => {
-  res.json(getAnalytics());
+app.get('/api/analytics', (req, res) => {
+  res.json(getAnalytics(currentUserId(req)));
 });
 
 app.get('/api/progress', (_req, res) => {
@@ -142,14 +160,17 @@ app.get('/api/notifications', (_req, res) => {
   res.json({ notifications: getNotifications() });
 });
 
-app.get('/api/settings', (_req, res) => {
-  res.json({ settings: getSettings() });
+app.get('/api/settings', (req, res) => {
+  const uid = currentUserId(req);
+  const settings = getSettings(uid) ?? upsertSettings({ userId: uid, emailVotes: 1, emailBalance: 1, pushSettlements: 1, aiProactive: 1 });
+  res.json({ settings });
 });
 
 app.put('/api/settings', (req, res) => {
-  const current = getSettings();
+  const uid = currentUserId(req);
+  const current = getSettings(uid) ?? { emailVotes: 1, emailBalance: 1, pushSettlements: 1, aiProactive: 1 };
   const settings = upsertSettings({
-    userId: 'u1',
+    userId: uid,
     emailVotes: req.body?.emailVotes ?? current.emailVotes,
     emailBalance: req.body?.emailBalance ?? current.emailBalance,
     pushSettlements: req.body?.pushSettlements ?? current.pushSettlements,
@@ -160,7 +181,36 @@ app.put('/api/settings', (req, res) => {
 
 app.post('/api/ai/chat', (req, res) => {
   const { message = '' } = req.body ?? {};
-  res.json({ reply: generateAiReply(message) });
+  res.json({ reply: generateAiReply(message, currentUserId(req)) });
+});
+
+app.post('/api/groups/:id/invite', (req, res) => {
+  const { email } = req.body ?? {};
+  if (!email) return res.status(400).json({ message: 'Email is required.' });
+  try {
+    const result = sendInvitation(req.params.id, currentUserId(req), email);
+    res.status(201).json(result);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+app.get('/api/invitations', (req, res) => {
+  const invitations = getPendingInvitations(currentUserId(req));
+  res.json({ invitations });
+});
+
+app.put('/api/invitations/:id/respond', (req, res) => {
+  const { decision } = req.body ?? {};
+  if (!['accepted', 'declined'].includes(decision)) {
+    return res.status(400).json({ message: 'decision must be accepted or declined.' });
+  }
+  try {
+    const result = respondToInvitation(req.params.id, currentUserId(req), decision);
+    res.json(result);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
 });
 
 app.listen(PORT, () => {
