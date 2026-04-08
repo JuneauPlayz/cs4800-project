@@ -75,13 +75,14 @@ export default function App() {
   const [error, setError] = useState('');
   const [authMode, setAuthMode] = useState('login');
   const [authForm, setAuthForm] = useState({ name: '', email: 'jordan@splitstack.app', password: 'demo123' });
-  const [expenseForm, setExpenseForm] = useState({ groupId: 'g1', description: '', amount: '', category: 'Groceries', splitMethod: 'equal', blockchainEnabled: true, reason: '' });
+  const [expenseForm, setExpenseForm] = useState({ groupId: 'g1', description: '', amount: '', category: 'Groceries', splitMethod: 'equal', reason: '' });
+  const [splitInputs, setSplitInputs] = useState({ percent: {}, custom: {} });
   const [ocrPreview, setOcrPreview] = useState(null);
   const [chatMessages, setChatMessages] = useState([
     { role: 'ai', text: 'Hi! I’m the SplitStack assistant. Ask me about balances, spending, votes, or saving ideas.' }
   ]);
   const [chatInput, setChatInput] = useState('');
-  const [creatingGroup, setCreatingGroup] = useState({ name: '', type: 'roommates', threshold: 250, blockchainEnabled: false });
+  const [creatingGroup, setCreatingGroup] = useState({ name: '', type: 'roommates', threshold: 250 });
   const chatMessagesRef = useRef(null);
 
   const topMeta = navMeta[page];
@@ -128,6 +129,81 @@ export default function App() {
   }, [chatMessages]);
 
   const currentGroup = useMemo(() => groups.find((group) => group.id === expenseForm.groupId) || groups[0], [groups, expenseForm.groupId]);
+  const amountNumber = Number(expenseForm.amount || 0);
+  const memberCount = currentGroup?.members.length || 0;
+  const equalShare = memberCount ? amountNumber / memberCount : 0;
+
+  useEffect(() => {
+    if (!currentGroup?.members?.length) return;
+    setSplitInputs((current) => {
+      const nextPercent = { ...current.percent };
+      const nextCustom = { ...current.custom };
+      const evenPercent = currentGroup.members.length ? Number((100 / currentGroup.members.length).toFixed(2)) : 0;
+      const evenAmount = currentGroup.members.length ? Number((amountNumber / currentGroup.members.length).toFixed(2)) : 0;
+
+      currentGroup.members.forEach((member, index) => {
+        if (nextPercent[member.id] == null) {
+          nextPercent[member.id] = index === currentGroup.members.length - 1
+            ? Number((100 - evenPercent * (currentGroup.members.length - 1)).toFixed(2))
+            : evenPercent;
+        }
+        if (nextCustom[member.id] == null) {
+          nextCustom[member.id] = evenAmount;
+        }
+      });
+
+      return { percent: nextPercent, custom: nextCustom };
+    });
+  }, [currentGroup, amountNumber]);
+
+  const percentTotal = useMemo(
+    () => (currentGroup?.members || []).reduce((sum, member) => sum + Number(splitInputs.percent[member.id] || 0), 0),
+    [currentGroup, splitInputs.percent]
+  );
+
+  const customTotal = useMemo(
+    () => (currentGroup?.members || []).reduce((sum, member) => sum + Number(splitInputs.custom[member.id] || 0), 0),
+    [currentGroup, splitInputs.custom]
+  );
+
+  const memberShares = useMemo(() => {
+    if (!currentGroup?.members?.length) return [];
+    if (expenseForm.splitMethod === 'percent') {
+      return currentGroup.members.map((member) => {
+        const percent = Number(splitInputs.percent[member.id] || 0);
+        return {
+          userId: member.id,
+          name: member.name,
+          initials: member.initials,
+          avatarColor: member.avatarColor,
+          percent,
+          amount: Number(((amountNumber * percent) / 100).toFixed(2))
+        };
+      });
+    }
+    if (expenseForm.splitMethod === 'custom') {
+      return currentGroup.members.map((member) => {
+        const amount = Number(splitInputs.custom[member.id] || 0);
+        return {
+          userId: member.id,
+          name: member.name,
+          initials: member.initials,
+          avatarColor: member.avatarColor,
+          amount
+        };
+      });
+    }
+    return currentGroup.members.map((member, index) => ({
+      userId: member.id,
+      name: member.name,
+      initials: member.initials,
+      avatarColor: member.avatarColor,
+      amount: Number((index === currentGroup.members.length - 1
+        ? amountNumber - equalShare * (currentGroup.members.length - 1)
+        : equalShare).toFixed(2))
+    }));
+  }, [amountNumber, currentGroup, equalShare, expenseForm.splitMethod, splitInputs.custom, splitInputs.percent]);
+
 
   async function handleAuthSubmit(event) {
     event.preventDefault();
@@ -164,13 +240,36 @@ export default function App() {
 
   async function submitExpense(event) {
     event.preventDefault();
+    if (!currentGroup?.members?.length) {
+      setError('Select a group before adding an expense.');
+      return;
+    }
+
+    const normalizedSplits = memberShares.map((share) => {
+      if (expenseForm.splitMethod === 'percent') {
+        return { userId: share.userId, percent: Number(share.percent || 0) };
+      }
+      return { userId: share.userId, amount: Number(share.amount || 0) };
+    });
+
+    if (expenseForm.splitMethod === 'percent' && Math.abs(percentTotal - 100) > 0.01) {
+      setError('Percent split must add up to 100%.');
+      return;
+    }
+
+    if (expenseForm.splitMethod === 'custom' && Math.abs(customTotal - amountNumber) > 0.01) {
+      setError('Custom split amounts must match the total expense amount.');
+      return;
+    }
+
     try {
       await api('/api/expenses', {
         method: 'POST',
         body: JSON.stringify({
           ...expenseForm,
-          amount: Number(expenseForm.amount),
-          paidBy: 'u1'
+          amount: amountNumber,
+          paidBy: 'u1',
+          splits: normalizedSplits
         })
       });
       setExpenseForm((form) => ({ ...form, description: '', amount: '', reason: '' }));
@@ -240,11 +339,31 @@ export default function App() {
     }
   }
 
+  function updatePercentSplit(userId, value) {
+    setSplitInputs((current) => ({
+      ...current,
+      percent: {
+        ...current.percent,
+        [userId]: value === '' ? '' : Number(value)
+      }
+    }));
+  }
+
+  function updateCustomSplit(userId, value) {
+    setSplitInputs((current) => ({
+      ...current,
+      custom: {
+        ...current.custom,
+        [userId]: value === '' ? '' : Number(value)
+      }
+    }));
+  }
+
   async function addGroup(event) {
     event.preventDefault();
     try {
       await api('/api/groups', { method: 'POST', body: JSON.stringify({ ...creatingGroup, emoji: groupTypeEmoji[creatingGroup.type] || '👥' }) });
-      setCreatingGroup({ name: '', type: 'roommates', threshold: 250, blockchainEnabled: false });
+      setCreatingGroup({ name: '', type: 'roommates', threshold: 250 });
       await loadAll();
     } catch (nextError) {
       setError(nextError.message);
@@ -279,7 +398,7 @@ export default function App() {
         <div className="auth-right">
           <form className="auth-form" onSubmit={handleAuthSubmit}>
             <div className="auth-title">{authMode === 'login' ? 'Welcome back' : 'Create your account'}</div>
-            <div className="auth-sub">Sign in to your SplitStack account.</div>
+            <div className="auth-sub">A web demo of the SplitStack experience that mirrors the supplied product design.</div>
             <div className="auth-hint">Use the seeded demo account: <strong>jordan@splitstack.app</strong> / <strong>demo123</strong>.</div>
             {authMode === 'register' && (
               <div className="f-row">
@@ -451,11 +570,13 @@ export default function App() {
                       <div className="group-card" key={group.id}>
                         <div className="group-top">
                           <div className="group-emoji">{group.emoji}</div>
-                          <div>
+                          <div className="group-main">
                             <div className="group-name">{group.name}</div>
-                            <div className="group-meta">{group.type} · Threshold {money(group.threshold)}</div>
+                            <div className="group-meta">{group.type} · {group.members.length} members</div>
                           </div>
-                          <span className={`tag ${group.blockchainEnabled ? 'tag-purple' : 'tag-muted'}`}>{group.blockchainEnabled ? 'Blockchain on' : 'Core mode'}</span>
+                        </div>
+                        <div className="group-rule">
+                          <strong>Voting threshold:</strong> purchases above {money(group.threshold)} open a group vote before the expense is approved.
                         </div>
                         <div className="member-stack">
                           {group.members.map((member) => (
@@ -478,8 +599,8 @@ export default function App() {
                         <option value="custom">Custom</option>
                       </select>
                       <label className="f-label">Voting threshold</label>
-                      <input className="f-inp" type="number" value={creatingGroup.threshold} onChange={(e) => setCreatingGroup({ ...creatingGroup, threshold: Number(e.target.value) })} />
-                      <label className="checkbox-row"><input type="checkbox" checked={creatingGroup.blockchainEnabled} onChange={(e) => setCreatingGroup({ ...creatingGroup, blockchainEnabled: e.target.checked })} /> Enable blockchain-backed audit mode</label>
+                      <input className="f-inp" type="number" min="0" value={creatingGroup.threshold} onChange={(e) => setCreatingGroup({ ...creatingGroup, threshold: Number(e.target.value) })} />
+                      <div className="scanner-hint">Set a dollar amount for purchases that should require group approval before they are finalized.</div>
                       <button className="btn btn-primary" type="submit">Create group</button>
                     </form>
                   </div>
@@ -513,20 +634,65 @@ export default function App() {
                           <button type="button" key={method} className={`split-tab ${expenseForm.splitMethod === method ? 'on' : ''}`} onClick={() => setExpenseForm({ ...expenseForm, splitMethod: method })}>{method}</button>
                         ))}
                       </div>
+                      {expenseForm.splitMethod === 'equal' ? (
+                        <div className="scanner-hint">Split equally divides this expense across all current group members automatically.</div>
+                      ) : null}
+                      {expenseForm.splitMethod === 'percent' ? (
+                        <div className="split-box">
+                          <div className="split-summary">
+                            <span>Percent total</span>
+                            <strong className={Math.abs(percentTotal - 100) < 0.01 ? 'ok-text' : 'warn-text'}>{percentTotal.toFixed(2)}%</strong>
+                          </div>
+                          <div className="split-note">Set each member&apos;s percentage. The app calculates each payment amount automatically.</div>
+                          {memberShares.map((member) => (
+                            <div className="split-member detailed" key={member.userId}>
+                              <div className="split-member-main">
+                                <div className="ava-sm" style={{ background: member.avatarColor }}>{member.initials}</div>
+                                <div className="sm-name">{member.name}</div>
+                              </div>
+                              <div className="split-input-wrap">
+                                <input className="sm-inp" type="number" min="0" max="100" step="0.01" value={splitInputs.percent[member.userId] ?? ''} onChange={(e) => updatePercentSplit(member.userId, e.target.value)} />
+                                <span className="sm-suffix">%</span>
+                              </div>
+                              <div className="sm-amt">{money(member.amount)}</div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+                      {expenseForm.splitMethod === 'custom' ? (
+                        <div className="split-box">
+                          <div className="split-summary">
+                            <span>Assigned total</span>
+                            <strong className={Math.abs(customTotal - amountNumber) < 0.01 ? 'ok-text' : 'warn-text'}>{money(customTotal)}</strong>
+                          </div>
+                          <div className="split-note">Enter the exact amount each member should pay. The total must match the expense amount.</div>
+                          {memberShares.map((member) => (
+                            <div className="split-member detailed" key={member.userId}>
+                              <div className="split-member-main">
+                                <div className="ava-sm" style={{ background: member.avatarColor }}>{member.initials}</div>
+                                <div className="sm-name">{member.name}</div>
+                              </div>
+                              <div className="split-input-wrap money">
+                                <span className="sm-prefix">$</span>
+                                <input className="sm-inp" type="number" min="0" step="0.01" value={splitInputs.custom[member.userId] ?? ''} onChange={(e) => updateCustomSplit(member.userId, e.target.value)} />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
                       <label className="f-label">Reason for large purchase (optional)</label>
                       <textarea className="f-inp" rows="3" value={expenseForm.reason} onChange={(e) => setExpenseForm({ ...expenseForm, reason: e.target.value })} />
-                      <label className="checkbox-row"><input type="checkbox" checked={expenseForm.blockchainEnabled} onChange={(e) => setExpenseForm({ ...expenseForm, blockchainEnabled: e.target.checked })} /> Include blockchain audit hash when enabled for this group</label>
-                      {currentGroup ? <div className="scanner-hint">Expenses above {money(currentGroup.threshold)} in this group trigger a vote automatically.</div> : null}
+                      {currentGroup ? <div className="scanner-hint">This group requires a vote for expenses above {money(currentGroup.threshold)}.</div> : null}
                       <button className="btn btn-primary btn-lg" type="submit">Add and Split</button>
                     </form>
                   </div>
                   <div className="card">
                     <div className="card-head">Current group members</div>
-                    {currentGroup?.members.map((member) => (
-                      <div className="split-member" key={member.id}>
+                    {memberShares.map((member) => (
+                      <div className="split-member" key={member.userId}>
                         <div className="ava-sm" style={{ background: member.avatarColor }}>{member.initials}</div>
                         <div className="sm-name">{member.name}</div>
-                        <div className="sm-amt">{expenseForm.amount ? money(Number(expenseForm.amount || 0) / currentGroup.members.length) : '$0.00'}</div>
+                        <div className="sm-amt">{expenseForm.splitMethod === 'percent' ? `${Number(member.percent || 0).toFixed(2)}% · ` : ''}{money(member.amount)}</div>
                       </div>
                     ))}
                   </div>
@@ -557,7 +723,7 @@ export default function App() {
                     <div className="card-head">What happens next</div>
                     <div className="timeline-item">1. OCR extracts merchant and amount.</div>
                     <div className="timeline-item">2. Expense form is pre-filled for faster logging.</div>
-                    <div className="timeline-item">3. If the amount crosses the group threshold, a democratic vote is created automatically.</div>
+                    <div className="timeline-item">3. If the amount crosses the group voting threshold, a democratic vote is created automatically for the group.</div>
                     <button className="btn btn-primary mt-4" onClick={() => setPage('add')}>Continue to expense form</button>
                   </div>
                 </div>
@@ -743,3 +909,4 @@ function Toggle({ label, checked, onChange }) {
     </div>
   );
 }
+
