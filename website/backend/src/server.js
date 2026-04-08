@@ -5,6 +5,7 @@ import db from './db.js';
 import {
   calculateBalances,
   createExpense,
+  createGroup,
   generateAiReply,
   getAnalytics,
   getCurrentUser,
@@ -12,6 +13,7 @@ import {
   getGroups,
   getNotifications,
   getProgress,
+  updateGroup,
   getSettings,
   getVotes,
   respondToVote,
@@ -74,14 +76,16 @@ app.get('/api/groups', (_req, res) => {
 });
 
 app.post('/api/groups', (req, res) => {
-  const { name, type = 'custom', emoji = '👥', threshold = 250, blockchainEnabled = false } = req.body ?? {};
-  if (!name) return res.status(400).json({ message: 'Group name is required.' });
-  const id = `g${Date.now()}`;
-  db.prepare(`INSERT INTO groups_table (id, name, type, emoji, threshold, blockchain_enabled, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`)
-    .run(id, name, type, emoji, threshold, blockchainEnabled ? 1 : 0, new Date().toISOString().slice(0, 10));
-  db.prepare(`INSERT INTO group_members (group_id, user_id, role) VALUES (?, ?, ?)`)
-    .run(id, 'u1', 'Owner');
-  res.status(201).json({ group: getGroups().find((group) => group.id === id) });
+  const { name, type = 'custom', emoji = '👥', threshold = 0, memberNames = [] } = req.body ?? {};
+  if (!name?.trim()) return res.status(400).json({ message: 'Group name is required.' });
+  const group = createGroup({ name: name.trim(), type, emoji, threshold, memberNames });
+  res.status(201).json({ group });
+});
+
+app.put('/api/groups/:id', (req, res) => {
+  const group = updateGroup(req.params.id, req.body ?? {});
+  if (!group) return res.status(404).json({ message: 'Group not found.' });
+  res.json({ group });
 });
 
 app.get('/api/expenses', (_req, res) => {

@@ -40,6 +40,40 @@ function money(value) {
   return `$${Math.abs(Number(value || 0)).toFixed(2)}`;
 }
 
+function parseMemberNames(text = '') {
+  const seen = new Set();
+  return String(text)
+    .split(/\n|,/)
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .filter((name) => {
+      const key = name.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
+function buildEvenPercentMap(members = []) {
+  const count = members.length || 1;
+  const base = Number((100 / count).toFixed(2));
+  const map = {};
+  members.forEach((member, index) => {
+    map[member.id] = index === members.length - 1 ? Number((100 - base * (members.length - 1)).toFixed(2)) : base;
+  });
+  return map;
+}
+
+function buildEvenCustomMap(members = [], amount = 0) {
+  const count = members.length || 1;
+  const base = Number((amount / count).toFixed(2));
+  const map = {};
+  members.forEach((member, index) => {
+    map[member.id] = index === members.length - 1 ? Number((amount - base * (members.length - 1)).toFixed(2)) : base;
+  });
+  return map;
+}
+
 function Icon({ name }) {
   const common = { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round' };
   const icons = {
@@ -82,10 +116,12 @@ export default function App() {
     { role: 'ai', text: 'Hi! I’m the SplitStack assistant. Ask me about balances, spending, votes, or saving ideas.' }
   ]);
   const [chatInput, setChatInput] = useState('');
-  const [creatingGroup, setCreatingGroup] = useState({ name: '', type: 'roommates', threshold: 250 });
+  const [creatingGroup, setCreatingGroup] = useState({ id: null, name: '', type: 'roommates', threshold: '', memberNamesText: 'Jordan Lee, Marcus Chen, Priya Sharma' });
   const chatMessagesRef = useRef(null);
 
   const topMeta = navMeta[page];
+  const draftMemberNames = useMemo(() => parseMemberNames(creatingGroup.memberNamesText), [creatingGroup.memberNamesText]);
+  const isEditingGroup = Boolean(creatingGroup.id);
 
   async function loadAll() {
     setLoading(true);
@@ -135,25 +171,10 @@ export default function App() {
 
   useEffect(() => {
     if (!currentGroup?.members?.length) return;
-    setSplitInputs((current) => {
-      const nextPercent = { ...current.percent };
-      const nextCustom = { ...current.custom };
-      const evenPercent = currentGroup.members.length ? Number((100 / currentGroup.members.length).toFixed(2)) : 0;
-      const evenAmount = currentGroup.members.length ? Number((amountNumber / currentGroup.members.length).toFixed(2)) : 0;
-
-      currentGroup.members.forEach((member, index) => {
-        if (nextPercent[member.id] == null) {
-          nextPercent[member.id] = index === currentGroup.members.length - 1
-            ? Number((100 - evenPercent * (currentGroup.members.length - 1)).toFixed(2))
-            : evenPercent;
-        }
-        if (nextCustom[member.id] == null) {
-          nextCustom[member.id] = evenAmount;
-        }
-      });
-
-      return { percent: nextPercent, custom: nextCustom };
-    });
+    setSplitInputs((current) => ({
+      percent: { ...buildEvenPercentMap(currentGroup.members), ...current.percent },
+      custom: { ...buildEvenCustomMap(currentGroup.members, amountNumber), ...current.custom }
+    }));
   }, [currentGroup, amountNumber]);
 
   const percentTotal = useMemo(
@@ -204,6 +225,31 @@ export default function App() {
     }));
   }, [amountNumber, currentGroup, equalShare, expenseForm.splitMethod, splitInputs.custom, splitInputs.percent]);
 
+
+
+  function resetGroupForm() {
+    setCreatingGroup({ id: null, name: '', type: 'roommates', threshold: '', memberNamesText: 'Jordan Lee, Marcus Chen, Priya Sharma' });
+  }
+
+  function startEditGroup(group) {
+    setCreatingGroup({
+      id: group.id,
+      name: group.name,
+      type: group.type,
+      threshold: String(group.threshold ?? ''),
+      memberNamesText: group.members.map((member) => member.name).join(', ')
+    });
+  }
+
+  function applyEvenPercentSplit() {
+    if (!currentGroup?.members?.length) return;
+    setSplitInputs((current) => ({ ...current, percent: buildEvenPercentMap(currentGroup.members) }));
+  }
+
+  function applyEvenCustomSplit() {
+    if (!currentGroup?.members?.length) return;
+    setSplitInputs((current) => ({ ...current, custom: buildEvenCustomMap(currentGroup.members, amountNumber) }));
+  }
 
   async function handleAuthSubmit(event) {
     event.preventDefault();
@@ -361,9 +407,27 @@ export default function App() {
 
   async function addGroup(event) {
     event.preventDefault();
+    const memberNames = parseMemberNames(creatingGroup.memberNamesText);
+    if (!creatingGroup.name.trim()) {
+      setError('Please enter a group name.');
+      return;
+    }
+    if (!memberNames.length) {
+      setError('Add at least one group member name before saving.');
+      return;
+    }
     try {
-      await api('/api/groups', { method: 'POST', body: JSON.stringify({ ...creatingGroup, emoji: groupTypeEmoji[creatingGroup.type] || '👥' }) });
-      setCreatingGroup({ name: '', type: 'roommates', threshold: 250 });
+      const payload = {
+        name: creatingGroup.name.trim(),
+        type: creatingGroup.type,
+        threshold: creatingGroup.threshold === '' ? 0 : Number(creatingGroup.threshold),
+        emoji: groupTypeEmoji[creatingGroup.type] || '👥',
+        memberNames
+      };
+      const method = isEditingGroup ? 'PUT' : 'POST';
+      const path = isEditingGroup ? `/api/groups/${creatingGroup.id}` : '/api/groups';
+      await api(path, { method, body: JSON.stringify(payload) });
+      resetGroupForm();
       await loadAll();
     } catch (nextError) {
       setError(nextError.message);
@@ -563,34 +627,38 @@ export default function App() {
 
             {page === 'groups' && (
               <div className="page show">
-                <div className="g2">
+                <div className="g2 groups-layout">
                   <div className="card">
                     <div className="card-head">Active groups</div>
-                    {groups.map((group) => (
-                      <div className="group-card" key={group.id}>
-                        <div className="group-top">
-                          <div className="group-emoji">{group.emoji}</div>
-                          <div className="group-main">
-                            <div className="group-name">{group.name}</div>
-                            <div className="group-meta">{group.type} · {group.members.length} members</div>
+                    <div className="group-list">
+                      {groups.map((group) => (
+                        <div className="group-card interactive" key={group.id}>
+                          <div className="group-top">
+                            <div className="group-emoji">{group.emoji}</div>
+                            <div className="group-main">
+                              <div className="group-name">{group.name}</div>
+                              <div className="group-meta">{group.type} · {group.members.length} members</div>
+                            </div>
+                            <button className="btn btn-secondary btn-sm" type="button" onClick={() => startEditGroup(group)}>Edit</button>
+                          </div>
+                          <div className="group-rule">
+                            <strong>Voting threshold:</strong> Any purchase above this amount will trigger a group vote automatically.
+                            <div className="group-threshold-value">Current threshold: {money(group.threshold)}</div>
+                          </div>
+                          <div className="member-stack">
+                            {group.members.map((member) => (
+                              <div className="member-pill" key={member.id}>{member.name}</div>
+                            ))}
                           </div>
                         </div>
-                        <div className="group-rule">
-                          <strong>Voting threshold:</strong> purchases above {money(group.threshold)} open a group vote before the expense is approved.
-                        </div>
-                        <div className="member-stack">
-                          {group.members.map((member) => (
-                            <div className="member-pill" key={member.id}>{member.initials} · {member.role}</div>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                  <div className="card">
-                    <div className="card-head">Create a group</div>
+                  <div className="card sticky-card">
+                    <div className="card-head">{isEditingGroup ? 'Edit group' : 'Create a group'}</div>
                     <form onSubmit={addGroup} className="stack-form">
                       <label className="f-label">Group name</label>
-                      <input className="f-inp" value={creatingGroup.name} onChange={(e) => setCreatingGroup({ ...creatingGroup, name: e.target.value })} />
+                      <input className="f-inp" placeholder="e.g. Summer Apartment" value={creatingGroup.name} onChange={(e) => setCreatingGroup({ ...creatingGroup, name: e.target.value })} />
                       <label className="f-label">Group type</label>
                       <select className="f-inp" value={creatingGroup.type} onChange={(e) => setCreatingGroup({ ...creatingGroup, type: e.target.value })}>
                         <option value="roommates">Roommates</option>
@@ -599,9 +667,23 @@ export default function App() {
                         <option value="custom">Custom</option>
                       </select>
                       <label className="f-label">Voting threshold</label>
-                      <input className="f-inp" type="number" min="0" value={creatingGroup.threshold} onChange={(e) => setCreatingGroup({ ...creatingGroup, threshold: Number(e.target.value) })} />
-                      <div className="scanner-hint">Set a dollar amount for purchases that should require group approval before they are finalized.</div>
-                      <button className="btn btn-primary" type="submit">Create group</button>
+                      <input className="f-inp" type="number" min="0" placeholder="Enter amount" value={creatingGroup.threshold} onChange={(e) => setCreatingGroup({ ...creatingGroup, threshold: e.target.value })} />
+                      <div className="scanner-hint">Any purchase above this amount will trigger a group vote automatically.</div>
+                      <label className="f-label">Group members</label>
+                      <textarea className="f-inp" rows="4" placeholder="Add names separated by commas or new lines" value={creatingGroup.memberNamesText} onChange={(e) => setCreatingGroup({ ...creatingGroup, memberNamesText: e.target.value })} />
+                      <div className="member-helper row-b">
+                        <span>{draftMemberNames.length} people ready to save</span>
+                        <span>{draftMemberNames.length ? 'Count updates automatically' : 'Add at least one name'}</span>
+                      </div>
+                      <div className="member-stack member-stack-edit">
+                        {draftMemberNames.map((name) => (
+                          <div className="member-pill" key={name}>{name}</div>
+                        ))}
+                      </div>
+                      <div className="form-actions">
+                        <button className="btn btn-primary" type="submit">{isEditingGroup ? 'Save changes' : 'Create group'}</button>
+                        {isEditingGroup ? <button className="btn btn-secondary" type="button" onClick={resetGroupForm}>Cancel</button> : null}
+                      </div>
                     </form>
                   </div>
                 </div>
@@ -644,6 +726,7 @@ export default function App() {
                             <strong className={Math.abs(percentTotal - 100) < 0.01 ? 'ok-text' : 'warn-text'}>{percentTotal.toFixed(2)}%</strong>
                           </div>
                           <div className="split-note">Set each member&apos;s percentage. The app calculates each payment amount automatically.</div>
+                          <div className="split-actions"><button className="btn btn-secondary btn-sm" type="button" onClick={applyEvenPercentSplit}>Split percentages evenly</button></div>
                           {memberShares.map((member) => (
                             <div className="split-member detailed" key={member.userId}>
                               <div className="split-member-main">
@@ -666,6 +749,7 @@ export default function App() {
                             <strong className={Math.abs(customTotal - amountNumber) < 0.01 ? 'ok-text' : 'warn-text'}>{money(customTotal)}</strong>
                           </div>
                           <div className="split-note">Enter the exact amount each member should pay. The total must match the expense amount.</div>
+                          <div className="split-actions"><button className="btn btn-secondary btn-sm" type="button" onClick={applyEvenCustomSplit}>Distribute amounts evenly</button></div>
                           {memberShares.map((member) => (
                             <div className="split-member detailed" key={member.userId}>
                               <div className="split-member-main">

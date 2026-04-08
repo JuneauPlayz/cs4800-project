@@ -1,5 +1,70 @@
 import db from './db.js';
 
+const avatarPalette = ['#0D9488', '#8B5CF6', '#F59E0B', '#EF4444', '#2563EB', '#14B8A6', '#EC4899', '#22C55E'];
+
+function initials(name = '') {
+  return name
+    .split(' ')
+    .map((part) => part[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
+}
+
+function normalizeMemberNames(namesInput = []) {
+  const names = Array.isArray(namesInput)
+    ? namesInput
+    : String(namesInput)
+      .split(/\n|,/)
+      .map((value) => value.trim());
+
+  const seen = new Set();
+  return names
+    .map((name) => name.trim())
+    .filter(Boolean)
+    .filter((name) => {
+      const key = name.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
+function ensureUserByName(name) {
+  const existing = db.prepare('SELECT id, name, email, initials, avatar_color as avatarColor FROM users WHERE lower(name) = lower(?)').get(name);
+  if (existing) return existing;
+
+  const count = db.prepare('SELECT COUNT(*) as count FROM users').get().count;
+  const id = `u${Date.now()}${Math.floor(Math.random() * 1000)}`;
+  const emailSlug = name.toLowerCase().replace(/[^a-z0-9]+/g, '.').replace(/^\.+|\.+$/g, '') || `member.${count + 1}`;
+  const user = {
+    id,
+    name,
+    email: `${emailSlug}@splitstack.local`,
+    password: 'demo123',
+    initials: initials(name),
+    avatarColor: avatarPalette[count % avatarPalette.length]
+  };
+  db.prepare('INSERT INTO users (id, name, email, password, initials, avatar_color) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(user.id, user.name, user.email, user.password, user.initials, user.avatarColor);
+  db.prepare('INSERT OR IGNORE INTO user_settings (user_id, email_votes, email_balance, push_settlements, ai_proactive) VALUES (?, 1, 1, 1, 1)')
+    .run(user.id);
+  return user;
+}
+
+function replaceGroupMembers(groupId, memberNames = []) {
+  const normalizedNames = normalizeMemberNames(memberNames);
+  const insertMember = db.prepare('INSERT OR REPLACE INTO group_members (group_id, user_id, role) VALUES (?, ?, ?)');
+
+  const members = normalizedNames.map((name, index) => {
+    const user = ensureUserByName(name);
+    insertMember.run(groupId, user.id, index === 0 ? 'Owner' : 'Member');
+    return user;
+  });
+
+  return members;
+}
+
 export function getCurrentUser() {
   return db.prepare('SELECT id, name, email, initials, avatar_color as avatarColor FROM users WHERE id = ?').get('u1');
 }
@@ -10,7 +75,7 @@ export function getMembersByGroup(groupId) {
     FROM group_members gm
     JOIN users u ON u.id = gm.user_id
     WHERE gm.group_id = ?
-    ORDER BY u.name ASC
+    ORDER BY CASE gm.role WHEN 'Owner' THEN 0 WHEN 'Admin' THEN 1 ELSE 2 END, u.name ASC
   `).all(groupId);
 }
 
@@ -69,9 +134,10 @@ export function calculateBalances() {
   const summary = Object.fromEntries(users.map((user) => [user.id, { ...user, paid: 0, owed: 0, net: 0 }]));
 
   expenses.forEach((expense) => {
+    if (!summary[expense.paidBy]) return;
     summary[expense.paidBy].paid += expense.amount;
     expense.splits.forEach((split) => {
-      summary[split.userId].owed += split.amount;
+      if (summary[split.userId]) summary[split.userId].owed += split.amount;
     });
   });
 
@@ -168,6 +234,38 @@ export function upsertSettings(nextSettings) {
   return getSettings();
 }
 
+export function createGroup(payload) {
+  const id = `g${Date.now()}`;
+  const createdAt = new Date().toISOString().slice(0, 10);
+  db.prepare(`INSERT INTO groups_table (id, name, type, emoji, threshold, blockchain_enabled, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`) 
+    .run(id, payload.name, payload.type ?? 'custom', payload.emoji ?? '👥', Number(payload.threshold ?? 0), 0, createdAt);
+
+  const memberNames = normalizeMemberNames(payload.memberNames);
+  replaceGroupMembers(id, memberNames.length ? memberNames : ['Jordan Lee']);
+
+  return getGroups().find((group) => group.id === id);
+}
+
+export function updateGroup(groupId, payload) {
+  const existing = db.prepare('SELECT * FROM groups_table WHERE id = ?').get(groupId);
+  if (!existing) return null;
+
+  const nextName = payload.name?.trim() || existing.name;
+  const nextType = payload.type || existing.type;
+  const nextEmoji = payload.emoji || existing.emoji;
+  const nextThreshold = payload.threshold === '' || payload.threshold == null ? existing.threshold : Number(payload.threshold);
+
+  db.prepare('UPDATE groups_table SET name = ?, type = ?, emoji = ?, threshold = ? WHERE id = ?')
+    .run(nextName, nextType, nextEmoji, nextThreshold, groupId);
+
+  if (payload.memberNames) {
+    db.prepare('DELETE FROM group_members WHERE group_id = ?').run(groupId);
+    replaceGroupMembers(groupId, payload.memberNames);
+  }
+
+  return getGroups().find((group) => group.id === groupId);
+}
+
 export function createExpense(payload) {
   const id = `e${Date.now()}`;
   const createdAt = new Date().toISOString();
@@ -214,7 +312,7 @@ export function createExpense(payload) {
       INSERT INTO votes (id, group_id, requested_by, description, amount, category, reason, status, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(voteId, payload.groupId, payload.paidBy ?? 'u1', payload.description, payload.amount, payload.category, payload.reason ?? 'Auto-created from expense above threshold.', 'pending', createdAt);
-    db.prepare(`INSERT INTO vote_decisions (vote_id, user_id, decision, decided_at) VALUES (?, ?, ?, ?)`)
+    db.prepare(`INSERT INTO vote_decisions (vote_id, user_id, decision, decided_at) VALUES (?, ?, ?, ?)`) 
       .run(voteId, payload.paidBy ?? 'u1', 'yes', createdAt);
     triggeredVote = voteId;
   }
@@ -260,24 +358,21 @@ export function generateAiReply(question) {
   const lower = question.toLowerCase();
 
   if (lower.includes('owe')) {
-    const most = [...balances.people].sort((a, b) => a.net - b.net)[0];
-    return `${most.name} owes the most right now at $${Math.abs(most.net).toFixed(2)}. Jordan is net ${balances.net >= 0 ? 'positive' : 'negative'} at $${Math.abs(balances.net).toFixed(2)}.`;
+    const top = balances.people[0];
+    return `${top.name} has the largest current imbalance at ${moneyLike(top.net)}. Your overall net balance is ${moneyLike(balances.net)}.`;
   }
   if (lower.includes('grocery')) {
-    const groceries = analytics.byCategory.find((category) => category.category.toLowerCase().includes('grocer'));
-    return `Groceries are at $${(groceries?.total ?? 0).toFixed(2)} this cycle. That is one of your top shared categories so far.`;
+    const groceries = analytics.byCategory.find((item) => item.category.toLowerCase() === 'groceries');
+    return `Groceries total ${moneyLike(groceries?.total ?? 0)} this month. The largest category overall is ${analytics.byCategory[0]?.category} at ${moneyLike(analytics.byCategory[0]?.total ?? 0)}.`;
   }
-  if (lower.includes('save') || lower.includes('tip')) {
-    const firstAlert = analytics.subscriptionAlerts[0];
-    return firstAlert
-      ? `A quick win: ${firstAlert.monthlySavingsText}. You could also keep dining spend below the current challenge target.`
-      : 'A quick win would be reducing dining purchases and consolidating duplicate subscriptions.';
+  if (lower.includes('pending vote') || lower.includes('vote')) {
+    if (!pendingVotes.length) return 'There are no pending votes right now. Everything above each group’s voting threshold has already been resolved.';
+    const vote = pendingVotes[0];
+    return `The current pending vote is for ${vote.description} at ${moneyLike(vote.amount)} in ${vote.category}. ${vote.decisions.length} decision(s) have been logged so far.`;
   }
-  if (lower.includes('vote')) {
-    return pendingVotes.length
-      ? `You have ${pendingVotes.length} pending vote${pendingVotes.length > 1 ? 's' : ''}. The top one is “${pendingVotes[0].description}” for $${pendingVotes[0].amount.toFixed(2)}.`
-      : 'There are no pending votes right now.';
-  }
+  return `You have ${pendingVotes.length} pending vote${pendingVotes.length === 1 ? '' : 's'}, ${analytics.subscriptionAlerts.length} subscription sharing opportunity${analytics.subscriptionAlerts.length === 1 ? '' : 'ies'}, and your current net balance is ${moneyLike(balances.net)}. A quick win: review dining and streaming spend if you want to cut costs this week.`;
+}
 
-  return `SplitStack tracks balances, votes, expenses, subscriptions, and progress challenges. Right now the group has spent $${analytics.monthTotal.toFixed(2)} and Jordan is ${balances.net >= 0 ? 'owed' : 'owing'} $${Math.abs(balances.net).toFixed(2)}.`;
+function moneyLike(value) {
+  return `$${Math.abs(Number(value || 0)).toFixed(2)}`;
 }

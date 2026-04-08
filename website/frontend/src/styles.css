@@ -321,3 +321,24 @@ svg { display: block; }
   .chat-wrap { height: calc(100vh - 170px); }
 }
 
+
+
+.groups-layout { align-items: start; }
+.group-list { display: flex; flex-direction: column; gap: 12px; }
+.group-card.interactive { transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease; }
+.group-card.interactive:hover { transform: translateY(-2px); box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08); border-color: var(--teal-m); }
+.group-threshold-value { margin-top: 6px; font-weight: 700; color: var(--teal-d); }
+.member-helper { margin: 6px 0 2px; padding: 10px 12px; border-radius: 10px; background: var(--teal-l); color: var(--teal-d); font-size: 12px; border: 1px solid var(--teal-m); }
+.member-stack-edit { min-height: 44px; }
+.form-actions { display: flex; gap: 10px; margin-top: 8px; }
+.sticky-card { position: sticky; top: 20px; }
+.split-actions { display: flex; justify-content: flex-end; margin-bottom: 8px; }
+.stack-form .btn, .cat-btn, .split-tab, .member-pill, .icon-btn, .nav-btn, .btn-demo { transition: all .16s ease; }
+.member-pill:hover { border-color: var(--teal-m); background: var(--teal-l); color: var(--teal-d); }
+.btn-demo:hover { background: var(--slate2); transform: translateY(-1px); }
+.group-rule { display: flex; flex-direction: column; gap: 4px; }
+
+@media (max-width: 900px) {
+  .sticky-card { position: static; }
+  .form-actions { flex-direction: column; }
+}
