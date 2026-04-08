@@ -13,7 +13,13 @@ import {
   getExpenses,
   getGroups,
   getNotifications,
+<<<<<<< HEAD
   getPendingInvitesForUser,
+=======
+  getProgress,
+  updateGroup,
+  leaveGroup,
+>>>>>>> dev
   getSettings,
   getUserByEmail,
   getUserById,
@@ -24,10 +30,20 @@ import {
   respondToInvite,
   respondToVote,
   upsertSettings,
+<<<<<<< HEAD
   updateGroup,
   contributeToChallenge,
   requireMembership
+=======
+  sendInvitation,
+  getPendingInvitations,
+  respondToInvitation
+>>>>>>> dev
 } from './services.js';
+
+function currentUserId(req) {
+  return req.headers['x-user-id'] || 'u1';
+}
 
 const app = express();
 const PORT = Number(process.env.PORT || 3001);
@@ -66,6 +82,7 @@ app.post('/api/auth/register', (req, res) => {
   res.status(201).json({ user, token: user.id });
 });
 
+<<<<<<< HEAD
 app.use('/api', auth);
 
 app.get('/api/me', (req, res) => {
@@ -79,12 +96,35 @@ app.get('/api/dashboard', (req, res) => {
 
 app.get('/api/groups', (req, res) => {
   res.json({ groups: getGroups(req.user.id) });
+=======
+app.get('/api/me', (req, res) => {
+  res.json({ user: getCurrentUser(currentUserId(req)) });
+});
+
+app.get('/api/dashboard', (req, res) => {
+  const uid = currentUserId(req);
+  res.json({
+    user: getCurrentUser(uid),
+    balances: calculateBalances(uid),
+    notifications: getNotifications(),
+    analytics: getAnalytics(uid),
+    pendingVotes: getVotes(uid).filter((vote) => vote.status === 'pending').length
+  });
+});
+
+app.get('/api/groups', (req, res) => {
+  res.json({ groups: getGroups(currentUserId(req)) });
+>>>>>>> dev
 });
 
 app.post('/api/groups', (req, res) => {
   const { name, type = 'custom', threshold = 0, inviteEntries = [], inviteEmails = [], description = '' } = req.body ?? {};
   if (!name?.trim()) return res.status(400).json({ message: 'Group name is required.' });
+<<<<<<< HEAD
   const group = createGroup({ userId: req.user.id, name, type, threshold, inviteEntries, inviteEmails, description });
+=======
+  const group = createGroup({ name: name.trim(), type, emoji, threshold, memberNames }, currentUserId(req));
+>>>>>>> dev
   res.status(201).json({ group });
 });
 
@@ -94,6 +134,7 @@ app.put('/api/groups/:id', (req, res) => {
   res.json({ group });
 });
 
+<<<<<<< HEAD
 
 
 app.delete('/api/groups/:id', (req, res) => {
@@ -134,18 +175,71 @@ app.post('/api/expenses', (req, res) => {
 
 app.get('/api/votes', (req, res) => {
   res.json({ votes: getVotes(req.user.id) });
+=======
+app.delete('/api/groups/:id', (req, res) => {
+  try {
+    const result = leaveGroup(req.params.id, currentUserId(req));
+    res.json(result);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+app.get('/api/expenses', (req, res) => {
+  res.json({ expenses: getExpenses(currentUserId(req)) });
+});
+
+app.post('/api/expenses', (req, res) => {
+  const { groupId, description, amount, category, splitMethod = 'equal', paidBy = currentUserId(req) } = req.body ?? {};
+  if (!groupId || !description || !amount || !category) {
+    return res.status(400).json({ message: 'groupId, description, amount, and category are required.' });
+  }
+  const payload = {
+    ...req.body,
+    amount: Number(amount),
+    splitMethod,
+    paidBy
+  };
+  const result = createExpense(payload);
+  res.status(201).json(result);
+});
+
+app.post('/api/ocr/mock', (req, res) => {
+  const merchant = req.body?.merchant || 'Whole Foods';
+  res.json({
+    merchant,
+    amount: 148.5,
+    date: new Date().toISOString().slice(0, 10),
+    category: 'Groceries'
+  });
+});
+
+app.get('/api/votes', (req, res) => {
+  res.json({ votes: getVotes(currentUserId(req)) });
+>>>>>>> dev
 });
 
 app.post('/api/votes/:id/respond', (req, res) => {
   const { decision } = req.body ?? {};
+<<<<<<< HEAD
   if (!['yes', 'no'].includes(decision)) return res.status(400).json({ message: 'decision must be yes or no.' });
   const vote = respondToVote(req.params.id, decision, req.user.id);
   if (!vote) return res.status(404).json({ message: 'Vote not found.' });
+=======
+  if (!['yes', 'no'].includes(decision)) {
+    return res.status(400).json({ message: 'decision must be yes or no.' });
+  }
+  const vote = respondToVote(req.params.id, decision, currentUserId(req));
+>>>>>>> dev
   res.json({ vote });
 });
 
 app.get('/api/analytics', (req, res) => {
+<<<<<<< HEAD
   res.json(getAnalytics(req.user.id));
+=======
+  res.json(getAnalytics(currentUserId(req)));
+>>>>>>> dev
 });
 
 app.get('/api/challenges', (req, res) => {
@@ -160,6 +254,7 @@ app.post('/api/challenges', (req, res) => {
   res.status(201).json({ challenge });
 });
 
+<<<<<<< HEAD
 app.post('/api/challenges/:id/contribute', (req, res) => {
   const { amount } = req.body ?? {};
   if (!amount || Number(amount) <= 0) return res.status(400).json({ message: 'A positive amount is required.' });
@@ -185,6 +280,19 @@ app.put('/api/settings', (req, res) => {
   const current = getSettings(req.user.id);
   const settings = upsertSettings({
     userId: req.user.id,
+=======
+app.get('/api/settings', (req, res) => {
+  const uid = currentUserId(req);
+  const settings = getSettings(uid) ?? upsertSettings({ userId: uid, emailVotes: 1, emailBalance: 1, pushSettlements: 1, aiProactive: 1 });
+  res.json({ settings });
+});
+
+app.put('/api/settings', (req, res) => {
+  const uid = currentUserId(req);
+  const current = getSettings(uid) ?? { emailVotes: 1, emailBalance: 1, pushSettlements: 1, aiProactive: 1 };
+  const settings = upsertSettings({
+    userId: uid,
+>>>>>>> dev
     emailVotes: req.body?.emailVotes ?? current.emailVotes,
     emailBalance: req.body?.emailBalance ?? current.emailBalance,
     pushSettlements: req.body?.pushSettlements ?? current.pushSettlements,
@@ -197,7 +305,40 @@ app.put('/api/settings', (req, res) => {
 
 app.post('/api/ai/chat', (req, res) => {
   const { message = '' } = req.body ?? {};
+<<<<<<< HEAD
   res.json({ reply: generateAiReply(req.user.id, message) });
+=======
+  res.json({ reply: generateAiReply(message, currentUserId(req)) });
+});
+
+app.post('/api/groups/:id/invite', (req, res) => {
+  const { email } = req.body ?? {};
+  if (!email) return res.status(400).json({ message: 'Email is required.' });
+  try {
+    const result = sendInvitation(req.params.id, currentUserId(req), email);
+    res.status(201).json(result);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+});
+
+app.get('/api/invitations', (req, res) => {
+  const invitations = getPendingInvitations(currentUserId(req));
+  res.json({ invitations });
+});
+
+app.put('/api/invitations/:id/respond', (req, res) => {
+  const { decision } = req.body ?? {};
+  if (!['accepted', 'declined'].includes(decision)) {
+    return res.status(400).json({ message: 'decision must be accepted or declined.' });
+  }
+  try {
+    const result = respondToInvitation(req.params.id, currentUserId(req), decision);
+    res.json(result);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+>>>>>>> dev
 });
 
 app.listen(PORT, () => {

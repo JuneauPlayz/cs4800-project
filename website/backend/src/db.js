@@ -72,6 +72,7 @@ function bootstrap() {
       expense_date TEXT NOT NULL,
       merchant TEXT,
       receipt_url TEXT,
+      reason TEXT,
       created_at TEXT NOT NULL
     );
 
@@ -142,6 +143,16 @@ function bootstrap() {
       challenge_id TEXT NOT NULL,
       user_id TEXT NOT NULL,
       amount REAL NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS group_invitations (
+      id TEXT PRIMARY KEY,
+      group_id TEXT NOT NULL,
+      invited_by TEXT NOT NULL,
+      invited_email TEXT NOT NULL,
+      invited_user_id TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
       created_at TEXT NOT NULL
     );
   `);
@@ -238,5 +249,14 @@ function bootstrap() {
 }
 
 bootstrap();
+
+// Migrations for existing databases
+const existingCols = db.pragma('table_info(expenses)').map((c) => c.name);
+if (!existingCols.includes('reason')) {
+  db.exec('ALTER TABLE expenses ADD COLUMN reason TEXT');
+}
+if (!existingCols.includes('vote_id')) {
+  db.exec('ALTER TABLE expenses ADD COLUMN vote_id TEXT');
+}
 
 export default db;
