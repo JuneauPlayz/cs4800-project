@@ -382,6 +382,28 @@ export default function App() {
     }
   }
 
+
+  async function handleDeleteGroup(group) {
+    const confirmed = window.confirm(`Delete ${group.name}? This will permanently remove the group, its expenses, votes, challenges, invites, and member history.`);
+    if (!confirmed) return;
+    try {
+      setError('');
+      await api(`/api/groups/${group.id}`, { method: 'DELETE' }, token);
+      if (groupForm.id === group.id) resetGroupForm();
+      if (expenseForm.groupId === group.id) {
+        const nextGroup = groups.find((item) => item.id !== group.id);
+        setExpenseForm((current) => ({ ...current, groupId: nextGroup?.id || '' }));
+      }
+      if (challengeForm.groupId === group.id) {
+        const nextGroup = groups.find((item) => item.id !== group.id);
+        setChallengeForm((current) => ({ ...current, groupId: nextGroup?.id || '' }));
+      }
+      await loadAll();
+    } catch (nextError) {
+      setError(nextError.message);
+    }
+  }
+
   async function submitExpense(event) {
     event.preventDefault();
     if (!currentGroup) return;
@@ -600,7 +622,7 @@ export default function App() {
                     <div className="card-head">Your groups</div>
                     {groups.map((group) => (
                       <div className="group-card interactive" key={group.id}>
-                        <div className="group-top"><div className="group-emoji">{group.emoji}</div><div className="group-main"><div className="group-name">{group.name}</div><div className="group-meta">{group.type} · {group.members.length} members · {group.pendingInvites.length} pending invites</div></div><div className="row gap-2">{group.isOwner ? <button className="btn btn-secondary btn-sm" onClick={() => startEditGroup(group)}>Edit</button> : <button className="btn btn-danger btn-sm" onClick={() => handleLeaveGroup(group)}>Leave group</button>}</div></div>
+                        <div className="group-top"><div className="group-emoji">{group.emoji}</div><div className="group-main"><div className="group-name">{group.name}</div><div className="group-meta">{group.type} · {group.members.length} members · {group.pendingInvites.length} pending invites</div></div><div className="row gap-2 wrap-actions">{group.isOwner ? <><button className="btn btn-secondary btn-sm" onClick={() => startEditGroup(group)}>Edit</button><button className="btn btn-danger btn-sm" onClick={() => handleDeleteGroup(group)}>Delete</button></> : <button className="btn btn-danger btn-sm" onClick={() => handleLeaveGroup(group)}>Leave group</button>}</div></div>
                         <div className="group-rule"><strong>Voting threshold:</strong> Any purchase above this amount will trigger a group vote automatically.<div className="group-threshold-value">Current threshold: {money(group.threshold)}</div></div>
                         <div className="member-stack">{group.members.map((member) => <div className="member-pill" key={member.id}>{member.name}</div>)}{group.pendingInvites.map((invite) => <div className="member-pill pending-pill" key={invite.id}>{invite.email} · Pending</div>)}</div>
                       </div>

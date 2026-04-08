@@ -353,6 +353,49 @@ export function leaveGroup(groupId, userId) {
   return { ok: true, groupId, message: `You left ${membership.groupName}.` };
 }
 
+
+export function deleteGroup(groupId, userId) {
+  const group = db.prepare('SELECT id, name, owner_id as ownerId FROM groups_table WHERE id = ?').get(groupId);
+  if (!group) return { ok: false, message: 'Group not found.' };
+  if (group.ownerId !== userId) return { ok: false, message: 'Only the group owner can delete this group.' };
+
+  const memberIds = db.prepare('SELECT user_id as userId FROM group_members WHERE group_id = ?').all(groupId).map((row) => row.userId);
+  const expenseIds = db.prepare('SELECT id FROM expenses WHERE group_id = ?').all(groupId).map((row) => row.id);
+  const voteIds = db.prepare('SELECT id FROM votes WHERE group_id = ?').all(groupId).map((row) => row.id);
+  const challengeIds = db.prepare('SELECT id FROM challenges WHERE group_id = ?').all(groupId).map((row) => row.id);
+
+  const transaction = db.transaction(() => {
+    if (expenseIds.length) {
+      const placeholders = expenseIds.map(() => '?').join(',');
+      db.prepare(`DELETE FROM expense_splits WHERE expense_id IN (${placeholders})`).run(...expenseIds);
+    }
+    if (voteIds.length) {
+      const placeholders = voteIds.map(() => '?').join(',');
+      db.prepare(`DELETE FROM vote_decisions WHERE vote_id IN (${placeholders})`).run(...voteIds);
+    }
+    if (challengeIds.length) {
+      const placeholders = challengeIds.map(() => '?').join(',');
+      db.prepare(`DELETE FROM challenge_contributions WHERE challenge_id IN (${placeholders})`).run(...challengeIds);
+    }
+
+    db.prepare('DELETE FROM expenses WHERE group_id = ?').run(groupId);
+    db.prepare('DELETE FROM votes WHERE group_id = ?').run(groupId);
+    db.prepare('DELETE FROM challenges WHERE group_id = ?').run(groupId);
+    db.prepare('DELETE FROM group_invites WHERE group_id = ?').run(groupId);
+    db.prepare('DELETE FROM group_members WHERE group_id = ?').run(groupId);
+    db.prepare('DELETE FROM groups_table WHERE id = ?').run(groupId);
+  });
+
+  transaction();
+
+  memberIds.filter((memberId) => memberId !== userId).forEach((memberId) => {
+    createNotification(memberId, 'group', 'Group deleted', `${group.name} was deleted by the group owner.`);
+  });
+  createNotification(userId, 'group', 'Group deleted', `${group.name} was deleted successfully.`);
+
+  return { ok: true, groupId, message: `${group.name} was deleted successfully.` };
+}
+
 export function respondToInvite(inviteId, userId, decision) {
   const user = getUserById(userId);
   const invite = db.prepare('SELECT * FROM group_invites WHERE id = ?').get(inviteId);
