@@ -193,11 +193,13 @@ export default function App() {
       Promise.all([
         api('/api/notifications', {}, token),
         api('/api/invites', {}, token),
-        api('/api/challenges', {}, token)
-      ]).then(([notificationData, inviteData, challengeData]) => {
+        api('/api/challenges', {}, token),
+        api('/api/votes', {}, token)
+      ]).then(([notificationData, inviteData, challengeData, votesData]) => {
         setNotifications(notificationData.notifications);
         setInvites(inviteData.invites);
         setChallengesState(challengeData);
+        setVotes(votesData.votes);
       }).catch(() => {});
     }, 4000);
     return () => clearInterval(id);
@@ -346,6 +348,8 @@ export default function App() {
     setChallengesState({ challenges: [], rings: [] });
     setNotifications([]);
     setInvites([]);
+    setExpenseForm({ groupId: '', description: '', amount: '', category: 'Groceries', splitMethod: 'equal', reason: '' });
+    setChallengeForm({ groupId: '', name: '', description: '', goal: '', endDate: '' });
     setPage('home');
   }
 
@@ -564,12 +568,17 @@ export default function App() {
           <div className="sb-nav">
             <div className="nav-group">
               <div className="nav-label">Workspace</div>
-              {['home', 'analytics', 'groups', 'add', 'vote', 'chat', 'progress', 'settings'].map((key) => (
-                <button key={key} className={`nav-btn ${page === key ? 'active' : ''}`} onClick={() => setPage(key)}>
-                  <span className="n-ico"><Icon name={key} /></span>{navMeta[key][0]}
-                  {key === 'settings' && unreadCount ? <span className="nav-pill">{unreadCount}</span> : null}
-                </button>
-              ))}
+              {['home', 'analytics', 'groups', 'add', 'vote', 'chat', 'progress', 'settings'].map((key) => {
+                const pendingVoteCount = votes.filter((v) => v.status === 'pending').length;
+                return (
+                  <button key={key} className={`nav-btn ${page === key ? 'active' : ''}`} onClick={() => setPage(key)}>
+                    <span className="n-ico"><Icon name={key} /></span>{navMeta[key][0]}
+                    {key === 'settings' && unreadCount ? <span className="nav-pill">{unreadCount}</span> : null}
+                    {key === 'vote' && pendingVoteCount > 0 ? <span className="nav-pill">{pendingVoteCount}</span> : null}
+                    {key === 'groups' && pendingVoteCount > 0 ? <span className="nav-pill">{pendingVoteCount}</span> : null}
+                  </button>
+                );
+              })}
             </div>
           </div>
           <div className="sb-profile" onClick={() => setPage('settings')}>
@@ -701,20 +710,56 @@ export default function App() {
               </div>
             )}
 
-            {page === 'groupDetail' && selectedGroup && (
+            {page === 'groupDetail' && selectedGroup && (() => {
+              const groupExpenses = expenses.filter((e) => e.groupId === selectedGroup.id);
+              const pendingGroupVotes = votes.filter((v) => v.status === 'pending' && v.groupId === selectedGroup.id);
+              const memberCount = selectedGroup.members?.length || 1;
+              return (
               <div className="page show" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 <button className="btn btn-secondary" style={{ alignSelf: 'flex-start' }} onClick={() => setPage('home')}>← Back</button>
+
+                {pendingGroupVotes.length > 0 && (
+                  <div className="card">
+                    <div className="card-head" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span>Pending approval</span>
+                      <span className="nav-pill">{pendingGroupVotes.length}</span>
+                    </div>
+                    <div style={{ padding: '0 20px 4px', fontSize: '13px', color: 'var(--text-2)' }}>
+                      These expenses are waiting for unanimous group approval and are not included in totals yet.
+                    </div>
+                    {pendingGroupVotes.map((vote) => {
+                      const yesCount = vote.decisions?.filter((d) => d.decision === 'yes').length ?? 0;
+                      return (
+                        <div className="activity-row" key={vote.id} style={{ opacity: 0.75 }}>
+                          <div className="act-icon" style={{ background: 'var(--warning, #F59E0B)', color: '#fff' }}>{vote.category.slice(0, 1)}</div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div className="act-name">{vote.description}</div>
+                            <div className="act-meta">{vote.category} · Requested by {vote.requestedByName}</div>
+                            <div className="act-meta" style={{ color: 'var(--warning, #F59E0B)', marginTop: '2px' }}>
+                              {yesCount}/{memberCount} approved · awaiting unanimous vote
+                            </div>
+                          </div>
+                          <div style={{ textAlign: 'right' }}>
+                            <div className="act-amt" style={{ color: 'var(--text-2)' }}>{money(vote.amount)}</div>
+                            <button className="btn btn-secondary btn-sm" style={{ marginTop: '4px' }} onClick={() => setPage('vote')}>Vote</button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
                 <div className="card">
                   <div className="card-head" style={{ alignItems: 'flex-start', flexDirection: 'column', gap: '4px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                       <span style={{ fontSize: '22px' }}>{selectedGroup.emoji}</span>
                       <span>{selectedGroup.name}</span>
                     </div>
-                    <div className="page-desc" style={{ margin: 0 }}>{selectedGroup.type} · {expenses.filter((e) => e.groupId === selectedGroup.id).length} expenses</div>
+                    <div className="page-desc" style={{ margin: 0 }}>{selectedGroup.type} · {groupExpenses.length} expenses</div>
                   </div>
-                  {expenses.filter((e) => e.groupId === selectedGroup.id).length === 0
-                    ? <div className="settlements-empty" style={{ padding: '24px 0' }}>No expenses in this group yet.</div>
-                    : expenses.filter((e) => e.groupId === selectedGroup.id).map((expense) => (
+                  {groupExpenses.length === 0
+                    ? <div className="settlements-empty" style={{ padding: '24px 0' }}>No approved expenses in this group yet.</div>
+                    : groupExpenses.map((expense) => (
                       <div className="activity-row" key={expense.id}>
                         <div className="act-icon">{expense.category.slice(0, 1)}</div>
                         <div style={{ flex: 1, minWidth: 0 }}>
@@ -731,11 +776,12 @@ export default function App() {
                           <div className="act-type">{new Date(expense.expenseDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric'})}</div>
                         </div>
                       </div>
-                   ))
+                    ))
                   }
                 </div>
               </div>
-            )}
+              );
+            })()}
 
             {page === 'analytics' && analytics && (
               <div className="page show">
@@ -758,8 +804,24 @@ export default function App() {
               </div>
             )}
 
-            {page === 'groups' && (
+            {page === 'groups' && (() => {
+              const pendingVotes = votes.filter((v) => v.status === 'pending');
+              return (
               <div className="page show">
+                {pendingVotes.length > 0 ? (
+                  <div className="card mb-4" style={{ borderLeft: '3px solid var(--accent, #6c63ff)' }}>
+                    <div className="card-head" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span>Group Voting</span>
+                      <span className="nav-pill">{pendingVotes.length}</span>
+                    </div>
+                    <div style={{ padding: '0 20px 16px', color: 'var(--text-2)', fontSize: '14px' }}>
+                      {pendingVotes.length === 1
+                        ? 'There is 1 pending group vote that needs your attention.'
+                        : `There are ${pendingVotes.length} pending group votes that need your attention.`}
+                      <button className="btn btn-primary btn-sm" style={{ marginLeft: '12px' }} onClick={() => setPage('vote')}>Review votes</button>
+                    </div>
+                  </div>
+                ) : null}
                 {invites.length ? (
                   <div className="card mb-4">
                     <div className="card-head">Pending invites</div>
@@ -848,7 +910,8 @@ export default function App() {
                   </div>
                 </div>
               </div>
-            )}
+              );
+            })()}
 
             {page === 'add' && (
               <div className="page show">
