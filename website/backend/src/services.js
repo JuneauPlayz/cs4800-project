@@ -553,14 +553,51 @@ export function respondToVote(voteId, decision, userId) {
 export function getAnalytics(userId) {
   const expenses = getExpenses(userId);
   const groups = getGroups(userId);
-  const monthTotal = Number(expenses.reduce((sum, expense) => sum + expense.amount, 0).toFixed(2));
+
+  // User's personal share for each expense
+  const userShare = (expense) => expense.splits.find((s) => s.userId === userId)?.amount ?? 0;
+
+  // Total spend = sum of user's split share across all groups
+  const totalSpend = Number(expenses.reduce((sum, expense) => sum + userShare(expense), 0).toFixed(2));
+
+  // Average spend per month = group user's share by calendar month, then average those monthly totals
+  const byMonth = {};
+  for (const expense of expenses) {
+    const month = (expense.expenseDate || expense.createdAt || '').slice(0, 7); // "YYYY-MM"
+    if (!month) continue;
+    byMonth[month] = (byMonth[month] ?? 0) + userShare(expense);
+  }
+  const monthValues = Object.values(byMonth);
+  const avgPerMonth = monthValues.length > 0
+    ? Number((monthValues.reduce((s, v) => s + v, 0) / monthValues.length).toFixed(2))
+    : 0;
+
   const byCategory = Object.values(expenses.reduce((acc, expense) => {
     acc[expense.category] ??= { category: expense.category, total: 0 };
-    acc[expense.category].total += expense.amount;
+    acc[expense.category].total += userShare(expense);
     return acc;
   }, {})).map((item) => ({ ...item, total: Number(item.total.toFixed(2)) })).sort((a, b) => b.total - a.total);
-  const byGroup = groups.map((group) => ({ id: group.id, name: group.name, total: Number(expenses.filter((expense) => expense.groupId === group.id).reduce((sum, expense) => sum + expense.amount, 0).toFixed(2)) }));
-  return { monthTotal, avgExpense: Number((monthTotal / Math.max(expenses.length, 1)).toFixed(2)), expenseCount: expenses.length, byCategory, byGroup };
+
+  // Monthly spend trend — sorted chronologically
+  const monthlyTrend = Object.entries(byMonth)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([month, total]) => ({ month, total: Number(total.toFixed(2)) }));
+
+  // Top 5 expenses by the user's share
+  const topExpenses = expenses
+    .map((expense) => ({ id: expense.id, description: expense.description, groupName: expense.groupName, date: expense.expenseDate || expense.createdAt, amount: userShare(expense) }))
+    .filter((e) => e.amount > 0)
+    .sort((a, b) => b.amount - a.amount)
+    .slice(0, 5);
+
+  // Spending frequency — count of expenses per category
+  const byFrequency = Object.values(expenses.reduce((acc, expense) => {
+    acc[expense.category] ??= { category: expense.category, count: 0 };
+    acc[expense.category].count += 1;
+    return acc;
+  }, {})).sort((a, b) => b.count - a.count);
+
+  return { totalSpend, avgPerMonth, expenseCount: expenses.length, byCategory, monthlyTrend, topExpenses, byFrequency };
 }
 
 export function getChallenges(userId) {

@@ -784,24 +784,12 @@ export default function App() {
             })()}
 
             {page === 'analytics' && analytics && (
-              <div className="page show">
-                <div className="g4">
-                  <StatCard label="Total spend" value={money(analytics.monthTotal)} />
-                  <StatCard label="Average expense" value={money(analytics.avgExpense)} />
-                  <StatCard label="Expenses logged" value={analytics.expenseCount} />
-                  <StatCard label="Accepted groups" value={groups.length} />
-                </div>
-                <div className="g2 mt-4">
-                  <div className="card">
-                    <div className="card-head">Spend by category</div>
-                    {analytics.byCategory.map((item) => <BarRow key={item.category} label={item.category} value={item.total} max={analytics.byCategory[0]?.total || 1} />)}
-                  </div>
-                  <div className="card">
-                    <div className="card-head">Spend by group</div>
-                    {analytics.byGroup.map((item) => <BarRow key={item.id} label={item.name} value={item.total} max={analytics.byGroup[0]?.total || 1} />)}
-                  </div>
-                </div>
-              </div>
+              <AnalyticsPage
+                analytics={analytics}
+                expenses={expenses}
+                groups={groups}
+                userId={session?.user?.id}
+              />
             )}
 
             {page === 'groups' && (() => {
@@ -1047,12 +1035,130 @@ export default function App() {
   );
 }
 
+function CategoryDropdown({ cat, max }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="bar-row">
+      <div className="row-b" onClick={() => setOpen((o) => !o)} style={{ cursor: 'pointer', userSelect: 'none' }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ transform: open ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.15s', color: 'var(--muted)' }}><path d="M9 18l6-6-6-6" /></svg>
+          {cat.category}
+        </span>
+        <strong>{money(cat.total)}</strong>
+      </div>
+      <div className="bar-shell"><div className="bar-fill" style={{ width: `${max ? (cat.total / max) * 100 : 0}%` }} /></div>
+      {open && (
+        <div style={{ marginTop: 10, paddingLeft: 18, borderLeft: '2px solid var(--border)' }}>
+          {cat.items.map((item) => (
+            <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '6px 0', borderBottom: '1px solid var(--border2)', fontSize: 13 }}>
+              <div>
+                <div style={{ fontWeight: 600 }}>{item.description}</div>
+                <div className="card-sub">{item.groupName} · {item.expenseDate || ''}</div>
+              </div>
+              <strong style={{ flexShrink: 0, marginLeft: 12 }}>{money(item.myShare)}</strong>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AnalyticsPage({ analytics, expenses, groups, userId }) {
+  const [selectedMonth, setSelectedMonth] = useState(null);
+
+  const userShare = (e) => e.splits?.find((s) => s.userId === userId)?.amount ?? 0;
+
+  const monthExpenses = selectedMonth
+    ? expenses.filter((e) => (e.expenseDate || e.createdAt || '').slice(0, 7) === selectedMonth)
+    : [];
+
+  const monthByCategory = Object.values(
+    monthExpenses.reduce((acc, e) => {
+      const share = userShare(e);
+      if (share <= 0) return acc;
+      acc[e.category] ??= { category: e.category, total: 0, items: [] };
+      acc[e.category].total += share;
+      acc[e.category].items.push({ ...e, myShare: share });
+      return acc;
+    }, {})
+  )
+    .sort((a, b) => b.total - a.total)
+    .map((cat) => ({ ...cat, items: cat.items.sort((a, b) => b.myShare - a.myShare) }));
+
+  const monthLabel = selectedMonth
+    ? new Date(Number(selectedMonth.slice(0, 4)), Number(selectedMonth.slice(5, 7)) - 1)
+        .toLocaleString('default', { month: 'long', year: 'numeric' })
+    : '';
+
+  return (
+    <div className="page show">
+      <div className="g4">
+        <StatCard label="Total spend" value={money(analytics.totalSpend)} />
+        <StatCard label="Avg spend / month" value={money(analytics.avgPerMonth)} />
+        <StatCard label="Expenses logged" value={analytics.expenseCount} />
+        <StatCard label="Accepted groups" value={groups.length} />
+      </div>
+      <div className="g2 mt-4">
+        <div className="card">
+          <div className="card-head">Monthly spend trend</div>
+          <div className="card-sub" style={{ marginBottom: 8 }}>Click a month to see your breakdown</div>
+          <MonthBarChart data={analytics.monthlyTrend} selected={selectedMonth} onSelect={setSelectedMonth} />
+        </div>
+        <div className="card">
+          <div className="card-head">Spend by category</div>
+          {analytics.byCategory.map((item) => <BarRow key={item.category} label={item.category} value={item.total} max={analytics.byCategory[0]?.total || 1} />)}
+        </div>
+      </div>
+      {selectedMonth && (
+        <div className="mt-4">
+          <div className="card">
+            <div className="card-head" style={{ justifyContent: 'space-between' }}>
+              <span>{monthLabel} breakdown</span>
+              <button className="btn btn-ghost btn-sm" onClick={() => setSelectedMonth(null)}>✕ Close</button>
+            </div>
+            {monthByCategory.length === 0
+              ? <div className="card-sub">No expenses for this month.</div>
+              : monthByCategory.map((cat) => (
+                  <CategoryDropdown key={cat.category} cat={cat} max={monthByCategory[0]?.total || 1} />
+                ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function StatCard({ label, value }) {
   return <div className="card stat-card"><div className="card-sub">{label}</div><div className="stat-val">{value}</div></div>;
 }
 
 function BarRow({ label, value, max }) {
   return <div className="bar-row"><div className="row-b"><span>{label}</span><strong>{money(value)}</strong></div><div className="bar-shell"><div className="bar-fill" style={{ width: `${max ? (value / max) * 100 : 0}%` }} /></div></div>;
+}
+
+function MonthBarChart({ data, selected, onSelect }) {
+  if (!data || data.length === 0) return <div className="card-sub">No data yet.</div>;
+  const maxVal = Math.max(...data.map((d) => d.total), 1);
+  const chartH = 160;
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, height: chartH + 56, paddingTop: 24, overflowX: 'auto' }}>
+      {data.map((item) => {
+        const [year, mon] = item.month.split('-');
+        const label = new Date(Number(year), Number(mon) - 1).toLocaleString('default', { month: 'short' });
+        const barH = Math.max(Math.round((item.total / maxVal) * chartH), 4);
+        const isSelected = selected === item.month;
+        return (
+          <div key={item.month} onClick={() => onSelect(isSelected ? null : item.month)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: '1 0 40px', minWidth: 40, cursor: 'pointer' }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: isSelected ? 'var(--teal)' : 'var(--muted)', marginBottom: 4 }}>{money(item.total)}</div>
+            <div style={{ width: '100%', height: barH, borderRadius: '6px 6px 0 0', background: isSelected ? 'linear-gradient(180deg, var(--teal-mid), var(--teal))' : 'var(--border)', transition: 'background 0.15s' }} />
+            <div style={{ fontSize: 12, fontWeight: 700, color: isSelected ? 'var(--teal)' : 'var(--muted)', marginTop: 6 }}>{label}</div>
+            {isSelected && <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--teal)', marginTop: 4 }} />}
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 function RingCard({ ring }) {
