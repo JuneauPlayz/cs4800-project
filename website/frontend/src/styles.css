@@ -137,15 +137,10 @@ svg { display: block; }
 .btn-primary:hover, .btn-main:hover, .chat-send-btn:hover { background: var(--teal-d); }
 .btn-secondary { background: var(--white); color: var(--slate2); border: 1.5px solid var(--border); }
 .btn-secondary:hover { border-color: var(--teal); color: var(--teal); background: var(--teal-l); }
-<<<<<<< HEAD
-.btn-danger { background: var(--red-l); color: var(--red); border: 1.5px solid #fecaca; }
-.btn-danger:hover { background: #fff1f2; border-color: #fca5a5; color: #dc2626; }
-=======
 .btn-danger { background: var(--white); color: #EF4444; border: 1.5px solid #EF4444; }
 .btn-danger:hover { background: #FEF2F2; border-color: #DC2626; color: #DC2626; }
 .btn-sm { padding: 5px 12px; font-size: 13px; }
 .group-actions { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
->>>>>>> dev
 .btn-main, .btn-demo { width: 100%; padding: 13px; border: none; outline: none; box-shadow: none; }
 .btn-main { border-radius: 10px; margin-top: 12px; }
 .btn-main:hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(13,148,136,.18); }

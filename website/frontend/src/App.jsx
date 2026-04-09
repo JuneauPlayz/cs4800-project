@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 const categoryOptions = ['Groceries', 'Dining', 'Utilities', 'Rent', 'Travel', 'Furniture', 'Streaming', 'Electronics', 'Household', 'Other'];
 const navMeta = {
-<<<<<<< HEAD
   home: ['Balances', 'Your standing across all accepted groups'],
   analytics: ['Analytics', 'Live spending totals across your active groups'],
   groups: ['Groups', 'Create groups, manage invites, and edit existing groups'],
@@ -11,18 +10,6 @@ const navMeta = {
   chat: ['AI Assistant', 'Ask questions about your actual SplitStack data'],
   progress: ['Challenges', 'Create group challenges and add contributions'],
   settings: ['Settings', 'Account, notifications, and privacy preferences']
-=======
-  home: ['Balances', 'Your standing across all groups'],
-  analytics: ['Analytics', 'Spending trends & group insights'],
-  groups: ['Groups', 'Manage your shared workspaces'],
-  groupDetail: ['Group Expenses', 'All expenses under this group'],
-  add: ['Add Expense', 'Log and split a shared cost'],
-  scanner: ['Receipt Scanner', 'Auto-fill from a receipt photo'],
-  vote: ['Group Voting', 'Democratic purchase approval'],
-  chat: ['AI Assistant', 'Powered by the SplitStack assistant'],
-  progress: ['Challenges', 'Track goals and earn badges'],
-  settings: ['Settings', 'Account and notification preferences']
->>>>>>> dev
 };
 
 function getStoredSession() {
@@ -34,7 +21,6 @@ function getStoredSession() {
   }
 }
 
-<<<<<<< HEAD
 async function api(path, options = {}, token = null) {
   const response = await fetch(path, {
     headers: {
@@ -42,13 +28,6 @@ async function api(path, options = {}, token = null) {
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(options.headers || {})
     },
-=======
-let _currentUserId = 'u1';
-
-async function api(path, options = {}) {
-  const response = await fetch(path, {
-    headers: { 'Content-Type': 'application/json', 'X-User-Id': _currentUserId, ...(options.headers || {}) },
->>>>>>> dev
     ...options
   });
   if (!response.ok) {
@@ -68,7 +47,6 @@ function money(value) {
   return `$${Number(value || 0).toFixed(2)}`;
 }
 
-<<<<<<< HEAD
 function initials(name = '') {
   return name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase();
 }
@@ -82,17 +60,6 @@ function parseInviteEntries(entries = []) {
     .filter((entry) => {
       if (seen.has(entry)) return false;
       seen.add(entry);
-=======
-function uniqueNames(members = []) {
-  const seen = new Set();
-  return members
-    .map((m) => m.name.trim())
-    .filter(Boolean)
-    .filter((name) => {
-      const key = name.toLowerCase();
-      if (seen.has(key)) return false;
-      seen.add(key);
->>>>>>> dev
       return true;
     })
     .map((email) => ({ email }));
@@ -160,7 +127,6 @@ export default function App() {
   const [challengesState, setChallengesState] = useState({ challenges: [], rings: [] });
   const [settings, setSettings] = useState(null);
   const [notifications, setNotifications] = useState([]);
-<<<<<<< HEAD
   const [invites, setInvites] = useState([]);
   const [expenseForm, setExpenseForm] = useState({ groupId: '', description: '', amount: '', category: 'Groceries', splitMethod: 'equal', reason: '' });
   const [splitInputs, setSplitInputs] = useState({ percent: {}, custom: {} });
@@ -169,32 +135,15 @@ export default function App() {
   const [contributionAmounts, setContributionAmounts] = useState({});
   const [chatInput, setChatInput] = useState('');
   const [savingGroup, setSavingGroup] = useState(false);
-  const [chatMessages, setChatMessages] = useState([{ role: 'ai', text: 'Hi! I’m the SplitStack assistant. Ask me about balances, spending, voting, or challenges.' }]);
-=======
-  const [invitations, setInvitations] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [authMode, setAuthMode] = useState('login');
-  const [authForm, setAuthForm] = useState({ name: '', email: 'jordan@splitstack.app', password: 'demo123' });
-  const todayLocal = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
-  const [expenseForm, setExpenseForm] = useState({ groupId: '', description: '', amount: '', category: 'Groceries', splitMethod: 'equal', reason: '', date: todayLocal(), receiptUrl: '', receiptMode: 'link' });
-  const [splitInputs, setSplitInputs] = useState({ percent: {}, custom: {} });
-  const [ocrPreview, setOcrPreview] = useState(null);
-  const [chatMessages, setChatMessages] = useState([
-    { role: 'ai', text: "Hi! I'm the SplitStack assistant. Ask me about balances, spending, votes, or saving ideas." }
-  ]);
-  const [chatInput, setChatInput] = useState('');
-  const [creatingGroup, setCreatingGroup] = useState({ id: null, name: '', type: 'roommates', threshold: '', members: [{ name: '', email: '' }] });
-  const [balanceModal, setBalanceModal] = useState(null);
+  const [creatingGroup, setCreatingGroup] = useState({ members: [{ name: '', email: '' }] });
   const [selectedGroup, setSelectedGroup] = useState(null);
->>>>>>> dev
+  const [chatMessages, setChatMessages] = useState([{ role: 'ai', text: 'Hi! I’m the SplitStack assistant. Ask me about balances, spending, voting, or challenges.' }]);
   const chatMessagesRef = useRef(null);
   const savingGroupRef = useRef(false);
 
-<<<<<<< HEAD
   const token = session?.token || null;
 
-  async function loadAll() {
+  async function loadAll({ silent = false } = {}) {
     if (!token) return;
     setLoading(true);
     setError('');
@@ -210,25 +159,6 @@ export default function App() {
         api('/api/settings', {}, token),
         api('/api/notifications', {}, token),
         api('/api/invites', {}, token)
-=======
-  const topMeta = navMeta[page];
-const isEditingGroup = Boolean(creatingGroup.id);
-
-  async function loadAll({ silent = false } = {}) {
-    if (!silent) setLoading(true);
-    setError('');
-    try {
-      const [dashboardData, groupsData, expensesData, votesData, analyticsData, progressData, settingsData, notificationsData, invitationsData] = await Promise.all([
-        api('/api/dashboard'),
-        api('/api/groups'),
-        api('/api/expenses'),
-        api('/api/votes'),
-        api('/api/analytics'),
-        api('/api/progress'),
-        api('/api/settings'),
-        api('/api/notifications'),
-        api('/api/invitations')
->>>>>>> dev
       ]);
       const nextSession = { user: meData.user, token };
       setSession(nextSession);
@@ -242,13 +172,8 @@ const isEditingGroup = Boolean(creatingGroup.id);
       setChallengesState(challengesData);
       setSettings(settingsData.settings);
       setNotifications(notificationsData.notifications);
-<<<<<<< HEAD
       setExpenseForm((current) => ({ ...current, groupId: current.groupId || groupsData.groups[0]?.id || '' }));
       setChallengeForm((current) => ({ ...current, groupId: current.groupId || groupsData.groups[0]?.id || '' }));
-=======
-      setInvitations(invitationsData.invitations);
-      if (!session) setSession({ user: dashboardData.user, token: 'demo-token-splitstack' });
->>>>>>> dev
     } catch (nextError) {
       setError(nextError.message);
       if (String(nextError.message).toLowerCase().includes('session')) logout();
@@ -263,7 +188,6 @@ const isEditingGroup = Boolean(creatingGroup.id);
   }, [token]);
 
   useEffect(() => {
-<<<<<<< HEAD
     if (!token) return undefined;
     const id = setInterval(() => {
       Promise.all([
@@ -285,29 +209,6 @@ const isEditingGroup = Boolean(creatingGroup.id);
 
   const currentGroup = useMemo(() => groups.find((group) => group.id === expenseForm.groupId) || groups[0], [groups, expenseForm.groupId]);
   const memberSharesBase = currentGroup?.members || [];
-=======
-    if (groups.length && !expenseForm.groupId) {
-      setExpenseForm((current) => ({ ...current, groupId: groups[0].id }));
-    }
-  }, [groups, expenseForm.groupId]);
-
-  useEffect(() => {
-    if (chatMessagesRef.current) {
-      chatMessagesRef.current.scrollTop = chatMessagesRef.current.scrollHeight;
-    }
-  }, [chatMessages]);
-
-  const currentGroup = useMemo(() => groups.find((group) => group.id === expenseForm.groupId) || groups[0], [groups, expenseForm.groupId]);
-
-  const currentMonth = new Date().toISOString().slice(0, 7);
-  const groupMonthlyTotals = useMemo(() => groups.map((group) => ({
-    ...group,
-    total: Number(expenses
-      .filter((e) => e.groupId === group.id && (e.expenseDate || '').slice(0, 7) === currentMonth)
-      .reduce((sum, e) => sum + e.amount, 0)
-      .toFixed(2))
-  })), [groups, expenses, currentMonth]);
->>>>>>> dev
   const amountNumber = Number(expenseForm.amount || 0);
 
   useEffect(() => {
@@ -322,8 +223,13 @@ const isEditingGroup = Boolean(creatingGroup.id);
   const customTotal = useMemo(() => memberSharesBase.reduce((sum, member) => sum + Number(splitInputs.custom[member.id] || 0), 0), [memberSharesBase, splitInputs.custom]);
   const inviteEntries = useMemo(() => parseInviteEntries(groupForm.inviteEmails), [groupForm.inviteEmails]);
   const inviteCountPreview = 1 + inviteEntries.length;
-  const topMeta = navMeta[page];
+  const topMeta = navMeta[page] || ['', ''];
   const unreadCount = notifications.filter((item) => item.unread).length + invites.length;
+  const [balanceModal, setBalanceModal] = useState(null);
+  const groupMonthlyTotals = useMemo(() => groups.map((group) => ({
+    ...group,
+    total: analytics?.byGroup?.find((g) => g.id === group.id)?.total ?? 0
+  })), [groups, analytics]);
 
   const memberShares = useMemo(() => {
     if (!memberSharesBase.length) return [];
@@ -343,31 +249,12 @@ const isEditingGroup = Boolean(creatingGroup.id);
     }));
   }, [memberSharesBase, expenseForm.splitMethod, amountNumber, splitInputs]);
 
-<<<<<<< HEAD
   function updatePercentSplit(userId, value) {
     setSplitInputs((current) => ({ ...current, percent: { ...current.percent, [userId]: value === '' ? '' : Number(value) } }));
   }
 
   function updateCustomSplit(userId, value) {
     setSplitInputs((current) => ({ ...current, custom: { ...current.custom, [userId]: value === '' ? '' : Number(value) } }));
-=======
-
-
-  function resetGroupForm() {
-    setCreatingGroup({ id: null, name: '', type: 'roommates', threshold: '', members: [{ name: '', email: '' }] });
-  }
-
-  function startEditGroup(group) {
-    setCreatingGroup({
-      id: group.id,
-      name: group.name,
-      type: group.type,
-      threshold: String(group.threshold ?? ''),
-      members: group.members.length
-        ? group.members.map((m) => ({ name: m.name, email: '' }))
-        : [{ name: '', email: '' }]
-    });
->>>>>>> dev
   }
 
   function updateMemberRow(index, field, value) {
@@ -440,58 +327,26 @@ const isEditingGroup = Boolean(creatingGroup.id);
       const path = authMode === 'login' ? '/api/auth/login' : '/api/auth/register';
       const payload = authMode === 'login' ? { email: authForm.email, password: authForm.password } : authForm;
       const data = await api(path, { method: 'POST', body: JSON.stringify(payload) });
-      _currentUserId = data.user.id;
       setSession(data);
-<<<<<<< HEAD
       localStorage.setItem('splitstack-session', JSON.stringify(data));
       setChatMessages([{ role: 'ai', text: `Welcome${data.user?.name ? `, ${data.user.name}` : ''}. Ask me about balances, spending, voting, or challenges.` }]);
-=======
-      setPage('home');
-    } catch (nextError) {
-      setError(nextError.message);
-    }
-  }
-
-  async function handleDemo() {
-    try {
-      const data = await api('/api/auth/login', {
-        method: 'POST',
-        body: JSON.stringify({ email: 'jordan@splitstack.app', password: 'demo123' })
-      });
-      _currentUserId = data.user.id;
-      setSession(data);
-      setPage('home');
->>>>>>> dev
     } catch (nextError) {
       setError(nextError.message);
     }
   }
 
   function logout() {
-<<<<<<< HEAD
     localStorage.removeItem('splitstack-session');
-=======
-    _currentUserId = 'u1';
->>>>>>> dev
     setSession(null);
     setDashboard(null);
     setGroups([]);
     setExpenses([]);
     setVotes([]);
     setAnalytics(null);
-<<<<<<< HEAD
     setChallengesState({ challenges: [], rings: [] });
     setNotifications([]);
     setInvites([]);
     setPage('home');
-=======
-    setProgress(null);
-    setSettings(null);
-    setNotifications([]);
-    setInvitations([]);
-    setPage('home');
-    setChatMessages([{ role: 'ai', text: "Hi! I'm the SplitStack assistant. Ask me about balances, spending, votes, or saving ideas." }]);
->>>>>>> dev
   }
 
   async function saveGroup(event) {
@@ -502,7 +357,6 @@ const isEditingGroup = Boolean(creatingGroup.id);
       return;
     }
     try {
-<<<<<<< HEAD
       setError('');
       savingGroupRef.current = true;
       setSavingGroup(true);
@@ -539,27 +393,7 @@ const isEditingGroup = Boolean(creatingGroup.id);
   async function respondInvite(inviteId, decision) {
     try {
       await api(`/api/invites/${inviteId}/respond`, { method: 'POST', body: JSON.stringify({ decision }) }, token);
-=======
-      const result = await api('/api/expenses', {
-        method: 'POST',
-        body: JSON.stringify({
-          ...expenseForm,
-          expenseDate: expenseForm.date,
-          amount: amountNumber,
-          paidBy: _currentUserId,
-          splits: normalizedSplits,
-          receiptUrl: expenseForm.receiptUrl.trim() || null
-        })
-      });
-      setExpenseForm((form) => ({ ...form, description: '', amount: '', reason: '', date: todayLocal(), receiptUrl: '', receiptMode: 'link' }));
->>>>>>> dev
       await loadAll();
-      if (result.triggeredVote) {
-        setPage('vote');
-        setError('This expense exceeds the group threshold. It will appear in balances only after all members approve it.');
-      } else {
-        setPage('home');
-      }
     } catch (nextError) {
       setError(nextError.message);
     }
@@ -679,76 +513,6 @@ const isEditingGroup = Boolean(creatingGroup.id);
       const data = await api('/api/ai/chat', { method: 'POST', body: JSON.stringify({ message: question }) }, token);
       setChatMessages((messages) => [...messages, { role: 'ai', text: data.reply }]);
     } catch (nextError) {
-<<<<<<< HEAD
-=======
-      setChatMessages((messages) => [...messages, { role: 'ai', text: 'I hit a snag reaching the assistant. Please try again.' }]);
-      setError(nextError.message);
-    }
-  }
-
-  async function saveSettings(nextSettings) {
-    try {
-      const data = await api('/api/settings', {
-        method: 'PUT',
-        body: JSON.stringify(nextSettings)
-      });
-      setSettings(data.settings);
-    } catch (nextError) {
-      setError(nextError.message);
-    }
-  }
-
-  function updatePercentSplit(userId, value) {
-    setSplitInputs((current) => ({
-      ...current,
-      percent: {
-        ...current.percent,
-        [userId]: value === '' ? '' : Number(value)
-      }
-    }));
-  }
-
-  function updateCustomSplit(userId, value) {
-    setSplitInputs((current) => ({
-      ...current,
-      custom: {
-        ...current.custom,
-        [userId]: value === '' ? '' : Number(value)
-      }
-    }));
-  }
-
-  async function addGroup(event) {
-    event.preventDefault();
-    if (!creatingGroup.name.trim()) {
-      setError('Please enter a group name.');
-      return;
-    }
-    try {
-      const payload = {
-        name: creatingGroup.name.trim(),
-        type: creatingGroup.type,
-        threshold: creatingGroup.threshold === '' ? 0 : Number(creatingGroup.threshold),
-        emoji: groupTypeEmoji[creatingGroup.type] || '👥'
-      };
-      const method = isEditingGroup ? 'PUT' : 'POST';
-      const path = isEditingGroup ? `/api/groups/${creatingGroup.id}` : '/api/groups';
-      const result = await api(path, { method, body: JSON.stringify(payload) });
-      const groupId = result.group?.id ?? creatingGroup.id;
-      const inviteEmails = creatingGroup.members.map((m) => m.email.trim()).filter(Boolean);
-      const inviteErrors = [];
-      for (const email of inviteEmails) {
-        try {
-          await api(`/api/groups/${groupId}/invite`, { method: 'POST', body: JSON.stringify({ email }) });
-        } catch (err) {
-          inviteErrors.push(`${email}: ${err.message}`);
-        }
-      }
-      resetGroupForm();
-      await loadAll({ silent: true });
-      if (inviteErrors.length) setError(inviteErrors.join(' · '));
-    } catch (nextError) {
->>>>>>> dev
       setError(nextError.message);
       setChatMessages((messages) => [...messages, { role: 'ai', text: 'I hit a snag reaching the assistant.' }]);
     }
@@ -834,22 +598,6 @@ const isEditingGroup = Boolean(creatingGroup.id);
             {error && session ? <div className="auth-hint auth-error mb-4">{error}</div> : null}
 
             {page === 'home' && dashboard && (
-<<<<<<< HEAD
-              <div className="page show">
-                <div className="balance-card"><div className="bc-inner"><div className="bc-label">Current balance</div><div className={`bc-amount ${dashboard.balances.net >= 0 ? 'pos' : 'neg'}`}>{dashboard.balances.net >= 0 ? '+' : '-'}{money(Math.abs(dashboard.balances.net))}</div><div className="bc-row"><div className="bc-stat"><div className="bc-stat-val">{money(dashboard.balances.totalOwed)}</div><div className="bc-stat-lbl">Total owed to members</div></div><div className="bc-stat"><div className="bc-stat-val">{money(dashboard.balances.totalOwe)}</div><div className="bc-stat-lbl">Total you owe</div></div><div className="bc-stat"><div className="bc-stat-val">{dashboard.balances.settleCount}</div><div className="bc-stat-lbl">Open relationships</div></div></div></div></div>
-                <div className="g2">
-                  <div className="card">
-                    <div className="card-head">People</div>
-                    {dashboard.balances.people.map((person) => (
-                      <div className="person-row" key={person.id}><div className="ava-sm" style={{ background: person.avatarColor }}>{person.initials}</div><div><div className="p-name">{person.name}</div><div className="p-group">{person.net >= 0 ? 'Currently owed' : 'Currently owes'}</div></div><div className={`p-amount ${person.net >= 0 ? 'teal' : 'red'}`}>{person.net >= 0 ? '+' : '-'}{money(Math.abs(person.net))}</div></div>
-                    ))}
-                  </div>
-                  <div className="card">
-                    <div className="card-head">Recent activity</div>
-                    {expenses.slice(0, 6).map((expense) => (
-                      <div className="activity-row" key={expense.id}><div className="act-icon">{expense.category.slice(0, 1)}</div><div><div className="act-name">{expense.description}</div><div className="act-meta">{expense.groupName} · paid by {expense.paidByName}</div></div><div style={{ marginLeft: 'auto', textAlign: 'right' }}><div className="act-amt">{money(expense.amount)}</div><div className="act-type">{expense.category}</div></div></div>
-                    ))}
-=======
               <div className="page show" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 <div className="balance-card">
                   <div className="bc-inner">
@@ -948,7 +696,6 @@ const isEditingGroup = Boolean(creatingGroup.id);
                         </div>
                       );
                     })}
->>>>>>> dev
                   </div>
                 </div>
               </div>
@@ -1026,16 +773,6 @@ const isEditingGroup = Boolean(creatingGroup.id);
                 ) : null}
                 <div className="g2 groups-layout">
                   <div className="card">
-<<<<<<< HEAD
-                    <div className="card-head">Your groups</div>
-                    {groups.map((group) => (
-                      <div className="group-card interactive" key={group.id}>
-                        <div className="group-top"><div className="group-emoji">{group.emoji}</div><div className="group-main"><div className="group-name">{group.name}</div><div className="group-meta">{group.type} · {group.members.length} members · {group.pendingInvites.length} pending invites</div></div><div className="row gap-2 wrap-actions">{group.isOwner ? <><button className="btn btn-secondary btn-sm" onClick={() => startEditGroup(group)}>Edit</button><button className="btn btn-danger btn-sm" onClick={() => handleDeleteGroup(group)}>Delete</button></> : <button className="btn btn-danger btn-sm" onClick={() => handleLeaveGroup(group)}>Leave group</button>}</div></div>
-                        <div className="group-rule"><strong>Voting threshold:</strong> Any purchase above this amount will trigger a group vote automatically.<div className="group-threshold-value">Current threshold: {money(group.threshold)}</div></div>
-                        <div className="member-stack">{group.members.map((member) => <div className="member-pill" key={member.id}>{member.name}</div>)}{group.pendingInvites.map((invite) => <div className="member-pill pending-pill" key={invite.id}>{invite.email} · Pending</div>)}</div>
-                      </div>
-                    ))}
-=======
                     <div className="card-head">Active groups</div>
                     <div className="group-list">
                       {groups.map((group) => (
@@ -1076,23 +813,17 @@ const isEditingGroup = Boolean(creatingGroup.id);
                         </div>
                       ))}
                     </div>
->>>>>>> dev
                   </div>
                   <div className="card sticky-card">
                     <div className="card-head">{groupForm.id ? 'Edit group' : 'Create a group'}</div>
                     <form onSubmit={saveGroup} className="stack-form">
                       <label className="f-label">Group name</label>
-<<<<<<< HEAD
                       <input className="f-inp" value={groupForm.name} onChange={(e) => setGroupForm({ ...groupForm, name: e.target.value })} placeholder="e.g. Summer Apartment" />
-=======
-                      <input className="f-inp" placeholder="e.g. 301 Apartment" value={creatingGroup.name} onChange={(e) => setCreatingGroup({ ...creatingGroup, name: e.target.value })} />
->>>>>>> dev
                       <label className="f-label">Group type</label>
                       <select className="f-inp" value={groupForm.type} onChange={(e) => setGroupForm({ ...groupForm, type: e.target.value })}>
                         <option value="roommates">Roommates</option><option value="trip">Trip</option><option value="household">Household</option><option value="custom">Custom</option>
                       </select>
                       <label className="f-label">Voting threshold</label>
-<<<<<<< HEAD
                       <input className="f-inp" type="number" min="0" placeholder="Enter amount" value={groupForm.threshold} onChange={(e) => setGroupForm({ ...groupForm, threshold: e.target.value })} />
                       <div className="scanner-hint">Any purchase above this amount will trigger a group vote automatically.</div>
                       <label className="f-label">Invite members by email</label>
@@ -1106,36 +837,6 @@ const isEditingGroup = Boolean(creatingGroup.id);
                           placeholder="friend@example.com"
                         />
                         <button className="btn btn-secondary" type="button" onClick={addInviteEmail}>Add</button>
-=======
-                      <input className="f-inp" type="number" min="0" placeholder="Enter amount" value={creatingGroup.threshold} onChange={(e) => setCreatingGroup({ ...creatingGroup, threshold: e.target.value })} />
-                      <p className="f-hint">Any purchase above this amount will trigger a group vote automatically.</p>
-                      <label className="f-label">Group members</label>
-                      <p className="f-hint">Fill in a name and optional email for each member. An invitation will be sent to any email you provide.</p>
-                      <div className="member-rows">
-                        {creatingGroup.members.map((member, index) => (
-                          <div className="member-row" key={index}>
-                            <input
-                              className="f-inp member-row-name"
-                              placeholder="Name"
-                              value={member.name}
-                              onChange={(e) => updateMemberRow(index, 'name', e.target.value)}
-                            />
-                            <input
-                              className="f-inp member-row-email"
-                              type="email"
-                              placeholder="Email (optional)"
-                              value={member.email}
-                              onChange={(e) => updateMemberRow(index, 'email', e.target.value)}
-                            />
-                            <button type="button" className="btn-icon-remove" onClick={() => removeMemberRow(index)} title="Remove">×</button>
-                          </div>
-                        ))}
-                      </div>
-                      <button type="button" className="btn btn-secondary btn-add-member" onClick={addMemberRow}>+ Add member</button>
-                      <div className="form-actions">
-                        <button className="btn btn-primary" type="submit">{isEditingGroup ? 'Save changes' : 'Create group'}</button>
-                        {isEditingGroup ? <button className="btn btn-secondary" type="button" onClick={resetGroupForm}>Cancel</button> : null}
->>>>>>> dev
                       </div>
                       <div className="scanner-hint">Invite people using the exact email address they will use to create or sign in to their SplitStack account.</div>
                       <div className="member-helper row-b"><span>{inviteCountPreview} people after save</span><span>Owner + accepted members + pending email invites</span></div>
@@ -1156,17 +857,7 @@ const isEditingGroup = Boolean(creatingGroup.id);
                     <div className="card-head">Add an expense</div>
                     <form onSubmit={submitExpense} className="stack-form">
                       <label className="f-label">Group</label>
-<<<<<<< HEAD
                       <select className="f-inp" value={expenseForm.groupId} onChange={(e) => setExpenseForm({ ...expenseForm, groupId: e.target.value })}>{groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}</select>
-=======
-                      <select className="f-inp" value={expenseForm.groupId} onChange={(e) => setExpenseForm({ ...expenseForm, groupId: e.target.value })}>
-                        {groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
-                      </select>
-                      <label className="f-label">Amount</label>
-                      <div className="amt-wrap"><span className="amt-sym">$</span><input className="amt-inp" value={expenseForm.amount} onChange={(e) => setExpenseForm({ ...expenseForm, amount: e.target.value })} /></div>
-                      <label className="f-label">Date</label>
-                      <input className="f-inp" type="date" value={expenseForm.date} onChange={(e) => setExpenseForm({ ...expenseForm, date: e.target.value })} />
->>>>>>> dev
                       <label className="f-label">Description</label>
                       <input className="f-inp" value={expenseForm.description} onChange={(e) => setExpenseForm({ ...expenseForm, description: e.target.value })} />
                       <label className="f-label">Amount</label>
@@ -1182,38 +873,9 @@ const isEditingGroup = Boolean(creatingGroup.id);
                       {expenseForm.splitMethod === 'custom' ? (
                         <div className="split-box"><div className="split-summary"><span>Assigned total</span><strong className={Math.abs(customTotal - amountNumber) < 0.01 ? 'ok-text' : 'warn-text'}>{money(customTotal)}</strong></div><div className="split-note">Enter the exact amount each person should pay.</div><div className="split-actions"><button className="btn btn-secondary btn-sm" type="button" onClick={applyEvenCustomSplit}>Distribute amounts evenly</button></div>{memberShares.map((member) => <div className="split-member detailed" key={member.id}><div className="split-member-main"><div className="ava-sm" style={{ background: member.avatarColor }}>{member.initials}</div><div className="sm-name">{member.name}</div></div><div className="split-input-wrap money"><span className="sm-prefix">$</span><input className="sm-inp" type="number" step="0.01" min="0" value={splitInputs.custom[member.id] ?? ''} onChange={(e) => updateCustomSplit(member.id, e.target.value)} /></div></div>)}</div>
                       ) : null}
-<<<<<<< HEAD
                       <label className="f-label">Reason for vote (optional)</label>
                       <textarea className="f-inp" rows="3" value={expenseForm.reason} onChange={(e) => setExpenseForm({ ...expenseForm, reason: e.target.value })} placeholder="Used only if this purchase exceeds the voting threshold." />
                       <button className="btn btn-primary" type="submit">Save expense</button>
-=======
-                      <label className="f-label">Receipt / photo (optional)</label>
-                      <div className="receipt-tabs">
-                        <button type="button" className={`split-tab ${expenseForm.receiptMode === 'link' ? 'on' : ''}`} onClick={() => setExpenseForm({ ...expenseForm, receiptMode: 'link', receiptUrl: '' })}>Link</button>
-                        <button type="button" className={`split-tab ${expenseForm.receiptMode === 'photo' ? 'on' : ''}`} onClick={() => setExpenseForm({ ...expenseForm, receiptMode: 'photo', receiptUrl: '' })}>Upload photo</button>
-                      </div>
-                      {expenseForm.receiptMode === 'link' ? (
-                        <input className="f-inp" type="url" placeholder="https://..." value={expenseForm.receiptUrl} onChange={(e) => setExpenseForm({ ...expenseForm, receiptUrl: e.target.value })} />
-                      ) : (
-                        <input className="f-inp" type="file" accept="image/*" onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (!file) return;
-                          const reader = new FileReader();
-                          reader.onload = (ev) => setExpenseForm((form) => ({ ...form, receiptUrl: ev.target.result }));
-                          reader.readAsDataURL(file);
-                        }} />
-                      )}
-                      {expenseForm.receiptUrl && expenseForm.receiptMode === 'photo' && (
-                        <div className="receipt-preview">
-                          <img src={expenseForm.receiptUrl} alt="Receipt preview" className="receipt-img" />
-                          <button type="button" className="btn btn-secondary btn-sm" onClick={() => setExpenseForm((form) => ({ ...form, receiptUrl: '' }))}>Remove</button>
-                        </div>
-                      )}
-                      <label className="f-label">Reason for large purchase (optional)</label>
-                      <textarea className="f-inp" rows="3" value={expenseForm.reason} onChange={(e) => setExpenseForm({ ...expenseForm, reason: e.target.value })} />
-                      {currentGroup ? <div className="scanner-hint">This group requires a vote for expenses above {money(currentGroup.threshold)}.</div> : null}
-                      <button className="btn btn-primary btn-lg" type="submit">Add and Split</button>
->>>>>>> dev
                     </form>
                   </div>
                   <div className="card">
@@ -1226,10 +888,6 @@ const isEditingGroup = Boolean(creatingGroup.id);
 
             {page === 'vote' && (
               <div className="page show">
-<<<<<<< HEAD
-                {votes.map((vote) => (
-                  <div className="vote-card" key={vote.id}><div className="vc-top"><div className="vc-tag">{vote.groupName}</div><div className="vc-desc">{vote.description}</div><div className="vc-amt">{money(vote.amount)}</div><div className="vc-reason">{vote.reason}</div></div><div className="vc-meta"><div className="vc-meta-item"><strong>Status</strong>{vote.status}</div><div className="vc-meta-item"><strong>Requested by</strong>{vote.requestedByName}</div><div className="vc-meta-item"><strong>Category</strong>{vote.category}</div></div><div className="vc-voters">{vote.decisions.map((decision) => <div className="vc-voter" key={`${vote.id}-${decision.userId}`}><span className="vote-dot" style={{ background: decision.decision === 'yes' ? '#22C55E' : '#EF4444' }} />{decision.name} · {decision.decision}</div>)}</div>{vote.status === 'pending' ? <div className="vc-actions"><button className="btn-vote-yes" onClick={() => respondToVote(vote.id, 'yes')}>Approve</button><button className="btn-vote-no" onClick={() => respondToVote(vote.id, 'no')}>Decline</button></div> : null}</div>
-=======
                 {votes.filter((vote) => vote.status === 'pending').map((vote) => (
                   <div className="vote-card" key={vote.id}>
                     <div className="vc-top">
@@ -1256,38 +914,13 @@ const isEditingGroup = Boolean(creatingGroup.id);
                       <button className="btn-vote-no" onClick={() => respondToVote(vote.id, 'no')}>Decline</button>
                     </div>
                   </div>
->>>>>>> dev
                 ))}
               </div>
             )}
 
             {page === 'chat' && (
               <div className="page show" style={{ padding: 0 }}>
-<<<<<<< HEAD
                 <div className="chat-wrap"><div className="chat-quick">{['Who owes the most?', 'How much did we spend on groceries?', 'Any pending votes?', 'How are our challenges doing?'].map((prompt) => <button className="cq-btn" key={prompt} onClick={() => sendChat(prompt)}>{prompt}</button>)}</div><div id="chat-msgs" ref={chatMessagesRef}>{chatMessages.map((message, index) => <div key={`${message.role}-${index}`} className={`msg-wrap ${message.role === 'user' ? 'user' : ''}`}><div className={`msg-ava ${message.role}`}>{message.role === 'user' ? session.user.initials : 'AI'}</div><div><div className={`msg-bub ${message.role}`}>{message.text}</div></div></div>)}</div><div className="chat-input-bar"><textarea id="chat-inp" value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); } }} placeholder="Ask about balances, group spending, savings, or votes…" rows="1" /><button className="chat-send-btn" onClick={() => sendChat()}><Icon name="send" /></button></div></div>
-=======
-                <div className="chat-wrap">
-                  <div className="chat-quick">
-                    {['Who owes the most?', 'How much did we spend on groceries this month?', 'Any tips to reduce our shared expenses?', "What's the pending vote about?"].map((prompt) => (
-                      <button className="cq-btn" key={prompt} onClick={() => { setChatInput(prompt); requestAnimationFrame(() => sendChat(prompt)); }}>{prompt}</button>
-                    ))}
-                  </div>
-                  <div id="chat-msgs" ref={chatMessagesRef}>
-                    {chatMessages.map((message, index) => (
-                      <div key={`${message.role}-${index}`} className={`msg-wrap ${message.role === 'user' ? 'user' : ''}`}>
-                        <div className={`msg-ava ${message.role}`}>{message.role === 'user' ? session.user.initials : 'AI'}</div>
-                        <div>
-                          <div className={`msg-bub ${message.role}`}>{message.text}</div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="chat-input-bar">
-                    <textarea id="chat-inp" value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); } }} placeholder="Ask about balances, group spending, savings, or votes…" rows="1" />
-                    <button className="chat-send-btn" onClick={() => sendChat()} aria-label="Send message"><Icon name="send" /></button>
-                  </div>
-                </div>
->>>>>>> dev
               </div>
             )}
 
@@ -1326,48 +959,9 @@ const isEditingGroup = Boolean(creatingGroup.id);
                 <div className="g2">
                   <div className="card">
                     <div className="card-head">Account</div>
-<<<<<<< HEAD
                     <div className="settings-user"><div className="settings-ava">{session.user.initials}</div><div><div className="page-title" style={{ fontSize: 20 }}>{session.user.name}</div><div className="page-desc">{session.user.email}</div></div></div>
                     <div className="card-sub mt-4">Notifications</div>
                     <div className="notification-list">{notifications.map((item) => <div className="notification-row" key={item.id}><div><div className="p-name">{item.title}</div><div className="p-group">{item.body}</div></div>{item.unread ? <span className="tag tag-teal">New</span> : <span className="tag tag-muted">Seen</span>}</div>)}</div>
-=======
-                    <div className="settings-user">
-                      <div className="settings-ava">{session.user.initials}</div>
-                      <div>
-                        <div className="page-title" style={{ fontSize: 20 }}>{session.user.name}</div>
-                        <div className="page-desc">{session.user.email}</div>
-                      </div>
-                    </div>
-                    {invitations.length > 0 && (
-                      <div className="mt-4">
-                        <div className="card-head">Group invitations</div>
-                        {invitations.map((invite) => (
-                          <div className="notification-row" key={invite.id}>
-                            <div style={{ flex: 1 }}>
-                              <div className="p-name">{invite.groupEmoji} {invite.groupName}</div>
-                              <div className="p-group">{invite.invitedByName} invited you · {invite.groupType}</div>
-                            </div>
-                            <div style={{ display: 'flex', gap: '8px' }}>
-                              <button className="btn btn-primary" style={{ padding: '6px 14px', fontSize: '12px' }} onClick={() => respondInvitation(invite.id, 'accepted')}>Accept</button>
-                              <button className="btn btn-secondary" style={{ padding: '6px 14px', fontSize: '12px' }} onClick={() => respondInvitation(invite.id, 'declined')}>Decline</button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    <div className="notification-list mt-4">
-                      <div className="card-head">Notifications</div>
-                      {notifications.map((item) => (
-                        <div className="notification-row" key={item.id}>
-                          <div>
-                            <div className="p-name">{item.title}</div>
-                            <div className="p-group">{item.body}</div>
-                          </div>
-                          {item.unread ? <span className="tag tag-teal">New</span> : <span className="tag tag-muted">Seen</span>}
-                        </div>
-                      ))}
-                    </div>
->>>>>>> dev
                   </div>
                   <div className="card">
                     <div className="card-head">Preferences</div>
