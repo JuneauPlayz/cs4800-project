@@ -136,13 +136,17 @@ export function calculateBalances(userId) {
   const expenses = db.prepare(`
     SELECT e.id, e.group_id as groupId, e.amount, e.paid_by as paidBy
     FROM expenses e
+    LEFT JOIN votes v ON v.id = e.vote_id
     WHERE e.group_id IN (${placeholders})
+      AND (e.vote_id IS NULL OR v.status = 'approved')
   `).all(...groupIds);
   const splits = db.prepare(`
     SELECT es.expense_id as expenseId, es.user_id as userId, es.amount
     FROM expense_splits es
     JOIN expenses e ON e.id = es.expense_id
+    LEFT JOIN votes v ON v.id = e.vote_id
     WHERE e.group_id IN (${placeholders})
+      AND (e.vote_id IS NULL OR v.status = 'approved')
   `).all(...groupIds);
 
   const relatedUserIds = [...new Set(groups.flatMap((g) => g.members.map((m) => m.id)))];
@@ -220,7 +224,9 @@ export function getExpenses(userId) {
     FROM expenses e
     JOIN users u ON u.id = e.paid_by
     JOIN groups_table gt ON gt.id = e.group_id
+    LEFT JOIN votes v ON v.id = e.vote_id
     WHERE e.group_id IN (${placeholders})
+      AND (e.vote_id IS NULL OR v.status = 'approved')
     ORDER BY e.expense_date DESC, e.created_at DESC
   `).all(...groupIds);
   const splitStmt = db.prepare('SELECT user_id as userId, amount FROM expense_splits WHERE expense_id = ?');
@@ -534,6 +540,11 @@ export function respondToVote(voteId, decision, userId) {
   else if (yes >= groupSize) status = 'approved';
 
   db.prepare('UPDATE votes SET status = ? WHERE id = ?').run(status, voteId);
+  if (status === 'approved') {
+    createNotification(vote.requested_by, 'vote', 'Expense approved', `"${vote.description}" for ${moneyLike(vote.amount)} was unanimously approved and has been added to the group balance.`);
+  } else if (status === 'declined') {
+    createNotification(vote.requested_by, 'vote', 'Expense declined', `"${vote.description}" for ${moneyLike(vote.amount)} was declined and will not be added to the group balance.`);
+  }
   // Find the vote's group owner to pass a valid userId to getVotes
   const owner = vote ? db.prepare('SELECT user_id FROM group_members WHERE group_id = ? LIMIT 1').get(vote.group_id) : null;
   const allVotes = owner ? getVotes(owner.user_id) : [];
