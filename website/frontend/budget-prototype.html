@@ -1,0 +1,1640 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SplitStack Budget Prototype</title>
+  <style>
+    :root {
+      --teal: #0d9488;
+      --teal-d: #0b7e73;
+      --teal-l: #f0fdfa;
+      --teal-m: #ccfbf1;
+      --teal-mid: #5eead4;
+      --slate: #0f172a;
+      --slate2: #1e293b;
+      --slate3: #334155;
+      --muted: #64748b;
+      --muted2: #94a3b8;
+      --border: #e2e8f0;
+      --border2: #f1f5f9;
+      --bg: #f8fafc;
+      --white: #ffffff;
+      --red: #ef4444;
+      --red-l: #fef2f2;
+      --amber: #f59e0b;
+      --amber-l: #fffbeb;
+      --green: #22c55e;
+      --green-l: #f0fdf4;
+      --purple: #8b5cf6;
+      --purple-l: #f5f3ff;
+      --sh1: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+      --sh2: 0 14px 40px rgba(15, 23, 42, 0.1);
+      --r: 16px;
+      --r-sm: 10px;
+      --f: "DM Sans", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--slate); font-family: var(--f); }
+    button, input, select, textarea { font: inherit; }
+    button { border: none; background: none; cursor: pointer; }
+    .app { display: flex; min-height: 100vh; }
+    .sidebar {
+      width: 240px;
+      background: var(--white);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+    }
+    .sb-top { padding: 22px 20px 16px; border-bottom: 1px solid var(--border2); }
+    .sb-brand { display: flex; align-items: center; gap: 10px; }
+    .sb-mark, .auth-mark, .hero-orb {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      background: var(--teal);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: var(--sh1);
+    }
+    .sb-name { font-size: 17px; font-weight: 800; }
+    .sb-nav { flex: 1; padding: 10px; overflow: auto; }
+    .nav-label {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--muted2);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      padding: 10px 10px 4px;
+    }
+    .nav-btn {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      margin-bottom: 4px;
+      border-radius: 9px;
+      color: var(--muted);
+      text-align: left;
+      font-size: 13.5px;
+      font-weight: 600;
+      transition: all .16s ease;
+    }
+    .nav-btn:hover { background: var(--bg); color: var(--slate); }
+    .nav-btn.active { background: var(--teal-l); color: var(--teal); }
+    .nav-pill {
+      margin-left: auto;
+      background: var(--red);
+      color: #fff;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 800;
+      padding: 2px 7px;
+    }
+    .sb-profile {
+      margin-top: auto;
+      border-top: 1px solid var(--border2);
+      padding: 14px 16px;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+    .avatar {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      background: var(--teal);
+      color: #fff;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      flex-shrink: 0;
+    }
+    .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+    .topbar {
+      height: 60px;
+      padding: 0 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--white);
+      border-bottom: 1px solid var(--border);
+    }
+    .tb-title { font-size: 16px; font-weight: 800; }
+    .tb-sub { margin-top: 2px; font-size: 12px; color: var(--muted); }
+    .tb-actions { display: flex; align-items: center; gap: 10px; }
+    .icon-btn, .btn, .mini-tab {
+      border-radius: 10px;
+      transition: all .16s ease;
+    }
+    .icon-btn {
+      width: 36px;
+      height: 36px;
+      border: 1px solid var(--border);
+      background: var(--white);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--slate2);
+    }
+    .icon-btn:hover { border-color: var(--teal); background: var(--teal-l); color: var(--teal); }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 10px 16px;
+      font-weight: 800;
+    }
+    .btn-primary { background: var(--teal); color: #fff; }
+    .btn-primary:hover { background: var(--teal-d); }
+    .btn-secondary { background: var(--white); color: var(--slate2); border: 1.5px solid var(--border); }
+    .btn-secondary:hover { background: var(--teal-l); border-color: var(--teal); color: var(--teal); }
+    .btn-sm { padding: 7px 12px; font-size: 13px; }
+    .page-wrap { flex: 1; overflow: auto; padding: 28px; }
+    .screen { display: none; }
+    .screen.active { display: block; }
+    .g2, .g3, .g4 { display: grid; gap: 16px; }
+    .g2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .g3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .g4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .stack { display: flex; flex-direction: column; gap: 16px; }
+    .card {
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      padding: 20px;
+      box-shadow: var(--sh1);
+    }
+    .card-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+      font-size: 13px;
+      font-weight: 800;
+    }
+    .card-sub {
+      font-size: 11px;
+      color: var(--muted2);
+      text-transform: uppercase;
+      letter-spacing: .9px;
+      font-weight: 800;
+    }
+    .hero {
+      background: var(--slate);
+      color: #fff;
+      border-radius: 22px;
+      padding: 28px;
+      overflow: hidden;
+      position: relative;
+      box-shadow: var(--sh2);
+    }
+    .hero::before,
+    .hero::after {
+      content: "";
+      position: absolute;
+      border-radius: 50%;
+      background: rgba(13, 148, 136, 0.16);
+    }
+    .hero::before { width: 220px; height: 220px; right: -70px; top: -80px; }
+    .hero::after { width: 170px; height: 170px; left: 20px; bottom: -90px; }
+    .hero-grid {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      grid-template-columns: 1.5fr 1fr;
+      gap: 22px;
+      align-items: stretch;
+    }
+    .hero-label {
+      font-size: 11px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: rgba(255,255,255,.5);
+      font-weight: 800;
+    }
+    .hero-amount {
+      margin-top: 8px;
+      font-size: 48px;
+      line-height: 1;
+      font-weight: 800;
+      letter-spacing: -2px;
+      color: var(--teal-mid);
+    }
+    .hero-copy { margin-top: 10px; color: rgba(255,255,255,.68); max-width: 540px; line-height: 1.6; }
+    .hero-stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-top: 24px;
+    }
+    .hero-stat {
+      background: rgba(255,255,255,.06);
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: 14px;
+      padding: 14px;
+    }
+    .hero-stat strong { display: block; font-size: 22px; color: #fff; }
+    .hero-stat span { display: block; margin-top: 4px; font-size: 12px; color: rgba(255,255,255,.55); }
+    .budget-meter {
+      background: rgba(255,255,255,.05);
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: 18px;
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    .budget-ring {
+      width: 132px;
+      height: 132px;
+      margin: 8px auto 14px;
+      border-radius: 50%;
+      background: conic-gradient(var(--teal-mid) 0 68%, rgba(255,255,255,.12) 68% 100%);
+      display: grid;
+      place-items: center;
+      position: relative;
+    }
+    .budget-ring::after {
+      content: "";
+      position: absolute;
+      inset: 12px;
+      border-radius: 50%;
+      background: var(--slate);
+      border: 1px solid rgba(255,255,255,.06);
+    }
+    .budget-ring span {
+      position: relative;
+      z-index: 1;
+      font-size: 28px;
+      font-weight: 800;
+      color: #fff;
+    }
+    .budget-meter p { margin: 0; color: rgba(255,255,255,.66); font-size: 13px; line-height: 1.6; }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 800;
+    }
+    .pill.teal { background: var(--teal-l); color: var(--teal-d); }
+    .pill.red { background: var(--red-l); color: #b91c1c; }
+    .pill.amber { background: var(--amber-l); color: #92400e; }
+    .pill.purple { background: var(--purple-l); color: var(--purple); }
+    .metric-card { min-height: 132px; }
+    .metric-value { font-size: 30px; font-weight: 800; letter-spacing: -1px; }
+    .metric-note { margin-top: 8px; font-size: 13px; color: var(--muted); line-height: 1.5; }
+    .budget-row, .list-row, .member-row, .vote-row, .chat-row, .toggle-row {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--border2);
+    }
+    .budget-row:last-child,
+    .list-row:last-child,
+    .member-row:last-child,
+    .vote-row:last-child,
+    .chat-row:last-child,
+    .toggle-row:last-child { border-bottom: none; }
+    .row-main { flex: 1; min-width: 0; }
+    .row-title { font-weight: 800; }
+    .row-sub { margin-top: 4px; color: var(--muted); font-size: 12px; line-height: 1.45; }
+    .row-value { margin-left: auto; font-weight: 800; text-align: right; }
+    .bar-shell {
+      width: 100%;
+      height: 10px;
+      background: var(--border2);
+      border-radius: 999px;
+      overflow: hidden;
+      margin-top: 10px;
+    }
+    .bar-fill {
+      height: 100%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, var(--teal), var(--teal-mid));
+    }
+    .bar-fill.warn { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+    .bar-fill.danger { background: linear-gradient(90deg, #ef4444, #fb7185); }
+    .group-card, .vote-card, .challenge-card {
+      border-radius: 18px;
+      border: 1px solid var(--border);
+      background: var(--white);
+      box-shadow: var(--sh1);
+      overflow: hidden;
+    }
+    .vote-card.dark {
+      background: var(--slate);
+      border-color: rgba(255,255,255,.06);
+      color: #fff;
+      box-shadow: var(--sh2);
+    }
+    .section-pad { padding: 22px; }
+    .group-hero {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border2);
+    }
+    .emoji-box {
+      width: 46px;
+      height: 46px;
+      border-radius: 12px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      display: grid;
+      place-items: center;
+      font-size: 22px;
+      flex-shrink: 0;
+    }
+    .group-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .helper-box, .soft-box {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px 16px;
+    }
+    .soft-box.teal { background: var(--teal-l); border-color: var(--teal-m); }
+    .soft-box.red { background: var(--red-l); border-color: #fecaca; }
+    .soft-box.dark {
+      background: rgba(255,255,255,.06);
+      border-color: rgba(255,255,255,.08);
+      color: rgba(255,255,255,.75);
+    }
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .field { display: flex; flex-direction: column; gap: 6px; }
+    .field label {
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: .4px;
+      color: var(--slate3);
+    }
+    input, select, textarea {
+      width: 100%;
+      border: 1.5px solid var(--border);
+      border-radius: 10px;
+      background: var(--white);
+      color: var(--slate);
+      padding: 12px 14px;
+      outline: none;
+    }
+    input:focus, select:focus, textarea:focus { border-color: var(--teal); box-shadow: 0 0 0 3px rgba(13, 148, 136, .12); }
+    textarea { resize: vertical; min-height: 96px; }
+    .amount-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      border-radius: 12px;
+      border: 1.5px solid var(--border);
+      background: var(--bg);
+    }
+    .amount-wrap span { font-size: 28px; color: var(--muted2); font-weight: 800; }
+    .amount-wrap input {
+      border: none;
+      background: transparent;
+      padding: 0;
+      font-size: 32px;
+      font-weight: 800;
+      box-shadow: none;
+    }
+    .chip-row, .quick-row { display: flex; flex-wrap: wrap; gap: 8px; }
+    .chip {
+      padding: 9px 12px;
+      border-radius: 9px;
+      border: 1.5px solid var(--border);
+      background: var(--white);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+    }
+    .chip.active { border-color: var(--teal); background: var(--teal-l); color: var(--teal-d); }
+    .split-tabs {
+      display: flex;
+      gap: 4px;
+      padding: 3px;
+      border-radius: 10px;
+      background: var(--bg);
+    }
+    .mini-tab {
+      flex: 1;
+      padding: 8px 10px;
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--muted);
+    }
+    .mini-tab.active {
+      background: var(--white);
+      color: var(--teal);
+      box-shadow: var(--sh1);
+    }
+    .split-box { background: var(--bg); border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; }
+    .split-member { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border2); }
+    .split-member:last-child { border-bottom: none; }
+    .split-member .avatar { width: 30px; height: 30px; font-size: 11px; }
+    .sparkline {
+      height: 180px;
+      display: flex;
+      align-items: flex-end;
+      gap: 10px;
+      padding-top: 28px;
+    }
+    .bar-col { flex: 1 0 0; min-width: 40px; }
+    .bar-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      justify-content: flex-end;
+      height: 130px;
+    }
+    .bar-seg {
+      border-radius: 8px 8px 0 0;
+      width: 100%;
+    }
+    .planned { background: rgba(13, 148, 136, .18); }
+    .actual { background: linear-gradient(180deg, var(--teal-mid), var(--teal)); }
+    .overrun { background: linear-gradient(180deg, #fbbf24, #f59e0b); }
+    .bar-cap {
+      font-size: 11px;
+      color: var(--muted);
+      text-align: center;
+      margin-top: 8px;
+      font-weight: 700;
+    }
+    .alert-grid { display: grid; gap: 12px; }
+    .alert {
+      border-radius: 14px;
+      padding: 14px 16px;
+      border: 1px solid var(--border);
+      background: var(--white);
+    }
+    .alert.red { background: var(--red-l); border-color: #fecaca; }
+    .alert.amber { background: var(--amber-l); border-color: #fde68a; }
+    .alert.teal { background: var(--teal-l); border-color: var(--teal-m); }
+    .chat-shell {
+      display: flex;
+      flex-direction: column;
+      min-height: 680px;
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      overflow: hidden;
+    }
+    .chat-quick { padding: 14px 20px; border-bottom: 1px solid var(--border); display: flex; gap: 8px; flex-wrap: wrap; }
+    .quick-pill {
+      border: 1px solid var(--teal-m);
+      background: var(--teal-l);
+      color: var(--teal-d);
+      padding: 7px 14px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 800;
+    }
+    .chat-log {
+      flex: 1;
+      background: var(--bg);
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .bubble-wrap { display: flex; gap: 10px; max-width: 720px; }
+    .bubble-wrap.user { align-self: flex-end; flex-direction: row-reverse; }
+    .bubble {
+      padding: 12px 16px;
+      border-radius: 18px;
+      line-height: 1.6;
+      font-size: 14px;
+    }
+    .bubble.ai { background: var(--white); border: 1px solid var(--border); border-radius: 18px 18px 18px 4px; }
+    .bubble.user { background: var(--teal); color: #fff; border-radius: 18px 18px 4px 18px; }
+    .chat-input {
+      padding: 16px 20px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      gap: 10px;
+      align-items: flex-end;
+    }
+    .chat-input textarea { min-height: 48px; }
+    .ring-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+    .ring-card {
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 22px;
+      text-align: center;
+    }
+    .ring {
+      width: 126px;
+      height: 126px;
+      margin: 0 auto 14px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      position: relative;
+    }
+    .ring::after {
+      content: "";
+      position: absolute;
+      inset: 10px;
+      border-radius: 50%;
+      background: var(--white);
+    }
+    .ring span {
+      position: relative;
+      z-index: 1;
+      font-size: 24px;
+      font-weight: 800;
+    }
+    .toggle {
+      width: 52px;
+      height: 30px;
+      border-radius: 999px;
+      background: var(--border);
+      position: relative;
+      flex-shrink: 0;
+    }
+    .toggle.on { background: var(--teal); }
+    .toggle::after {
+      content: "";
+      position: absolute;
+      top: 4px;
+      left: 4px;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: #fff;
+      transition: transform .16s ease;
+    }
+    .toggle.on::after { transform: translateX(22px); }
+    .muted { color: var(--muted); }
+    .teal { color: var(--teal); }
+    .red { color: var(--red); }
+    .amber { color: #b45309; }
+
+    @media (max-width: 1180px) {
+      .g4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .hero-grid, .g3, .ring-grid { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 920px) {
+      .app { flex-direction: column; }
+      .sidebar { width: 100%; }
+      .topbar { height: auto; padding: 16px 18px; }
+      .page-wrap { padding: 18px; }
+      .g2, .form-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="sb-top">
+        <div class="sb-brand">
+          <div class="sb-mark">S</div>
+          <div class="sb-name">SplitStack</div>
+        </div>
+      </div>
+      <div class="sb-nav">
+        <div class="nav-label">Workspace</div>
+        <button class="nav-btn active" data-screen-target="home"><span>◫</span>Home</button>
+        <button class="nav-btn" data-screen-target="analytics"><span>◭</span>Analytics</button>
+        <button class="nav-btn" data-screen-target="groups"><span>◎</span>Groups</button>
+        <button class="nav-btn" data-screen-target="add"><span>＋</span>Add Expense</button>
+        <button class="nav-btn" data-screen-target="vote"><span>✓</span>Group Voting <span class="nav-pill">2</span></button>
+        <button class="nav-btn" data-screen-target="chat"><span>◌</span>AI Assistant</button>
+        <button class="nav-btn" data-screen-target="progress"><span>↗</span>Challenges</button>
+        <button class="nav-btn" data-screen-target="settings"><span>⚙</span>Settings</button>
+      </div>
+      <div class="sb-profile">
+        <div class="avatar">JN</div>
+        <div>
+          <div style="font-weight:800;">Jordan Nguyen</div>
+          <div style="font-size:11px;color:var(--muted);">jordan@splitstack.app</div>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <div class="topbar">
+        <div>
+          <div class="tb-title" id="screenTitle">Balances</div>
+          <div class="tb-sub" id="screenSubtitle">Your standing across all accepted groups, now with a personal budget layer.</div>
+        </div>
+        <div class="tb-actions">
+          <button class="icon-btn">◔</button>
+          <button class="btn btn-secondary btn-sm">Prototype Mode</button>
+        </div>
+      </div>
+
+      <div class="page-wrap">
+        <section class="screen active" data-screen="home" data-title="Balances" data-subtitle="Your standing across all accepted groups, now with a personal budget layer.">
+          <div class="stack">
+            <div class="hero">
+              <div class="hero-grid">
+                <div>
+                  <div class="hero-label">Monthly self budget</div>
+                  <div class="hero-amount">$1,620 left</div>
+                  <div class="hero-copy">This mirrors the current SplitStack dashboard hero, but adds a personal planning lens. Shared expenses still show group settlement data, while your own budget progress sits alongside it so each decision is framed by “can I afford this month?”</div>
+                  <div class="hero-stats">
+                    <div class="hero-stat">
+                      <strong>$980</strong>
+                      <span>Spent so far</span>
+                    </div>
+                    <div class="hero-stat">
+                      <strong>$2,600</strong>
+                      <span>Monthly cap</span>
+                    </div>
+                    <div class="hero-stat">
+                      <strong>12 days</strong>
+                      <span>Until reset</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="budget-meter">
+                  <div>
+                    <div class="pill teal">On track</div>
+                    <div class="budget-ring"><span>68%</span></div>
+                  </div>
+                  <p>Your budget ring becomes the “quick health check” beside the existing net-balance card. It uses the same dark card mood, teal highlights, and optimistic status language already present in the frontend.</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="g4">
+              <div class="card metric-card">
+                <div class="card-sub">Net balance</div>
+                <div class="metric-value teal">+$184.20</div>
+                <div class="metric-note">Keep the existing settlement summary intact.</div>
+              </div>
+              <div class="card metric-card">
+                <div class="card-sub">Budget at risk</div>
+                <div class="metric-value amber">$220</div>
+                <div class="metric-note">Upcoming roommate and dining activity could push you near cap.</div>
+              </div>
+              <div class="card metric-card">
+                <div class="card-sub">Biggest category</div>
+                <div class="metric-value">$410</div>
+                <div class="metric-note">Dining is pacing 18% above your target this month.</div>
+              </div>
+              <div class="card metric-card">
+                <div class="card-sub">Safe to spend</div>
+                <div class="metric-value">$54/day</div>
+                <div class="metric-note">Daily allowance based on days left in this cycle.</div>
+              </div>
+            </div>
+
+            <div class="g2">
+              <div class="card">
+                <div class="card-head">
+                  <span>Budget by category</span>
+                  <span class="pill teal">Live from your share</span>
+                </div>
+
+                <div class="budget-row">
+                  <div class="row-main">
+                    <div class="row-title">Groceries</div>
+                    <div class="row-sub">$210 of $320 planned across all groups</div>
+                    <div class="bar-shell"><div class="bar-fill" style="width:66%;"></div></div>
+                  </div>
+                  <div class="row-value">$110 left</div>
+                </div>
+
+                <div class="budget-row">
+                  <div class="row-main">
+                    <div class="row-title">Dining</div>
+                    <div class="row-sub">$410 of $360 planned. This category is already over target.</div>
+                    <div class="bar-shell"><div class="bar-fill danger" style="width:100%;"></div></div>
+                  </div>
+                  <div class="row-value red">+ $50 over</div>
+                </div>
+
+                <div class="budget-row">
+                  <div class="row-main">
+                    <div class="row-title">Travel</div>
+                    <div class="row-sub">$175 of $450 used, mostly from the Tahoe group.</div>
+                    <div class="bar-shell"><div class="bar-fill" style="width:39%;"></div></div>
+                  </div>
+                  <div class="row-value">$275 left</div>
+                </div>
+
+                <div class="budget-row">
+                  <div class="row-main">
+                    <div class="row-title">Household</div>
+                    <div class="row-sub">$185 of $220 used, nearing your warning threshold.</div>
+                    <div class="bar-shell"><div class="bar-fill warn" style="width:84%;"></div></div>
+                  </div>
+                  <div class="row-value amber">$35 left</div>
+                </div>
+              </div>
+
+              <div class="card">
+                <div class="card-head">
+                  <span>Budget-aware activity</span>
+                  <span class="pill purple">New behavior</span>
+                </div>
+
+                <div class="list-row">
+                  <div class="emoji-box">🍣</div>
+                  <div class="row-main">
+                    <div class="row-title">Sushi dinner</div>
+                    <div class="row-sub">Dining · Tahoe Cabin · your share $48</div>
+                  </div>
+                  <div class="row-value amber">Puts dining at 114%</div>
+                </div>
+
+                <div class="list-row">
+                  <div class="emoji-box">🧻</div>
+                  <div class="row-main">
+                    <div class="row-title">Costco household run</div>
+                    <div class="row-sub">Household · Apt 5B · your share $22</div>
+                  </div>
+                  <div class="row-value">Still within cap</div>
+                </div>
+
+                <div class="list-row">
+                  <div class="emoji-box">🚗</div>
+                  <div class="row-main">
+                    <div class="row-title">Gas refill</div>
+                    <div class="row-sub">Travel · Tahoe Cabin · your share $36</div>
+                  </div>
+                  <div class="row-value teal">Under plan</div>
+                </div>
+
+                <div class="soft-box teal" style="margin-top:14px;">
+                  <strong>Design pattern:</strong> the current home screen already highlights recent activity. This version keeps that list but annotates each expense with its personal budget consequence so the dashboard becomes more decision-oriented.
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="screen" data-screen="analytics" data-title="Analytics" data-subtitle="Live spending totals plus planned-vs-actual budget performance.">
+          <div class="stack">
+            <div class="g4">
+              <div class="card metric-card">
+                <div class="card-sub">Budget accuracy</div>
+                <div class="metric-value">92%</div>
+                <div class="metric-note">How closely actual spend matches your monthly plan.</div>
+              </div>
+              <div class="card metric-card">
+                <div class="card-sub">Over-budget categories</div>
+                <div class="metric-value red">2</div>
+                <div class="metric-note">Dining and subscriptions need attention.</div>
+              </div>
+              <div class="card metric-card">
+                <div class="card-sub">Best controlled</div>
+                <div class="metric-value teal">Travel</div>
+                <div class="metric-note">32% under your expected pace this month.</div>
+              </div>
+              <div class="card metric-card">
+                <div class="card-sub">Projected month-end</div>
+                <div class="metric-value amber">$2,740</div>
+                <div class="metric-note">$140 above plan unless current pace changes.</div>
+              </div>
+            </div>
+
+            <div class="g2">
+              <div class="card">
+                <div class="card-head">
+                  <span>Plan vs actual</span>
+                  <span class="pill teal">Click-through chart in real app</span>
+                </div>
+                <div class="sparkline">
+                  <div class="bar-col">
+                    <div class="bar-stack">
+                      <div class="bar-seg planned" style="height:22px;"></div>
+                      <div class="bar-seg actual" style="height:38px;"></div>
+                    </div>
+                    <div class="bar-cap">Jan</div>
+                  </div>
+                  <div class="bar-col">
+                    <div class="bar-stack">
+                      <div class="bar-seg planned" style="height:28px;"></div>
+                      <div class="bar-seg actual" style="height:42px;"></div>
+                    </div>
+                    <div class="bar-cap">Feb</div>
+                  </div>
+                  <div class="bar-col">
+                    <div class="bar-stack">
+                      <div class="bar-seg planned" style="height:34px;"></div>
+                      <div class="bar-seg actual" style="height:55px;"></div>
+                    </div>
+                    <div class="bar-cap">Mar</div>
+                  </div>
+                  <div class="bar-col">
+                    <div class="bar-stack">
+                      <div class="bar-seg planned" style="height:40px;"></div>
+                      <div class="bar-seg actual" style="height:64px;"></div>
+                      <div class="bar-seg overrun" style="height:14px;"></div>
+                    </div>
+                    <div class="bar-cap">Apr</div>
+                  </div>
+                  <div class="bar-col">
+                    <div class="bar-stack">
+                      <div class="bar-seg planned" style="height:46px;"></div>
+                      <div class="bar-seg actual" style="height:60px;"></div>
+                    </div>
+                    <div class="bar-cap">May</div>
+                  </div>
+                  <div class="bar-col">
+                    <div class="bar-stack">
+                      <div class="bar-seg planned" style="height:52px;"></div>
+                      <div class="bar-seg actual" style="height:72px;"></div>
+                    </div>
+                    <div class="bar-cap">Jun</div>
+                  </div>
+                </div>
+                <div class="helper-box" style="margin-top:16px;">
+                  Planned bars show your intended limit. Actual bars show what your split-share spending actually landed at, which makes the analytics page a budgeting review rather than only a historical expense report.
+                </div>
+              </div>
+
+              <div class="card">
+                <div class="card-head">
+                  <span>Category pressure</span>
+                  <span class="pill amber">Needs tuning</span>
+                </div>
+
+                <div class="budget-row">
+                  <div class="row-main">
+                    <div class="row-title">Dining</div>
+                    <div class="row-sub">Expected $360 · actual $410</div>
+                    <div class="bar-shell"><div class="bar-fill danger" style="width:100%;"></div></div>
+                  </div>
+                  <div class="row-value red">+14%</div>
+                </div>
+
+                <div class="budget-row">
+                  <div class="row-main">
+                    <div class="row-title">Subscriptions</div>
+                    <div class="row-sub">Expected $40 · actual $56</div>
+                    <div class="bar-shell"><div class="bar-fill warn" style="width:100%;"></div></div>
+                  </div>
+                  <div class="row-value amber">+40%</div>
+                </div>
+
+                <div class="budget-row">
+                  <div class="row-main">
+                    <div class="row-title">Groceries</div>
+                    <div class="row-sub">Expected $320 · actual $210</div>
+                    <div class="bar-shell"><div class="bar-fill" style="width:66%;"></div></div>
+                  </div>
+                  <div class="row-value teal">-34%</div>
+                </div>
+
+                <div class="budget-row">
+                  <div class="row-main">
+                    <div class="row-title">Travel</div>
+                    <div class="row-sub">Expected $450 · actual $175</div>
+                    <div class="bar-shell"><div class="bar-fill" style="width:39%;"></div></div>
+                  </div>
+                  <div class="row-value teal">-61%</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-head">
+                <span>Budget insights</span>
+                <span class="pill purple">AI-ready</span>
+              </div>
+              <div class="alert-grid">
+                <div class="alert red">
+                  <strong>Dining is consistently where shared expenses knock your plan off course.</strong>
+                  <div class="row-sub">Recommendation: add a soft warning at $320 so the Add Expense screen starts cautioning earlier.</div>
+                </div>
+                <div class="alert amber">
+                  <strong>Tahoe Cabin spikes travel every other month.</strong>
+                  <div class="row-sub">Recommendation: let users create “event budgets” separate from their base monthly budget.</div>
+                </div>
+                <div class="alert teal">
+                  <strong>Groceries are below plan and can absorb some roommate household variance.</strong>
+                  <div class="row-sub">Recommendation: suggest reallocating $60 from groceries to dining for a more realistic plan.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="screen" data-screen="groups" data-title="Groups" data-subtitle="Shared groups with personal budget rules layered into each membership.">
+          <div class="g2">
+            <div class="stack">
+              <div class="group-card">
+                <div class="section-pad">
+                  <div class="group-hero">
+                    <div class="emoji-box">🏠</div>
+                    <div class="row-main">
+                      <div class="row-title">Apt 5B</div>
+                      <div class="row-sub">Roommates · 4 members · active all month</div>
+                    </div>
+                    <div class="pill teal">Best fit</div>
+                  </div>
+
+                  <div class="g2" style="margin-top:16px;">
+                    <div class="soft-box">
+                      <div class="card-sub">Your monthly cap in this group</div>
+                      <div class="metric-value">$780</div>
+                      <div class="metric-note">Includes groceries, household, utilities, and shared home purchases.</div>
+                    </div>
+                    <div class="soft-box teal">
+                      <div class="card-sub">Spent so far</div>
+                      <div class="metric-value teal">$542</div>
+                      <div class="metric-note">$238 left before this group starts warning you.</div>
+                    </div>
+                  </div>
+
+                  <div class="helper-box" style="margin-top:16px;">
+                    <strong>Budget idea for Groups screen:</strong> every group card gains a personal “budget envelope” so users can decide not just whether a group is active, but whether that group is consuming too much of their month.
+                  </div>
+
+                  <div class="budget-row">
+                    <div class="row-main">
+                      <div class="row-title">Household supplies</div>
+                      <div class="row-sub">$185 of $220</div>
+                      <div class="bar-shell"><div class="bar-fill warn" style="width:84%;"></div></div>
+                    </div>
+                    <div class="row-value amber">Near cap</div>
+                  </div>
+
+                  <div class="budget-row">
+                    <div class="row-main">
+                      <div class="row-title">Utilities</div>
+                      <div class="row-sub">$96 of $140</div>
+                      <div class="bar-shell"><div class="bar-fill" style="width:68%;"></div></div>
+                    </div>
+                    <div class="row-value">$44 left</div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="group-card">
+                <div class="section-pad">
+                  <div class="group-hero">
+                    <div class="emoji-box">🏔</div>
+                    <div class="row-main">
+                      <div class="row-title">Tahoe Cabin</div>
+                      <div class="row-sub">Trip · 6 members · short-term event budget</div>
+                    </div>
+                    <div class="pill amber">Monitor</div>
+                  </div>
+                  <div class="budget-row">
+                    <div class="row-main">
+                      <div class="row-title">Trip budget envelope</div>
+                      <div class="row-sub">$438 of $500 spent from your trip budget</div>
+                      <div class="bar-shell"><div class="bar-fill warn" style="width:88%;"></div></div>
+                    </div>
+                    <div class="row-value amber">$62 left</div>
+                  </div>
+                  <div class="group-actions" style="margin-top:16px;">
+                    <button class="btn btn-secondary btn-sm">Edit group</button>
+                    <button class="btn btn-secondary btn-sm">Adjust envelope</button>
+                    <button class="btn btn-primary btn-sm">Create one-off trip budget</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-head">
+                <span>Personal group budget settings</span>
+                <span class="pill purple">New side panel</span>
+              </div>
+
+              <div class="field">
+                <label>Group budget mode</label>
+                <select>
+                  <option>Track against my global monthly budget</option>
+                  <option>Use a separate group envelope</option>
+                  <option>Exclude from personal budget</option>
+                </select>
+              </div>
+
+              <div class="field">
+                <label>Warning threshold</label>
+                <select>
+                  <option>Warn me at 80%</option>
+                  <option>Warn me at 90%</option>
+                  <option>Warn only when exceeded</option>
+                </select>
+              </div>
+
+              <div class="field">
+                <label>Dining sub-cap inside this group</label>
+                <input value="$120" />
+              </div>
+
+              <div class="field">
+                <label>Auto-block voting above</label>
+                <input value="$75" />
+              </div>
+
+              <div class="soft-box teal" style="margin-top:16px;">
+                <strong>Why here:</strong> the existing Groups area already handles thresholds and membership rules. Personal budget controls naturally belong alongside those policies because this is where users think about the boundaries of each shared context.
+              </div>
+
+              <div class="member-row" style="margin-top:14px;">
+                <div class="avatar">JN</div>
+                <div class="row-main">
+                  <div class="row-title">Jordan</div>
+                  <div class="row-sub">Budget owner for this profile only</div>
+                </div>
+                <div class="pill teal">Editable</div>
+              </div>
+              <div class="member-row">
+                <div class="avatar" style="background:#334155;">AL</div>
+                <div class="row-main">
+                  <div class="row-title">Alex</div>
+                  <div class="row-sub">Sees shared group totals, not your private budget rules</div>
+                </div>
+                <div class="pill">Private</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="screen" data-screen="add" data-title="Add Expense" data-subtitle="Log and split an expense with an immediate budget-impact preview.">
+          <div class="g2">
+            <div class="card">
+              <div class="card-head">
+                <span>Add an expense</span>
+                <span class="pill teal">Budget-aware form</span>
+              </div>
+
+              <div class="form-grid">
+                <div class="field">
+                  <label>Group</label>
+                  <select>
+                    <option>Apt 5B</option>
+                    <option>Tahoe Cabin</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label>Category</label>
+                  <select id="categorySelect">
+                    <option value="groceries">Groceries</option>
+                    <option value="dining">Dining</option>
+                    <option value="household">Household</option>
+                    <option value="travel">Travel</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="field" style="margin-top:12px;">
+                <label>Description</label>
+                <input value="Trader Joe's weekly stock-up" />
+              </div>
+
+              <div class="field" style="margin-top:12px;">
+                <label>Amount</label>
+                <div class="amount-wrap">
+                  <span>$</span>
+                  <input id="expenseAmount" type="number" value="84" />
+                </div>
+              </div>
+
+              <div class="field" style="margin-top:12px;">
+                <label>Split method</label>
+                <div class="split-tabs">
+                  <button class="mini-tab active">Equal</button>
+                  <button class="mini-tab">Percent</button>
+                  <button class="mini-tab">Custom</button>
+                </div>
+              </div>
+
+              <div class="split-box" style="margin-top:12px;">
+                <div class="card-head" style="margin-bottom:8px;">
+                  <span>Your share preview</span>
+                  <span class="pill teal" id="sharePill">$21.00</span>
+                </div>
+
+                <div class="split-member">
+                  <div class="avatar">JN</div>
+                  <div class="row-main">
+                    <div class="row-title">Jordan</div>
+                    <div class="row-sub">This budget check runs off your split, not the whole receipt.</div>
+                  </div>
+                  <div class="row-value" id="yourShare">$21.00</div>
+                </div>
+                <div class="split-member">
+                  <div class="avatar" style="background:#475569;">AL</div>
+                  <div class="row-main"><div class="row-title">Alex</div></div>
+                  <div class="row-value">$21.00</div>
+                </div>
+                <div class="split-member">
+                  <div class="avatar" style="background:#64748b;">SM</div>
+                  <div class="row-main"><div class="row-title">Sam</div></div>
+                  <div class="row-value">$21.00</div>
+                </div>
+                <div class="split-member">
+                  <div class="avatar" style="background:#94a3b8;">KP</div>
+                  <div class="row-main"><div class="row-title">Kris</div></div>
+                  <div class="row-value">$21.00</div>
+                </div>
+              </div>
+
+              <div class="chip-row" style="margin-top:14px;">
+                <button class="chip active">Groceries</button>
+                <button class="chip">Dining</button>
+                <button class="chip">Utilities</button>
+                <button class="chip">Travel</button>
+                <button class="chip">Household</button>
+              </div>
+
+              <div class="field" style="margin-top:14px;">
+                <label>Reason for vote</label>
+                <textarea>This purchase is within our shared home supplies plan, but I want to preserve the receipt note for later review.</textarea>
+              </div>
+
+              <div style="display:flex;gap:10px;margin-top:16px;">
+                <button class="btn btn-primary">Save expense</button>
+                <button class="btn btn-secondary">Save as draft</button>
+              </div>
+            </div>
+
+            <div class="stack">
+              <div class="card">
+                <div class="card-head">
+                  <span>Budget impact</span>
+                  <span class="pill" id="impactStatus">Within target</span>
+                </div>
+
+                <div class="soft-box teal" id="impactBox">
+                  <div class="row-title" id="impactTitle">This expense keeps you on plan.</div>
+                  <div class="row-sub" id="impactText">Your grocery budget would move from $210 to $231 of $320 after this save.</div>
+                </div>
+
+                <div class="budget-row">
+                  <div class="row-main">
+                    <div class="row-title">Selected category budget</div>
+                    <div class="row-sub" id="categoryLine">$210 used of $320 groceries budget</div>
+                    <div class="bar-shell"><div class="bar-fill" id="categoryBar" style="width:72%;"></div></div>
+                  </div>
+                  <div class="row-value" id="categoryRemaining">$89 left</div>
+                </div>
+
+                <div class="budget-row">
+                  <div class="row-main">
+                    <div class="row-title">Monthly total after save</div>
+                    <div class="row-sub" id="monthLine">$980 current spend, increasing by your share</div>
+                    <div class="bar-shell"><div class="bar-fill" id="monthBar" style="width:39%;"></div></div>
+                  </div>
+                  <div class="row-value" id="monthRemaining">$1,599 left</div>
+                </div>
+              </div>
+
+              <div class="card">
+                <div class="card-head">
+                  <span>Prototype rationale</span>
+                  <span class="pill purple">Key UX win</span>
+                </div>
+                <div class="row-sub">
+                  The strongest budget addition is here: before a user commits an expense, we can explain whether their own share pushes a category over budget, uses their daily allowance, or should trigger a different conversation with the group.
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="screen" data-screen="vote" data-title="Group Voting" data-subtitle="Approve purchases with shared consensus and personal budget context.">
+          <div class="stack">
+            <div class="vote-card dark">
+              <div class="section-pad">
+                <div class="card-sub" style="color:rgba(255,255,255,.42);">Pending approval</div>
+                <div style="font-size:24px;font-weight:800;margin-top:8px;">Hotpot team dinner</div>
+                <div style="font-size:34px;font-weight:800;color:var(--teal-mid);margin-top:4px;">$164.00</div>
+                <div style="margin-top:12px;color:rgba(255,255,255,.65);line-height:1.6;">
+                  Shared celebration after project milestone. In the budget-aware version, users can see not only whether the group should approve it, but whether their own share fits the month they’re trying to run.
+                </div>
+              </div>
+              <div class="section-pad" style="border-top:1px solid rgba(255,255,255,.06);">
+                <div class="g3">
+                  <div class="soft-box dark">
+                    <div class="card-sub" style="color:rgba(255,255,255,.42);">Your share</div>
+                    <div class="metric-value" style="color:#fff;">$41.00</div>
+                  </div>
+                  <div class="soft-box dark">
+                    <div class="card-sub" style="color:rgba(255,255,255,.42);">Budget effect</div>
+                    <div class="metric-value amber" style="color:#fbbf24;">Dining 125%</div>
+                  </div>
+                  <div class="soft-box dark">
+                    <div class="card-sub" style="color:rgba(255,255,255,.42);">Recommendation</div>
+                    <div class="metric-value" style="font-size:22px;color:#fff;">Ask to split from fun budget</div>
+                  </div>
+                </div>
+              </div>
+              <div class="section-pad" style="border-top:1px solid rgba(255,255,255,.06); display:flex; gap:10px;">
+                <button class="btn btn-primary" style="flex:1;">Approve</button>
+                <button class="btn btn-secondary" style="flex:1;background:rgba(255,255,255,.05);border-color:rgba(255,255,255,.12);color:#fff;">Decline</button>
+              </div>
+            </div>
+
+            <div class="g2">
+              <div class="card">
+                <div class="card-head">
+                  <span>Why this matters to me</span>
+                  <span class="pill amber">Budget friction</span>
+                </div>
+                <div class="alert amber">
+                  <strong>If approved, this purchase makes dining your largest over-budget category this month.</strong>
+                  <div class="row-sub">That gives the vote screen a more honest role: not just “do I like this purchase?” but “can I support it right now?”</div>
+                </div>
+                <div class="budget-row">
+                  <div class="row-main">
+                    <div class="row-title">Dining after approval</div>
+                    <div class="row-sub">$451 of $360 target</div>
+                    <div class="bar-shell"><div class="bar-fill danger" style="width:100%;"></div></div>
+                  </div>
+                  <div class="row-value red">$91 over</div>
+                </div>
+                <div class="budget-row">
+                  <div class="row-main">
+                    <div class="row-title">Alternative source</div>
+                    <div class="row-sub">Could reclassify under “celebration” event budget if the group agrees</div>
+                  </div>
+                  <div class="row-value teal">Safer</div>
+                </div>
+              </div>
+
+              <div class="card">
+                <div class="card-head">
+                  <span>Votes with budget badges</span>
+                  <span class="pill teal">List treatment</span>
+                </div>
+                <div class="vote-row">
+                  <div class="emoji-box">🥘</div>
+                  <div class="row-main">
+                    <div class="row-title">Hotpot team dinner</div>
+                    <div class="row-sub">Your share: $41 · exceeds dining plan</div>
+                  </div>
+                  <div class="pill red">Over budget</div>
+                </div>
+                <div class="vote-row">
+                  <div class="emoji-box">🛒</div>
+                  <div class="row-main">
+                    <div class="row-title">Bulk paper towels</div>
+                    <div class="row-sub">Your share: $8 · fits household envelope</div>
+                  </div>
+                  <div class="pill teal">Safe</div>
+                </div>
+                <div class="vote-row">
+                  <div class="emoji-box">⛽</div>
+                  <div class="row-main">
+                    <div class="row-title">Cabin gas refill</div>
+                    <div class="row-sub">Your share: $19 · near trip cap</div>
+                  </div>
+                  <div class="pill amber">Watch</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="screen" data-screen="chat" data-title="AI Assistant" data-subtitle="Ask about balances, spending, and now your budget decisions.">
+          <div class="chat-shell">
+            <div class="chat-quick">
+              <button class="quick-pill">Can I still spend on dining this week?</button>
+              <button class="quick-pill">Which group is eating most of my budget?</button>
+              <button class="quick-pill">What would keep me under plan?</button>
+              <button class="quick-pill">Should I approve the hotpot expense?</button>
+            </div>
+            <div class="chat-log">
+              <div class="bubble-wrap">
+                <div class="avatar">AI</div>
+                <div class="bubble ai">
+                  You have <strong>$1,620</strong> left overall, but only <strong>$35</strong> left in household and you are already <strong>$50 over</strong> on dining. If you want to stay under plan this month, prioritize groceries and avoid another discretionary dining split.
+                </div>
+              </div>
+              <div class="bubble-wrap user">
+                <div class="avatar" style="background:var(--slate);">JN</div>
+                <div class="bubble user">
+                  Which group is creating the most budget pressure?
+                </div>
+              </div>
+              <div class="bubble-wrap">
+                <div class="avatar">AI</div>
+                <div class="bubble ai">
+                  <strong>Tahoe Cabin</strong> is the biggest swing factor. It has used <strong>$438 of your $500 trip envelope</strong>, and two pending expenses would bring that to <strong>$497</strong>. Apt 5B is more stable, but household supplies are nearing cap.
+                </div>
+              </div>
+              <div class="bubble-wrap user">
+                <div class="avatar" style="background:var(--slate);">JN</div>
+                <div class="bubble user">
+                  Should I approve the hotpot vote?
+                </div>
+              </div>
+              <div class="bubble-wrap">
+                <div class="avatar">AI</div>
+                <div class="bubble ai">
+                  If you approve it as dining, your category lands at <strong>125%</strong> of plan. Two safer options: ask the group to use a celebration budget, or approve it and reduce dining spending for the rest of the month by about <strong>$30 per week</strong>.
+                </div>
+              </div>
+            </div>
+            <div class="chat-input">
+              <textarea placeholder="Ask about balances, category limits, what-if budget scenarios, or votes..."></textarea>
+              <button class="btn btn-primary">Send</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="screen" data-screen="progress" data-title="Challenges" data-subtitle="Savings goals and group challenges shaped around budget habits.">
+          <div class="stack">
+            <div class="ring-grid">
+              <div class="ring-card">
+                <div class="ring" style="background:conic-gradient(var(--teal) 0 72%, #e2e8f0 72% 100%);"><span>72%</span></div>
+                <div class="row-title">Stay under total budget</div>
+                <div class="row-sub">$980 of $1,360 pace target for mid-month</div>
+              </div>
+              <div class="ring-card">
+                <div class="ring" style="background:conic-gradient(#f59e0b 0 88%, #e2e8f0 88% 100%);"><span>88%</span></div>
+                <div class="row-title">Household control</div>
+                <div class="row-sub">$185 of $210 checkpoint used</div>
+              </div>
+              <div class="ring-card">
+                <div class="ring" style="background:conic-gradient(#8b5cf6 0 61%, #e2e8f0 61% 100%);"><span>61%</span></div>
+                <div class="row-title">No-spend dining week</div>
+                <div class="row-sub">4 of 7 days completed</div>
+              </div>
+            </div>
+
+            <div class="g2">
+              <div class="card">
+                <div class="card-head">
+                  <span>Create challenge</span>
+                  <span class="pill purple">Budget variant</span>
+                </div>
+                <div class="field">
+                  <label>Challenge type</label>
+                  <select>
+                    <option>Keep dining under $320</option>
+                    <option>Save $150 from roommate spending</option>
+                    <option>No-spend weekend</option>
+                    <option>Create custom challenge</option>
+                  </select>
+                </div>
+                <div class="field" style="margin-top:12px;">
+                  <label>Success metric</label>
+                  <input value="Spend less than $320 in Dining by Apr 30" />
+                </div>
+                <div class="field" style="margin-top:12px;">
+                  <label>Who sees it</label>
+                  <select>
+                    <option>Private to me</option>
+                    <option>Visible to Apt 5B</option>
+                    <option>Visible to all groups</option>
+                  </select>
+                </div>
+                <div class="soft-box teal" style="margin-top:16px;">
+                  Challenges already exist in the app. This prototype bends them toward self-tracking so users can turn shared expense data into habit goals, not just generic progress rings.
+                </div>
+              </div>
+
+              <div class="card">
+                <div class="card-head">
+                  <span>Active budget challenges</span>
+                  <span class="pill teal">Recommended</span>
+                </div>
+                <div class="challenge-card">
+                  <div class="section-pad">
+                    <div class="row-title">Dining cooldown</div>
+                    <div class="row-sub">Pause group dining spends for 7 days to recover your monthly plan.</div>
+                    <div class="bar-shell"><div class="bar-fill" style="width:57%;"></div></div>
+                    <div class="row-sub" style="margin-top:8px;">4 days complete · estimated savings: $48</div>
+                  </div>
+                </div>
+                <div class="challenge-card" style="margin-top:12px;">
+                  <div class="section-pad">
+                    <div class="row-title">Trip cap protector</div>
+                    <div class="row-sub">Keep Tahoe Cabin under the final $62 of your envelope.</div>
+                    <div class="bar-shell"><div class="bar-fill warn" style="width:88%;"></div></div>
+                    <div class="row-sub" style="margin-top:8px;">1 pending vote could finish the envelope</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="screen" data-screen="settings" data-title="Settings" data-subtitle="Account, notifications, and private budget preferences.">
+          <div class="g2">
+            <div class="card">
+              <div class="card-head">
+                <span>Budget preferences</span>
+                <span class="pill teal">Personal only</span>
+              </div>
+
+              <div class="toggle-row">
+                <div class="row-main">
+                  <div class="row-title">Enable self budget tracking</div>
+                  <div class="row-sub">Adds planning widgets throughout balances, expenses, and votes.</div>
+                </div>
+                <div class="toggle on"></div>
+              </div>
+
+              <div class="toggle-row">
+                <div class="row-main">
+                  <div class="row-title">Warn before saving over-budget expenses</div>
+                  <div class="row-sub">Show soft blockers inside Add Expense.</div>
+                </div>
+                <div class="toggle on"></div>
+              </div>
+
+              <div class="toggle-row">
+                <div class="row-main">
+                  <div class="row-title">Show budget effect during voting</div>
+                  <div class="row-sub">Annotates pending approvals with your share and budget status.</div>
+                </div>
+                <div class="toggle on"></div>
+              </div>
+
+              <div class="field" style="margin-top:16px;">
+                <label>Monthly total budget</label>
+                <input value="$2,600" />
+              </div>
+
+              <div class="field" style="margin-top:12px;">
+                <label>Alert me when a category hits</label>
+                <select>
+                  <option>80% of budget</option>
+                  <option>90% of budget</option>
+                  <option>100% of budget</option>
+                </select>
+              </div>
+
+              <div class="field" style="margin-top:12px;">
+                <label>Budget privacy</label>
+                <select>
+                  <option>Only me</option>
+                  <option>Share summary with groups</option>
+                  <option>Share challenge progress only</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="stack">
+              <div class="card">
+                <div class="card-head">
+                  <span>Notification samples</span>
+                  <span class="pill amber">Budget alerts</span>
+                </div>
+                <div class="list-row">
+                  <div class="row-main">
+                    <div class="row-title">Dining is over plan</div>
+                    <div class="row-sub">Your last split pushed Dining to 114% of target.</div>
+                  </div>
+                  <div class="pill red">New</div>
+                </div>
+                <div class="list-row">
+                  <div class="row-main">
+                    <div class="row-title">Trip envelope is almost full</div>
+                    <div class="row-sub">Tahoe Cabin has only $62 left in your personal cap.</div>
+                  </div>
+                  <div class="pill amber">Watch</div>
+                </div>
+                <div class="list-row">
+                  <div class="row-main">
+                    <div class="row-title">You stayed under pace this week</div>
+                    <div class="row-sub">You have $73 more flexibility than forecast.</div>
+                  </div>
+                  <div class="pill teal">Good</div>
+                </div>
+              </div>
+
+              <div class="card">
+                <div class="card-head">
+                  <span>Implementation note</span>
+                  <span class="pill purple">Design guidance</span>
+                </div>
+                <div class="row-sub">
+                  The safest product shape is to keep budget tracking private by default. Shared groups can still see expenses, votes, and balances, while the budget layer remains a personal interpretation of that data unless the user explicitly shares it.
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const navButtons = document.querySelectorAll("[data-screen-target]");
+    const screens = document.querySelectorAll("[data-screen]");
+    const titleEl = document.getElementById("screenTitle");
+    const subtitleEl = document.getElementById("screenSubtitle");
+
+    navButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        const target = button.dataset.screenTarget;
+        navButtons.forEach((btn) => btn.classList.toggle("active", btn === button));
+        screens.forEach((screen) => {
+          const active = screen.dataset.screen === target;
+          screen.classList.toggle("active", active);
+          if (active) {
+            titleEl.textContent = screen.dataset.title;
+            subtitleEl.textContent = screen.dataset.subtitle;
+          }
+        });
+      });
+    });
+
+    const expenseAmount = document.getElementById("expenseAmount");
+    const categorySelect = document.getElementById("categorySelect");
+    const yourShare = document.getElementById("yourShare");
+    const sharePill = document.getElementById("sharePill");
+    const impactStatus = document.getElementById("impactStatus");
+    const impactBox = document.getElementById("impactBox");
+    const impactTitle = document.getElementById("impactTitle");
+    const impactText = document.getElementById("impactText");
+    const categoryLine = document.getElementById("categoryLine");
+    const categoryBar = document.getElementById("categoryBar");
+    const categoryRemaining = document.getElementById("categoryRemaining");
+    const monthLine = document.getElementById("monthLine");
+    const monthBar = document.getElementById("monthBar");
+    const monthRemaining = document.getElementById("monthRemaining");
+
+    const budgetMap = {
+      groceries: { used: 210, limit: 320, label: "groceries" },
+      dining: { used: 410, limit: 360, label: "dining" },
+      household: { used: 185, limit: 220, label: "household" },
+      travel: { used: 175, limit: 450, label: "travel" }
+    };
+
+    function formatMoney(value) {
+      return "$" + Number(value).toFixed(2);
+    }
+
+    function renderBudgetPreview() {
+      const total = Number(expenseAmount.value || 0);
+      const share = total / 4;
+      const currentMonthUsed = 980;
+      const monthLimit = 2600;
+      const category = budgetMap[categorySelect.value];
+      const nextCategory = category.used + share;
+      const categoryPct = Math.min((nextCategory / category.limit) * 100, 100);
+      const monthPct = ((currentMonthUsed + share) / monthLimit) * 100;
+      const remaining = category.limit - nextCategory;
+      const monthLeft = monthLimit - currentMonthUsed - share;
+
+      yourShare.textContent = formatMoney(share);
+      sharePill.textContent = formatMoney(share);
+      categoryLine.textContent = formatMoney(nextCategory) + " of " + formatMoney(category.limit) + " " + category.label + " budget";
+      categoryBar.style.width = categoryPct + "%";
+      monthLine.textContent = formatMoney(currentMonthUsed) + " current spend, increasing by " + formatMoney(share);
+      monthBar.style.width = monthPct + "%";
+      monthRemaining.textContent = formatMoney(monthLeft) + " left";
+
+      if (remaining >= 0) {
+        categoryRemaining.textContent = formatMoney(remaining) + " left";
+      } else {
+        categoryRemaining.textContent = formatMoney(Math.abs(remaining)) + " over";
+      }
+
+      impactStatus.className = "pill";
+      impactBox.className = "soft-box";
+      categoryBar.className = "bar-fill";
+
+      if (nextCategory > category.limit) {
+        impactStatus.textContent = "Over target";
+        impactStatus.classList.add("red");
+        impactBox.classList.add("red");
+        categoryBar.classList.add("danger");
+        impactTitle.textContent = "This expense would push the category over budget.";
+        impactText.textContent = "Your share moves " + category.label + " to " + formatMoney(nextCategory) + " against a " + formatMoney(category.limit) + " cap.";
+      } else if (nextCategory / category.limit >= 0.8) {
+        impactStatus.textContent = "Near limit";
+        impactStatus.classList.add("amber");
+        impactBox.classList.add("teal");
+        categoryBar.classList.add("warn");
+        impactTitle.textContent = "This expense keeps you under budget but gets close to the line.";
+        impactText.textContent = "After saving, you would have only " + formatMoney(remaining) + " left in " + category.label + ".";
+      } else {
+        impactStatus.textContent = "Within target";
+        impactStatus.classList.add("teal");
+        impactBox.classList.add("teal");
+        impactTitle.textContent = "This expense keeps you on plan.";
+        impactText.textContent = "Your " + category.label + " budget would move from " + formatMoney(category.used) + " to " + formatMoney(nextCategory) + ".";
+      }
+    }
+
+    expenseAmount.addEventListener("input", renderBudgetPreview);
+    categorySelect.addEventListener("change", renderBudgetPreview);
+    renderBudgetPreview();
+  </script>
+</body>
+</html>
