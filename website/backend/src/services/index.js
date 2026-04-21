@@ -1,0 +1,10 @@
+export { loginUser, registerUser } from './authService.js';
+export { getDashboard } from './dashboardService.js';
+export { listGroups, listPendingInvites, createGroup, updateGroup, leaveGroup, deleteGroup, respondToInvite } from './groupService.js';
+export { getExpenses, createExpense, calculateBalances } from './expenseService.js';
+export { getVotes, respondToVote } from './voteService.js';
+export { getAnalytics } from './analyticsService.js';
+export { getChallenges, createChallenge, contributeToChallenge } from './challengeService.js';
+export { getNotifications, markNotificationRead, getSettings, upsertSettings, getUserByEmail, getUserById, requireMembership } from './sharedService.js';
+export { generateAiReply } from './assistantService.js';
+export { getPendingInvitesForUser } from './sharedService.js';
