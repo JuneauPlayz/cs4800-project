@@ -5,7 +5,7 @@ export const categoryOptions = ['Groceries', 'Dining', 'Utilities', 'Rent', 'Tra
 export const workspacePages = ['home', 'analytics', 'groups', 'add', 'vote', 'chat', 'progress', 'settings'];
 
 export const navMeta = {
-  home: ['Balances', 'Your standing across all accepted groups'],
+  home: ['Home', 'Your standing across all accepted groups'],
   analytics: ['Analytics', 'Live spending totals across your active groups'],
   groups: ['Groups', 'Create groups, manage invites, and edit existing groups'],
   add: ['Add Expense', 'Log and split a shared expense with real members'],
@@ -15,7 +15,18 @@ export const navMeta = {
   settings: ['Settings', 'Account, notifications, and privacy preferences']
 };
 
-export const initialAuthForm = { name: '', email: 'jordan@splitstack.app', password: 'demo123' };
+export const DICEBEAR_SEEDS = [
+  'Jasper', 'Luna', 'Felix', 'River', 'Sage', 'Quinn',
+  'Milo', 'Ivy', 'Oscar', 'Willow', 'Leo', 'Aurora',
+  'Max', 'Zoe', 'Finn', 'Ruby', 'Kai', 'Nova',
+  'Asher', 'Aria', 'Theo', 'Cleo', 'Eli', 'Violet'
+];
+
+export function getDiceBearUrl(seed) {
+  return `https://api.dicebear.com/9.x/avataaars/svg?seed=${encodeURIComponent(seed)}&backgroundColor=b6e3f4,c0aede,d1d4f9,ffd5dc,ffdfbf`;
+}
+
+export const initialAuthForm = { name: '', email: 'jordan@splitstack.app', password: 'demo123', avatarEmoji: '' };
 export const initialExpenseForm = { groupId: '', description: '', amount: '', category: 'Groceries', splitMethod: 'equal', reason: '' };
 export const initialGroupForm = { id: null, name: '', type: 'roommates', threshold: '', inviteEmail: '', inviteEmails: [], description: '' };
 export const initialChallengeForm = { groupId: '', name: '', description: '', goal: '', endDate: '' };
