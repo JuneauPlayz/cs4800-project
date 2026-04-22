@@ -40,11 +40,11 @@ export function ensureSettings(userId) {
 }
 
 export function getUserById(userId) {
-  return db.prepare('SELECT id, name, email, initials, avatar_color as avatarColor, created_at as createdAt FROM users WHERE id = ?').get(userId);
+  return db.prepare('SELECT id, name, email, initials, avatar_color as avatarColor, avatar_emoji as avatarEmoji, created_at as createdAt FROM users WHERE id = ?').get(userId);
 }
 
 export function getUserByEmail(email) {
-  return db.prepare('SELECT id, name, email, initials, avatar_color as avatarColor, password FROM users WHERE lower(email) = lower(?)').get(email);
+  return db.prepare('SELECT id, name, email, initials, avatar_color as avatarColor, avatar_emoji as avatarEmoji, password FROM users WHERE lower(email) = lower(?)').get(email);
 }
 
 export function createNotification(userId, type, title, body) {
@@ -71,7 +71,7 @@ export function getPendingInvitesForUser(user) {
 
 export function getMembersByGroup(groupId) {
   return db.prepare(`
-    SELECT u.id, u.name, u.email, u.initials, u.avatar_color as avatarColor, gm.role, gm.joined_at as joinedAt
+    SELECT u.id, u.name, u.email, u.initials, u.avatar_color as avatarColor, u.avatar_emoji as avatarEmoji, gm.role, gm.joined_at as joinedAt
     FROM group_members gm
     JOIN users u ON u.id = gm.user_id
     WHERE gm.group_id = ?

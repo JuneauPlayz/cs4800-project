@@ -8,13 +8,13 @@ export function login(req, res) {
 }
 
 export function register(req, res) {
-  const { name, email, password } = req.body ?? {};
+  const { name, email, password, avatarEmoji } = req.body ?? {};
   if (!name || !email || !password) {
     return res.status(400).json({ message: 'name, email, and password are required.' });
   }
   if (getUserByEmail(email)) {
     return res.status(409).json({ message: 'Email already exists.' });
   }
-  const result = registerUser({ name, email, password });
+  const result = registerUser({ name, email, password, avatarEmoji });
   return res.status(201).json(result);
 }

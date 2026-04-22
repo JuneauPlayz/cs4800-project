@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { categoryOptions, initials, money, navMeta, workspacePages } from '../models/appModel';
+import { DICEBEAR_SEEDS, categoryOptions, getDiceBearUrl, initials, money, navMeta, workspacePages } from '../models/appModel';
 
 function StackLogo({ size = 18 }) {
   return (
@@ -26,6 +26,17 @@ function Icon({ name }) {
     send: <><path d="M22 2 11 13" /><path d="m22 2-7 20-4-9-9-4Z" /></>
   };
   return <svg {...common}>{icons[name]}</svg>;
+}
+
+function UserAvatar({ user, className = 'ava-sm' }) {
+  if (user?.avatarEmoji) {
+    return (
+      <div className={`${className} ava-dicebear`}>
+        <img src={getDiceBearUrl(user.avatarEmoji)} alt="" />
+      </div>
+    );
+  }
+  return <div className={className} style={{ background: user?.avatarColor }}>{user?.initials}</div>;
 }
 
 export function AppView({ controller }) {
@@ -120,7 +131,19 @@ export function AppView({ controller }) {
             <div className="auth-sub">Sign in to your SplitStack account</div>
             {error ? <div className="auth-hint auth-error">{error}</div> : null}
             {authMode === 'register' ? (
-              <div className="f-row"><label className="f-label">Full name</label><input className="f-inp" value={authForm.name} onChange={(e) => setAuthForm({ ...authForm, name: e.target.value })} /></div>
+              <>
+                <div className="f-row"><label className="f-label">Full name</label><input className="f-inp" value={authForm.name} onChange={(e) => setAuthForm({ ...authForm, name: e.target.value })} /></div>
+                <div className="f-row">
+                  <label className="f-label">Choose your avatar <span style={{ fontWeight: 400, color: 'var(--muted)' }}>(optional)</span></label>
+                  <div className="avatar-picker">
+                    {DICEBEAR_SEEDS.map((seed) => (
+                      <button key={seed} type="button" className={`avatar-option${authForm.avatarEmoji === seed ? ' selected' : ''}`} onClick={() => setAuthForm({ ...authForm, avatarEmoji: authForm.avatarEmoji === seed ? '' : seed })}>
+                        <img src={getDiceBearUrl(seed)} alt={seed} />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </>
             ) : null}
             <div className="f-row"><label className="f-label">Email</label><input className="f-inp" type="email" value={authForm.email} onChange={(e) => setAuthForm({ ...authForm, email: e.target.value })} /></div>
             <div className="f-row"><label className="f-label">Password</label><input className="f-inp" type="password" value={authForm.password} onChange={(e) => setAuthForm({ ...authForm, password: e.target.value })} /></div>
@@ -156,7 +179,7 @@ export function AppView({ controller }) {
             </div>
           </div>
           <div className="sb-profile" onClick={() => setPage('settings')}>
-            <div className="sb-ava">{session.user.initials || initials(session.user.name)}</div>
+            <UserAvatar user={session.user} className="sb-ava" />
             <div>
               <div className="sb-uname">{session.user.name}</div>
               <div className="sb-uemail">{session.user.email}</div>
@@ -258,7 +281,7 @@ export function AppView({ controller }) {
                 chatInput={chatInput}
                 setChatInput={setChatInput}
                 sendChat={sendChat}
-                userInitials={session.user.initials}
+                sessionUser={session.user}
               />
             )}
 
@@ -339,7 +362,7 @@ function HomePage({ dashboard, groups, expenses, groupMonthlyTotals, balanceModa
                 ? <div className="settlements-empty" style={{ padding: '24px 20px', textAlign: 'center' }}>{balanceModal === 'owedToYou' ? 'No one owes you right now.' : "You're all settled up!"}</div>
                 : (balanceModal === 'owedToYou' ? dashboard.balances.owedToYou : dashboard.balances.youOwe).map((person) => (
                   <div className="settlement-row" key={person.id} style={{ padding: '14px 20px' }}>
-                    <div className="ava-sm" style={{ background: person.avatarColor }}>{person.initials}</div>
+                    <UserAvatar user={person} />
                     <div className="modal-person-info">
                       <div className="p-name">{person.name}</div>
                       <div className="modal-group-tags">{person.groups.map((group) => <span className="tag tag-muted" key={group.id}>{group.name}</span>)}</div>
@@ -543,7 +566,9 @@ function GroupsPage({
                 </div>
                 <div className="member-stack">
                   {group.members.map((member) => (
-                    <div className="member-pill" key={member.id} title={member.role}>{member.name}</div>
+                    <div className="member-avatar" key={member.id} data-tooltip={`${member.name} · ${member.role}`}>
+                      <UserAvatar user={member} />
+                    </div>
                   ))}
                   {(group.pendingInvites ?? []).map((invite) => (
                     <div className="member-pill member-pill-pending" key={invite.id} title="Invitation pending">
@@ -753,10 +778,10 @@ function VotePage({ votes, onRespond }) {
   );
 }
 
-function ChatPage({ chatMessages, chatMessagesRef, chatInput, setChatInput, sendChat, userInitials }) {
+function ChatPage({ chatMessages, chatMessagesRef, chatInput, setChatInput, sendChat, sessionUser }) {
   return (
     <div className="page show" style={{ padding: 0 }}>
-      <div className="chat-wrap"><div className="chat-quick">{['Who owes the most?', 'How much did we spend on groceries?', 'Any pending votes?', 'How are our challenges doing?'].map((prompt) => <button className="cq-btn" key={prompt} onClick={() => sendChat(prompt)}>{prompt}</button>)}</div><div id="chat-msgs" ref={chatMessagesRef}>{chatMessages.map((message, index) => <div key={`${message.role}-${index}`} className={`msg-wrap ${message.role === 'user' ? 'user' : ''}`}><div className={`msg-ava ${message.role}`}>{message.role === 'user' ? userInitials : 'AI'}</div><div><div className={`msg-bub ${message.role}`}>{message.text}</div></div></div>)}</div><div className="chat-input-bar"><textarea id="chat-inp" value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); } }} placeholder="Ask about balances, group spending, savings, or votes…" rows="1" /><button className="chat-send-btn" onClick={() => sendChat()}><Icon name="send" /></button></div></div>
+      <div className="chat-wrap"><div className="chat-quick">{['Who owes the most?', 'How much did we spend on groceries?', 'Any pending votes?', 'How are our challenges doing?'].map((prompt) => <button className="cq-btn" key={prompt} onClick={() => sendChat(prompt)}>{prompt}</button>)}</div><div id="chat-msgs" ref={chatMessagesRef}>{chatMessages.map((message, index) => <div key={`${message.role}-${index}`} className={`msg-wrap ${message.role === 'user' ? 'user' : ''}`}><div className={`msg-ava ${message.role}`}>{message.role === 'user' ? (sessionUser?.avatarEmoji || sessionUser?.initials) : 'AI'}</div><div><div className={`msg-bub ${message.role}`}>{message.text}</div></div></div>)}</div><div className="chat-input-bar"><textarea id="chat-inp" value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); } }} placeholder="Ask about balances, group spending, savings, or votes…" rows="1" /><button className="chat-send-btn" onClick={() => sendChat()}><Icon name="send" /></button></div></div>
     </div>
   );
 }
@@ -794,7 +819,7 @@ function ProgressPage({
         <div className="card">
           <div className="card-head">Active challenges</div>
           {challengesState.challenges.map((challenge) => (
-            <div className="challenge-card" key={challenge.id}><div className="row-b"><div><div className="ch-name">{challenge.name}</div><div className="ch-desc">{challenge.groupName} · {challenge.description}</div></div><span className="tag tag-teal">{money(challenge.current)} / {money(challenge.goal)}</span></div><div className="ch-bar"><div className="ch-fill" style={{ width: `${Math.min((challenge.current / challenge.goal) * 100, 100)}%`, background: challenge.color }} /></div><div className="row-b"><span className="ch-nums">Created by {challenge.createdByName}</span><span className="ch-nums">Ends {challenge.endDate || 'Any time'}</span></div><div className="split-member detailed mt-3"><div className="split-member-main"><div className="sm-name">Add progress</div></div><div className="split-input-wrap money"><span className="sm-prefix">$</span><input className="sm-inp" type="number" min="0" step="0.01" value={contributionAmounts[challenge.id] ?? ''} onChange={(e) => setContributionAmounts((current) => ({ ...current, [challenge.id]: e.target.value }))} /></div><button className="btn btn-primary btn-sm" type="button" onClick={() => addContribution(challenge.id)}>Add</button></div>{challenge.contributions.slice(0, 3).map((item) => <div className="notification-row compact-row" key={item.id}><div className="row gap-2"><div className="ava-sm" style={{ background: item.avatarColor }}>{item.initials}</div><div><div className="p-name">{item.name}</div><div className="p-group">Added progress</div></div></div><strong>{money(item.amount)}</strong></div>)}</div>
+            <div className="challenge-card" key={challenge.id}><div className="row-b"><div><div className="ch-name">{challenge.name}</div><div className="ch-desc">{challenge.groupName} · {challenge.description}</div></div><span className="tag tag-teal">{money(challenge.current)} / {money(challenge.goal)}</span></div><div className="ch-bar"><div className="ch-fill" style={{ width: `${Math.min((challenge.current / challenge.goal) * 100, 100)}%`, background: challenge.color }} /></div><div className="row-b"><span className="ch-nums">Created by {challenge.createdByName}</span><span className="ch-nums">Ends {challenge.endDate || 'Any time'}</span></div><div className="split-member detailed mt-3"><div className="split-member-main"><div className="sm-name">Add progress</div></div><div className="split-input-wrap money"><span className="sm-prefix">$</span><input className="sm-inp" type="number" min="0" step="0.01" value={contributionAmounts[challenge.id] ?? ''} onChange={(e) => setContributionAmounts((current) => ({ ...current, [challenge.id]: e.target.value }))} /></div><button className="btn btn-primary btn-sm" type="button" onClick={() => addContribution(challenge.id)}>Add</button></div>{challenge.contributions.slice(0, 3).map((item) => <div className="notification-row compact-row" key={item.id}><div className="row gap-2"><UserAvatar user={item} /><div><div className="p-name">{item.name}</div><div className="p-group">Added progress</div></div></div><strong>{money(item.amount)}</strong></div>)}</div>
           ))}
         </div>
       </div>
@@ -808,7 +833,7 @@ function SettingsPage({ settings, session, notifications, saveSettings }) {
       <div className="g2">
         <div className="card">
           <div className="card-head">Account</div>
-          <div className="settings-user"><div className="settings-ava">{session.user.initials}</div><div><div className="page-title" style={{ fontSize: 20 }}>{session.user.name}</div><div className="page-desc">{session.user.email}</div></div></div>
+          <div className="settings-user"><UserAvatar user={session.user} className="settings-ava" /><div><div className="page-title" style={{ fontSize: 20 }}>{session.user.name}</div><div className="page-desc">{session.user.email}</div></div></div>
           <div className="card-sub mt-4">Notifications</div>
           <div className="notification-list">{notifications.map((item) => <div className="notification-row" key={item.id}><div><div className="p-name">{item.title}</div><div className="p-group">{item.body}</div></div>{item.unread ? <span className="tag tag-teal">New</span> : <span className="tag tag-muted">Seen</span>}</div>)}</div>
         </div>
