@@ -19,7 +19,7 @@ export function getChallenges(userId) {
   `).all(...groupIds);
 
   const contributionStmt = db.prepare(`
-    SELECT cc.id, cc.user_id as userId, cc.amount, cc.created_at as createdAt, u.name, u.initials, u.avatar_color as avatarColor
+    SELECT cc.id, cc.user_id as userId, cc.amount, cc.created_at as createdAt, u.name, u.initials, u.avatar_color as avatarColor, u.avatar_emoji as avatarEmoji
     FROM challenge_contributions cc
     JOIN users u ON u.id = cc.user_id
     WHERE cc.challenge_id = ?
