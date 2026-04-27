@@ -1,123 +1,175 @@
 # SplitStack
 
-Shared expense management app.
+SplitStack is a shared-expenses app with a React frontend, an Express + SQLite backend, AI assistant responses, group voting, challenges, settlements, and mobile-only receipt scanning.
 
 ## Requirements
 
-- [Node.js](https://nodejs.org) (includes npm) — use **v22 LTS**
+- Node.js 22
+- npm
 
-To check if you have it:
+Check your versions:
+
 ```bash
 node --version
 npm --version
 ```
 
-If not installed:
-```bash
-brew install node
-```
-
-If you have Node but it's the wrong version, install nvm and switch:
-```bash
-curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
-# open a new terminal, then:
-nvm install 22
-nvm use 22
-```
-
----
-
 ## Project Structure
 
-```
+```text
 cs4800-project/
 ├── website/
-│   ├── frontend/     ← React + Vite app
-│   └── backend/      ← Express + SQLite API
+│   ├── frontend/
+│   └── backend/
 └── README.md
 ```
 
----
+## First-Time Setup
 
-## Running the Backend
+Install dependencies in both apps:
 
 ```bash
-cd website/backend
+cd /Users/sarinakhara/Desktop/CS4800/cs4800-project/website/backend
 npm install
+
+cd /Users/sarinakhara/Desktop/CS4800/cs4800-project/website/frontend
+npm install
+```
+
+## Run The App
+
+You need two terminals open at the same time.
+
+### Terminal 1: backend
+
+```bash
+cd /Users/sarinakhara/Desktop/CS4800/cs4800-project/website/backend
 npm run dev
 ```
 
-You should see:
-```
+Expected result:
+
+```text
 SplitStack API running at http://localhost:3001
 ```
 
-> Verify it works: open http://localhost:3001/api/health in your browser.
-
----
-
-## Running the Frontend
-
-Open a **second terminal tab**, then:
+Quick backend health check:
 
 ```bash
-cd website/frontend
-npm install
+open http://localhost:3001/api/health
+```
+
+### Terminal 2: frontend
+
+For normal desktop testing:
+
+```bash
+cd /Users/sarinakhara/Desktop/CS4800/cs4800-project/website/frontend
 npm run dev
 ```
 
-Then open **http://localhost:5173/** in your browser.
+For phone testing on the same Wi-Fi:
 
-> Both servers must be running at the same time for the app to work.
-
----
-
-## Quick Reference
-
-| Command | What it does |
-|---|---|
-| `npm run dev` | Start dev server (auto-restarts on file changes) |
-| `npm run build` | Build for production |
-| `npm run lint` | Check for code issues |
-
----
-
-## Troubleshooting
-
-**`zsh: command not found: npm`** — Node is not installed. See Requirements above.
-
-**`cd: no such file or directory`** — Make sure you're in the project root (`cs4800-project/`) before running `cd`.
-
-**`Cannot reach backend`** — Make sure the backend is running on port 3001 before opening the frontend.
-
-**Port already in use** — Another process is using the port. Run on a different port:
 ```bash
-npx vite --port 3000        # frontend
-PORT=3002 npm run dev       # backend
+cd /Users/sarinakhara/Desktop/CS4800/cs4800-project/website/frontend
+npm run dev -- --host
 ```
 
----
+Expected result:
+
+```text
+Local:   http://localhost:5173/
+Network: http://<your-local-ip>:5173/
+```
+
+Open the frontend at:
+
+- Desktop: `http://localhost:5173/`
+- Phone: the `Network` URL shown in the frontend terminal
 
 ## Demo Accounts
-
-You can sign in with one of the seeded accounts:
 
 - `jordan@splitstack.app` / `demo123`
 - `marcus@splitstack.app` / `demo123`
 - `priya@splitstack.app` / `demo123`
 - `sam@splitstack.app` / `demo123`
 
-You can also register a new account. If that email was invited to a group before registration, the invite will appear after sign in.
+## Mobile Testing
 
----
+Receipt scanning is intentionally mobile-only.
 
-## Included Features
+To test it:
 
-- Real email/password registration and login
-- Persistent user-specific sessions in the frontend
-- Group creation, editing, and invite acceptance
-- Real member-aware expenses with equal / percent / custom split methods
-- Auto-created votes when an expense exceeds the group voting threshold
-- Group-specific challenges with contributions from accepted members
-- User-specific notifications and settings
-- AI assistant responses based on live app data
+1. Start backend with `npm run dev`.
+2. Start frontend with `npm run dev -- --host`.
+3. On your phone, open the `Network` URL shown by Vite.
+4. Log in with one of the demo accounts.
+5. Go to `Add Expense`.
+6. In the receipt section, use either:
+   - `Upload from library`
+   - `Take a new photo`
+
+The scanner only auto-fills:
+
+- merchant
+- date
+- total amount
+
+The user should still type:
+
+- description
+- category
+
+## Useful Commands
+
+Backend:
+
+```bash
+cd /Users/sarinakhara/Desktop/CS4800/cs4800-project/website/backend
+npm run dev
+npm run build
+npm run lint
+```
+
+Frontend:
+
+```bash
+cd /Users/sarinakhara/Desktop/CS4800/cs4800-project/website/frontend
+npm run dev
+npm run dev -- --host
+npm run build
+npm run lint
+```
+
+## Troubleshooting
+
+### Red error banner at the top of the app
+
+If you changed backend schema or pulled new code, fully restart the backend:
+
+```bash
+cd /Users/sarinakhara/Desktop/CS4800/cs4800-project/website/backend
+npm run dev
+```
+
+The backend applies SQLite migrations on startup.
+
+### Frontend opens but data does not load
+
+Make sure the backend is running on port `3001`.
+
+### Phone cannot reach the app
+
+- Make sure your phone and computer are on the same Wi-Fi.
+- Use the `Network` URL from `npm run dev -- --host`.
+- Keep both terminals running.
+
+### `zsh: command not found: npm`
+
+Install Node.js first.
+
+## Notes
+
+- The app uses a local SQLite database at `website/backend/splitstack.db`.
+- Frontend and backend must both be running for the app to work.
+- `npm audit fix` is optional cleanup and is not required to start the app.

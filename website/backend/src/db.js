@@ -189,6 +189,9 @@ function bootstrap() {
   ensureColumn('user_payout_profiles', 'cash_note', 'cash_note TEXT');
   ensureColumn('user_payout_profiles', 'preferred_method', "preferred_method TEXT NOT NULL DEFAULT 'cash'");
   ensureColumn('user_payout_profiles', 'updated_at', "updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
+  ensureColumn('settlements', 'status', "status TEXT NOT NULL DEFAULT 'completed'");
+  ensureColumn('settlements', 'completed_by', 'completed_by TEXT');
+  ensureColumn('settlements', 'completed_at', 'completed_at TEXT');
 
   const hasUsers = db.prepare('SELECT COUNT(*) as count FROM users').get().count;
   if (hasUsers > 0) return;
@@ -294,6 +297,19 @@ if (!existingCols.includes('reason')) {
 }
 if (!existingCols.includes('vote_id')) {
   db.exec('ALTER TABLE expenses ADD COLUMN vote_id TEXT');
+}
+
+const settlementCols = db.pragma('table_info(settlements)').map((c) => c.name);
+if (settlementCols.length && !settlementCols.includes('status')) {
+  db.exec("ALTER TABLE settlements ADD COLUMN status TEXT NOT NULL DEFAULT 'completed'");
+}
+if (settlementCols.length && !settlementCols.includes('completed_by')) {
+  db.exec('ALTER TABLE settlements ADD COLUMN completed_by TEXT');
+  db.exec('UPDATE settlements SET completed_by = payer_id WHERE completed_by IS NULL');
+}
+if (settlementCols.length && !settlementCols.includes('completed_at')) {
+  db.exec('ALTER TABLE settlements ADD COLUMN completed_at TEXT');
+  db.exec('UPDATE settlements SET completed_at = created_at WHERE completed_at IS NULL');
 }
 
 export default db;

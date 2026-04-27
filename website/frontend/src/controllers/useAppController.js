@@ -221,7 +221,6 @@ export function useAppController() {
       ...current,
       receiptRawText: rawText,
       merchant: parsed.merchant || current.merchant,
-      description: parsed.description && (!current.description || current.description === 'Scanned receipt') ? parsed.description : current.description,
       amount: parsed.amount ? String(parsed.amount) : current.amount,
       expenseDate: parsed.expenseDate || current.expenseDate
     }));
@@ -251,7 +250,6 @@ export function useAppController() {
       setExpenseForm((current) => ({
         ...current,
         merchant: parsed.merchant || current.merchant,
-        description: current.description || parsed.description,
         amount: parsed.amount ? String(parsed.amount) : current.amount,
         expenseDate: parsed.expenseDate || current.expenseDate,
         receiptRawText: parsed.rawText || current.receiptRawText
@@ -265,6 +263,22 @@ export function useAppController() {
         parsed: current.parsed
       }));
     }
+  }
+
+  function clearReceiptSelection() {
+    setReceiptImagePreview((current) => {
+      if (current) URL.revokeObjectURL(current);
+      return '';
+    });
+    setExpenseForm((current) => ({
+      ...current,
+      receiptUrl: '',
+      receiptRawText: '',
+      amount: '',
+      merchant: '',
+      expenseDate: ''
+    }));
+    setReceiptScannerState((current) => ({ ...current, reading: false, error: '', parsed: null }));
   }
 
   function beginSettlement(person) {
@@ -363,6 +377,7 @@ export function useAppController() {
       }
 
       resetGroupForm();
+      setShowGroupModal(false);
       await loadAll();
     } catch (nextError) {
       setError(nextError.message);
@@ -569,6 +584,7 @@ export function useAppController() {
     receiptScannerState,
     updateReceiptText,
     handleReceiptImageChange,
+    clearReceiptSelection,
     beginSettlement,
     submitSettlement,
     loadAll,

@@ -98,6 +98,7 @@ export function AppView({ controller }) {
     receiptScannerState,
     updateReceiptText,
     handleReceiptImageChange,
+    clearReceiptSelection,
     beginSettlement,
     submitSettlement,
     handleAuthSubmit,
@@ -282,6 +283,7 @@ export function AppView({ controller }) {
                 receiptScannerState={receiptScannerState}
                 updateReceiptText={updateReceiptText}
                 handleReceiptImageChange={handleReceiptImageChange}
+                clearReceiptSelection={clearReceiptSelection}
                 updatePercentSplit={updatePercentSplit}
                 updateCustomSplit={updateCustomSplit}
                 applyEvenPercentSplit={applyEvenPercentSplit}
@@ -781,6 +783,7 @@ function AddExpensePage({
   receiptScannerState,
   updateReceiptText,
   handleReceiptImageChange,
+  clearReceiptSelection,
   updatePercentSplit,
   updateCustomSplit,
   applyEvenPercentSplit,
@@ -825,12 +828,15 @@ function AddExpensePage({
           <div className="card-head">Receipt scanning</div>
           {receiptScannerState.isMobile ? (
             <div className="stack-form">
-              <label className="f-label">Capture receipt photo</label>
+              <label className="f-label">Upload from library</label>
+              <input className="f-inp" type="file" accept="image/*" onChange={(e) => handleReceiptImageChange(e.target.files?.[0])} />
+              <label className="f-label">Take a new photo</label>
               <input className="f-inp" type="file" accept="image/*" capture="environment" onChange={(e) => handleReceiptImageChange(e.target.files?.[0])} />
-              <div className="scanner-hint">Receipt capture is mobile-only. Attach a camera photo and SplitStack will try to read the merchant, date, and total automatically on-device.</div>
+              <div className="scanner-hint">Receipt scanning is mobile-only. SplitStack only auto-fills merchant, date, and total. You can type the description and choose the category yourself.</div>
               {receiptImagePreview ? (
                 <div className="receipt-preview">
                   <img src={receiptImagePreview} alt="Receipt preview" className="receipt-img" />
+                  <button className="btn btn-secondary btn-sm" type="button" onClick={clearReceiptSelection}>Remove receipt</button>
                 </div>
               ) : null}
               {receiptScannerState.reading ? <div className="scanner-hint">Reading the receipt now… this can take a few seconds on the first scan.</div> : null}
