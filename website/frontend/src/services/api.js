@@ -62,6 +62,12 @@ export const splitStackApi = {
   createExpense(payload, token) {
     return api('/api/expenses', { method: 'POST', body: JSON.stringify(payload) }, token);
   },
+  getSettlements(token) {
+    return api('/api/settlements', {}, token);
+  },
+  createSettlement(payload, token) {
+    return api('/api/settlements', { method: 'POST', body: JSON.stringify(payload) }, token);
+  },
   getVotes(token) {
     return api('/api/votes', {}, token);
   },

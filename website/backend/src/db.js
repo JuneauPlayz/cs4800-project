@@ -155,6 +155,28 @@ function bootstrap() {
       status TEXT NOT NULL DEFAULT 'pending',
       created_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS user_payout_profiles (
+      user_id TEXT PRIMARY KEY,
+      zelle_handle TEXT,
+      venmo_handle TEXT,
+      cash_note TEXT,
+      preferred_method TEXT NOT NULL DEFAULT 'cash',
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS settlements (
+      id TEXT PRIMARY KEY,
+      payer_id TEXT NOT NULL,
+      payee_id TEXT NOT NULL,
+      amount REAL NOT NULL,
+      method TEXT NOT NULL,
+      note TEXT,
+      status TEXT NOT NULL DEFAULT 'completed',
+      completed_by TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      completed_at TEXT NOT NULL
+    );
   `);
 
   ensureColumn('groups_table', 'owner_id', 'owner_id TEXT');
@@ -164,6 +186,9 @@ function bootstrap() {
   ensureColumn('users', 'avatar_emoji', 'avatar_emoji TEXT');
   ensureColumn('user_settings', 'profile_visibility', "profile_visibility TEXT NOT NULL DEFAULT 'group_members'");
   ensureColumn('user_settings', 'activity_visibility', "activity_visibility TEXT NOT NULL DEFAULT 'group_members'");
+  ensureColumn('user_payout_profiles', 'cash_note', 'cash_note TEXT');
+  ensureColumn('user_payout_profiles', 'preferred_method', "preferred_method TEXT NOT NULL DEFAULT 'cash'");
+  ensureColumn('user_payout_profiles', 'updated_at', "updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
 
   const hasUsers = db.prepare('SELECT COUNT(*) as count FROM users').get().count;
   if (hasUsers > 0) return;
@@ -183,6 +208,17 @@ function bootstrap() {
     VALUES (?, 1, 1, 1, 1, 'group_members', 'group_members')
   `);
   users.forEach((u) => insertSettings.run(u[0]));
+
+  const insertPayoutProfile = db.prepare(`
+    INSERT INTO user_payout_profiles (user_id, zelle_handle, venmo_handle, cash_note, preferred_method, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `);
+  [
+    ['u1', 'jordan@splitstack.app', '@jordan-lee', 'Cash works for in-person handoffs.', 'zelle', now],
+    ['u2', 'marcus@splitstack.app', '@marcus-chen', 'Cash or bank transfer is fine.', 'venmo', now],
+    ['u3', 'priya@splitstack.app', '@priya-s', 'Cash is okay for smaller amounts.', 'venmo', now],
+    ['u4', null, '@sam-rivera', 'Cash only after class.', 'cash', now]
+  ].forEach((profile) => insertPayoutProfile.run(...profile));
 
   const insertGroup = db.prepare(`
     INSERT INTO groups_table (id, name, type, emoji, threshold, created_at, owner_id, description)

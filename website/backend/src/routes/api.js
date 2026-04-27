@@ -3,6 +3,7 @@ import * as authController from '../controllers/authController.js';
 import * as challengeController from '../controllers/challengeController.js';
 import * as expenseController from '../controllers/expenseController.js';
 import * as groupController from '../controllers/groupController.js';
+import * as settlementController from '../controllers/settlementController.js';
 import * as voteController from '../controllers/voteController.js';
 import * as workspaceController from '../controllers/workspaceController.js';
 import { auth } from '../middleware/auth.js';
@@ -29,6 +30,9 @@ router.post('/invites/:id/respond', groupController.respondInvite);
 
 router.get('/expenses', expenseController.list);
 router.post('/expenses', expenseController.create);
+
+router.get('/settlements', settlementController.list);
+router.post('/settlements', settlementController.create);
 
 router.get('/votes', voteController.list);
 router.post('/votes/:id/respond', voteController.respond);

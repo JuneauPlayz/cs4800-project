@@ -1,18 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  buildEvenCustomMap,
-  buildEvenPercentMap,
   initialAuthForm,
   initialChallengeForm,
   initialChallengesState,
   initialChatMessages,
   initialExpenseForm,
   initialGroupForm,
+  initialSettlementDraft,
   navMeta,
-  parseInviteEntries
+  parseInviteEntries,
+  payoutMethodOptions
 } from '../models/appModel';
+import { extractReceiptDetails, scanReceiptImage } from '../receiptScanner';
 import { splitStackApi } from '../services/api';
 import { clearStoredSession, getStoredSession, setStoredSession } from '../services/sessionStorage';
+import { getSplitStrategy } from '../splitStrategies';
 
 export function useAppController() {
   const [session, setSession] = useState(getStoredSession());
@@ -41,6 +43,9 @@ export function useAppController() {
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [chatMessages, setChatMessages] = useState(initialChatMessages);
   const [balanceModal, setBalanceModal] = useState(null);
+  const [settlementDraft, setSettlementDraft] = useState(initialSettlementDraft);
+  const [receiptImagePreview, setReceiptImagePreview] = useState('');
+  const [receiptScannerState, setReceiptScannerState] = useState({ supported: false, isMobile: false, reading: false, error: '', parsed: null });
 
   const chatMessagesRef = useRef(null);
   const savingGroupRef = useRef(false);
@@ -67,6 +72,9 @@ export function useAppController() {
     setSelectedGroup(null);
     setBalanceModal(null);
     setShowGroupModal(false);
+    setSettlementDraft(initialSettlementDraft);
+    setReceiptImagePreview('');
+    setReceiptScannerState({ supported: false, isMobile: false, reading: false, error: '', parsed: null });
   }
 
   function logout() {
@@ -144,27 +152,32 @@ export function useAppController() {
     }
   }, [chatMessages]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const updateDeviceState = () => {
+      const isMobile = window.matchMedia('(max-width: 820px)').matches || /android|iphone|ipad|ipod/i.test(window.navigator.userAgent);
+      setReceiptScannerState((current) => ({ ...current, isMobile, supported: isMobile }));
+    };
+    updateDeviceState();
+    window.addEventListener('resize', updateDeviceState);
+    return () => window.removeEventListener('resize', updateDeviceState);
+  }, []);
+
   const currentGroup = useMemo(() => groups.find((group) => group.id === expenseForm.groupId) || groups[0], [groups, expenseForm.groupId]);
   const memberSharesBase = useMemo(() => currentGroup?.members || [], [currentGroup]);
   const amountNumber = Number(expenseForm.amount || 0);
+  const splitStrategy = useMemo(() => getSplitStrategy(expenseForm.splitMethod), [expenseForm.splitMethod]);
 
   useEffect(() => {
     if (!memberSharesBase.length) return;
     setSplitInputs((current) => ({
-      percent: { ...buildEvenPercentMap(memberSharesBase), ...current.percent },
-      custom: { ...buildEvenCustomMap(memberSharesBase, amountNumber), ...current.custom }
+      percent: { ...getSplitStrategy('percent').createInputs(memberSharesBase), ...current.percent },
+      custom: { ...getSplitStrategy('custom').createInputs(memberSharesBase, amountNumber), ...current.custom }
     }));
   }, [amountNumber, currentGroup?.id, memberSharesBase]);
 
-  const percentTotal = useMemo(
-    () => memberSharesBase.reduce((sum, member) => sum + Number(splitInputs.percent[member.id] || 0), 0),
-    [memberSharesBase, splitInputs.percent]
-  );
-
-  const customTotal = useMemo(
-    () => memberSharesBase.reduce((sum, member) => sum + Number(splitInputs.custom[member.id] || 0), 0),
-    [memberSharesBase, splitInputs.custom]
-  );
+  const percentTotal = useMemo(() => memberSharesBase.reduce((sum, member) => sum + Number(splitInputs.percent[member.id] || 0), 0), [memberSharesBase, splitInputs.percent]);
+  const customTotal = useMemo(() => memberSharesBase.reduce((sum, member) => sum + Number(splitInputs.custom[member.id] || 0), 0), [memberSharesBase, splitInputs.custom]);
 
   const inviteEntries = useMemo(() => parseInviteEntries(groupForm.inviteEmails), [groupForm.inviteEmails]);
   const inviteCountPreview = 1 + inviteEntries.length;
@@ -182,21 +195,9 @@ export function useAppController() {
 
   const memberShares = useMemo(() => {
     if (!memberSharesBase.length) return [];
-    if (expenseForm.splitMethod === 'percent') {
-      return memberSharesBase.map((member) => {
-        const percent = Number(splitInputs.percent[member.id] || 0);
-        return { ...member, percent, amount: Number(((amountNumber * percent) / 100).toFixed(2)) };
-      });
-    }
-    if (expenseForm.splitMethod === 'custom') {
-      return memberSharesBase.map((member) => ({ ...member, amount: Number(splitInputs.custom[member.id] || 0) }));
-    }
-    const equalShare = memberSharesBase.length ? Number((amountNumber / memberSharesBase.length).toFixed(2)) : 0;
-    return memberSharesBase.map((member, index) => ({
-      ...member,
-      amount: index === memberSharesBase.length - 1 ? Number((amountNumber - equalShare * (memberSharesBase.length - 1)).toFixed(2)) : equalShare
-    }));
-  }, [memberSharesBase, expenseForm.splitMethod, amountNumber, splitInputs]);
+    const inputs = expenseForm.splitMethod === 'percent' ? splitInputs.percent : splitInputs.custom;
+    return splitStrategy.calculateShares({ members: memberSharesBase, amount: amountNumber, inputs });
+  }, [memberSharesBase, expenseForm.splitMethod, amountNumber, splitInputs, splitStrategy]);
 
   function updatePercentSplit(userId, value) {
     setSplitInputs((current) => ({ ...current, percent: { ...current.percent, [userId]: value === '' ? '' : Number(value) } }));
@@ -207,11 +208,92 @@ export function useAppController() {
   }
 
   function applyEvenPercentSplit() {
-    setSplitInputs((current) => ({ ...current, percent: buildEvenPercentMap(memberSharesBase) }));
+    setSplitInputs((current) => ({ ...current, percent: getSplitStrategy('percent').createInputs(memberSharesBase) }));
   }
 
   function applyEvenCustomSplit() {
-    setSplitInputs((current) => ({ ...current, custom: buildEvenCustomMap(memberSharesBase, amountNumber) }));
+    setSplitInputs((current) => ({ ...current, custom: getSplitStrategy('custom').createInputs(memberSharesBase, amountNumber) }));
+  }
+
+  function updateReceiptText(rawText) {
+    const parsed = extractReceiptDetails(rawText);
+    setExpenseForm((current) => ({
+      ...current,
+      receiptRawText: rawText,
+      merchant: parsed.merchant || current.merchant,
+      description: parsed.description && (!current.description || current.description === 'Scanned receipt') ? parsed.description : current.description,
+      amount: parsed.amount ? String(parsed.amount) : current.amount,
+      expenseDate: parsed.expenseDate || current.expenseDate
+    }));
+    setReceiptScannerState((current) => ({ ...current, parsed, error: '' }));
+  }
+
+  async function handleReceiptImageChange(file) {
+    if (!file) return;
+    const previewUrl = URL.createObjectURL(file);
+    setReceiptImagePreview((current) => {
+      if (current) URL.revokeObjectURL(current);
+      return previewUrl;
+    });
+
+    const toBase64 = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ''));
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+
+    setExpenseForm((current) => ({ ...current, receiptUrl: String(toBase64) }));
+    setReceiptScannerState((current) => ({ ...current, reading: true, error: '', parsed: null }));
+
+    try {
+      const parsed = await scanReceiptImage(file);
+      setExpenseForm((current) => ({
+        ...current,
+        merchant: parsed.merchant || current.merchant,
+        description: current.description || parsed.description,
+        amount: parsed.amount ? String(parsed.amount) : current.amount,
+        expenseDate: parsed.expenseDate || current.expenseDate,
+        receiptRawText: parsed.rawText || current.receiptRawText
+      }));
+      setReceiptScannerState((current) => ({ ...current, reading: false, error: '', parsed }));
+    } catch {
+      setReceiptScannerState((current) => ({
+        ...current,
+        reading: false,
+        error: 'OCR could not finish on this image. You can still paste receipt text below to auto-fill the fields.',
+        parsed: current.parsed
+      }));
+    }
+  }
+
+  function beginSettlement(person) {
+    const availableMethod = payoutMethodOptions.find((method) => {
+      if (method === 'zelle') return Boolean(person?.payoutProfile?.zelleHandle);
+      if (method === 'venmo') return Boolean(person?.payoutProfile?.venmoHandle);
+      return true;
+    }) || 'cash';
+    setSettlementDraft({
+      payeeId: person.id,
+      amount: String(person.amount),
+      method: availableMethod,
+      note: ''
+    });
+  }
+
+  async function submitSettlement(person) {
+    try {
+      await splitStackApi.createSettlement({
+        payeeId: settlementDraft.payeeId || person.id,
+        amount: Number(settlementDraft.amount || person.amount),
+        method: settlementDraft.method,
+        note: settlementDraft.note
+      }, token);
+      setSettlementDraft(initialSettlementDraft);
+      await loadAll();
+    } catch (nextError) {
+      setError(nextError.message);
+    }
   }
 
   function addInviteEmail() {
@@ -354,12 +436,10 @@ export function useAppController() {
   async function submitExpense(event) {
     event.preventDefault();
     if (!currentGroup) return;
-    if (expenseForm.splitMethod === 'percent' && Math.abs(percentTotal - 100) > 0.01) {
-      setError('Percent split must add up to 100%.');
-      return;
-    }
-    if (expenseForm.splitMethod === 'custom' && Math.abs(customTotal - amountNumber) > 0.01) {
-      setError('Custom split amounts must match the expense total.');
+    const inputs = expenseForm.splitMethod === 'percent' ? splitInputs.percent : splitInputs.custom;
+    const splitError = splitStrategy.validate({ members: memberSharesBase, amount: amountNumber, inputs });
+    if (splitError) {
+      setError(splitError);
       return;
     }
     const splits = memberShares.map((member) => expenseForm.splitMethod === 'percent'
@@ -367,8 +447,10 @@ export function useAppController() {
       : { userId: member.id, amount: Number(member.amount || 0) });
     try {
       await splitStackApi.createExpense({ ...expenseForm, amount: amountNumber, splits }, token);
-      setExpenseForm((current) => ({ ...current, description: '', amount: '', reason: '' }));
-      setSplitInputs((current) => ({ ...current, custom: buildEvenCustomMap(memberSharesBase, 0) }));
+      setExpenseForm((current) => ({ ...current, ...initialExpenseForm, groupId: current.groupId }));
+      setSplitInputs((current) => ({ ...current, custom: getSplitStrategy('custom').createInputs(memberSharesBase, 0) }));
+      setReceiptImagePreview('');
+      setReceiptScannerState((current) => ({ ...current, error: '', parsed: null }));
       await loadAll();
       setPage('home');
     } catch (nextError) {
@@ -454,6 +536,8 @@ export function useAppController() {
     expenseForm,
     setExpenseForm,
     splitInputs,
+    settlementDraft,
+    setSettlementDraft,
     groupForm,
     setGroupForm,
     showGroupModal,
@@ -481,6 +565,12 @@ export function useAppController() {
     groupMonthlyTotals,
     balanceModal,
     setBalanceModal,
+    receiptImagePreview,
+    receiptScannerState,
+    updateReceiptText,
+    handleReceiptImageChange,
+    beginSettlement,
+    submitSettlement,
     loadAll,
     handleAuthSubmit,
     logout,

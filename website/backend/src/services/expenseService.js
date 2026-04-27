@@ -1,4 +1,6 @@
 import db from '../db.js';
+import { getSplitStrategy } from '../splitStrategies.js';
+import { getCompletedSettlementAdjustments, getPayoutProfile } from './settlementService.js';
 import { createNotification, getGroups, getMembersByGroup, getUserById, moneyLike } from './sharedService.js';
 
 export function getExpenses(userId) {
@@ -65,7 +67,7 @@ export function calculateBalances(userId) {
     ? db.prepare(`SELECT id, name, initials, avatar_color as avatarColor, avatar_emoji as avatarEmoji FROM users WHERE id IN (${relatedUserIds.map(() => '?').join(',')})`).all(...relatedUserIds)
     : [];
 
-  const summary = Object.fromEntries(userRows.map((user) => [user.id, { ...user, paid: 0, owed: 0, net: 0 }]));
+  const summary = Object.fromEntries(userRows.map((user) => [user.id, { ...user, payoutProfile: getPayoutProfile(user.id), paid: 0, owed: 0, net: 0 }]));
   expenses.forEach((expense) => {
     if (summary[expense.paidBy]) summary[expense.paidBy].paid += expense.amount;
   });
@@ -83,6 +85,7 @@ export function calculateBalances(userId) {
   const groupNames = Object.fromEntries(groups.map((group) => [group.id, group.name]));
   const owedToYouMap = {};
   const youOweMap = {};
+  const settlementAdjustments = getCompletedSettlementAdjustments(userId);
 
   expenses.forEach((expense) => {
     const expenseSplits = splits.filter((split) => split.expenseId === expense.id);
@@ -109,16 +112,24 @@ export function calculateBalances(userId) {
 
   const owedToYou = Object.values(owedToYouMap).map((person) => ({ ...person, amount: Number(person.amount.toFixed(2)) })).sort((first, second) => second.amount - first.amount);
   const youOwe = Object.values(youOweMap).map((person) => ({ ...person, amount: Number(person.amount.toFixed(2)) })).sort((first, second) => second.amount - first.amount);
+  const adjustedOwedToYou = owedToYou
+    .map((person) => ({ ...person, amount: Number(Math.max(person.amount - (settlementAdjustments.owedToYou[person.id] || 0), 0).toFixed(2)) }))
+    .filter((person) => person.amount > 0);
+  const adjustedYouOwe = youOwe
+    .map((person) => ({ ...person, amount: Number(Math.max(person.amount - (settlementAdjustments.youOwe[person.id] || 0), 0).toFixed(2)) }))
+    .filter((person) => person.amount > 0);
+  const totalOwedToYou = Number(adjustedOwedToYou.reduce((sum, person) => sum + person.amount, 0).toFixed(2));
+  const totalYouOwe = Number(adjustedYouOwe.reduce((sum, person) => sum + person.amount, 0).toFixed(2));
 
   return {
     byMember: summary,
     currentUser,
-    net: currentUser.net,
-    totalOwedToYou: Number(owedToYou.reduce((sum, person) => sum + person.amount, 0).toFixed(2)),
-    totalYouOwe: Number(youOwe.reduce((sum, person) => sum + person.amount, 0).toFixed(2)),
-    owedToYou,
-    youOwe,
-    settleCount: people.filter((person) => person.net !== 0).length,
+    net: Number((totalOwedToYou - totalYouOwe).toFixed(2)),
+    totalOwedToYou,
+    totalYouOwe,
+    owedToYou: adjustedOwedToYou,
+    youOwe: adjustedYouOwe,
+    settleCount: adjustedOwedToYou.length + adjustedYouOwe.length,
     people
   };
 }
@@ -128,9 +139,11 @@ export function createExpense(payload) {
   const createdAt = new Date().toISOString();
   const expenseDate = payload.expenseDate ?? createdAt.slice(0, 10);
   const groupMembers = getMembersByGroup(payload.groupId);
-  const memberIds = groupMembers.map((member) => member.id);
   const group = db.prepare('SELECT threshold, name FROM groups_table WHERE id = ?').get(payload.groupId);
   const needsVote = group && group.threshold > 0 && payload.amount > group.threshold;
+  const splitStrategy = getSplitStrategy(payload.splitMethod);
+  splitStrategy.validate({ amount: payload.amount, members: groupMembers, splits: payload.splits });
+  const normalizedSplits = splitStrategy.calculate({ amount: payload.amount, members: groupMembers, splits: payload.splits });
 
   let voteId = null;
   if (needsVote) {
@@ -157,24 +170,7 @@ export function createExpense(payload) {
   );
 
   const splitStmt = db.prepare('INSERT INTO expense_splits (expense_id, user_id, amount) VALUES (?, ?, ?)');
-  if (payload.splitMethod === 'custom' && Array.isArray(payload.splits)) {
-    payload.splits.forEach((split) => splitStmt.run(id, split.userId, Number(split.amount || 0)));
-  } else if (payload.splitMethod === 'percent' && Array.isArray(payload.splits)) {
-    payload.splits.forEach((split, index) => {
-      const raw = Number(((payload.amount * Number(split.percent || 0)) / 100).toFixed(2));
-      const assignedSoFar = payload.splits
-        .slice(0, index)
-        .reduce((sum, part) => sum + Number(((payload.amount * Number(part.percent || 0)) / 100).toFixed(2)), 0);
-      const value = index === payload.splits.length - 1 ? Number((payload.amount - assignedSoFar).toFixed(2)) : raw;
-      splitStmt.run(id, split.userId, value);
-    });
-  } else {
-    const share = Number((payload.amount / memberIds.length).toFixed(2));
-    memberIds.forEach((memberId, index) => {
-      const value = index === memberIds.length - 1 ? Number((payload.amount - share * (memberIds.length - 1)).toFixed(2)) : share;
-      splitStmt.run(id, memberId, value);
-    });
-  }
+  normalizedSplits.forEach((split) => splitStmt.run(id, split.userId, split.amount));
 
   let triggeredVote = null;
   if (needsVote) {

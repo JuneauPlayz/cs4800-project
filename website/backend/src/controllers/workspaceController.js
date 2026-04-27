@@ -4,8 +4,10 @@ import {
   getDashboard,
   getNotifications,
   getPendingInvitesForUser,
+  getPayoutProfile,
   getSettings,
   markNotificationRead,
+  upsertPayoutProfile,
   upsertSettings
 } from '../services/index.js';
 
@@ -35,11 +37,12 @@ export function markNotification(req, res) {
 }
 
 export function settings(req, res) {
-  res.json({ settings: getSettings(req.user.id) });
+  res.json({ settings: { ...getSettings(req.user.id), payoutProfile: getPayoutProfile(req.user.id) } });
 }
 
 export function updateSettings(req, res) {
   const current = getSettings(req.user.id);
+  const currentPayoutProfile = getPayoutProfile(req.user.id);
   const nextSettings = upsertSettings({
     userId: req.user.id,
     emailVotes: req.body?.emailVotes ?? current.emailVotes,
@@ -49,7 +52,14 @@ export function updateSettings(req, res) {
     profileVisibility: req.body?.profileVisibility ?? current.profileVisibility,
     activityVisibility: req.body?.activityVisibility ?? current.activityVisibility
   });
-  res.json({ settings: nextSettings });
+  const payoutProfile = upsertPayoutProfile({
+    userId: req.user.id,
+    zelleHandle: req.body?.payoutProfile?.zelleHandle ?? currentPayoutProfile.zelleHandle,
+    venmoHandle: req.body?.payoutProfile?.venmoHandle ?? currentPayoutProfile.venmoHandle,
+    cashNote: req.body?.payoutProfile?.cashNote ?? currentPayoutProfile.cashNote,
+    preferredMethod: req.body?.payoutProfile?.preferredMethod ?? currentPayoutProfile.preferredMethod
+  });
+  res.json({ settings: { ...nextSettings, payoutProfile } });
 }
 
 export function chat(req, res) {

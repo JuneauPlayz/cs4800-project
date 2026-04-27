@@ -12,6 +12,13 @@ export function create(req, res) {
   if (!requireMembership(groupId, req.user.id)) {
     return res.status(403).json({ message: 'You are not a member of this group.' });
   }
-  const result = createExpense({ ...req.body, amount: Number(amount), splitMethod, paidBy: req.user.id });
-  return res.status(201).json(result);
+  try {
+    const result = createExpense({ ...req.body, amount: Number(amount), splitMethod, paidBy: req.user.id });
+    return res.status(201).json(result);
+  } catch (error) {
+    if (error?.statusCode) {
+      return res.status(error.statusCode).json({ message: error.message });
+    }
+    throw error;
+  }
 }

@@ -2,6 +2,7 @@ export { loginUser, registerUser } from './authService.js';
 export { getDashboard } from './dashboardService.js';
 export { listGroups, listPendingInvites, createGroup, updateGroup, leaveGroup, deleteGroup, respondToInvite } from './groupService.js';
 export { getExpenses, createExpense, calculateBalances } from './expenseService.js';
+export { getSettlementHistory, createSettlement, getPayoutProfile, upsertPayoutProfile } from './settlementService.js';
 export { getVotes, respondToVote } from './voteService.js';
 export { getAnalytics } from './analyticsService.js';
 export { getChallenges, createChallenge, contributeToChallenge } from './challengeService.js';

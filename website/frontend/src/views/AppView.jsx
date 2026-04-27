@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { DICEBEAR_SEEDS, categoryOptions, getDiceBearUrl, initials, money, navMeta, workspacePages } from '../models/appModel';
+import { DICEBEAR_SEEDS, categoryOptions, getDiceBearUrl, money, navMeta, payoutMethodOptions, workspacePages } from '../models/appModel';
 
 function StackLogo({ size = 18 }) {
   return (
@@ -37,6 +37,10 @@ function UserAvatar({ user, className = 'ava-sm' }) {
     );
   }
   return <div className={className} style={{ background: user?.avatarColor }}>{user?.initials}</div>;
+}
+
+function formatPayoutMethod(method) {
+  return method === 'cash' ? 'Cash / other' : method.charAt(0).toUpperCase() + method.slice(1);
 }
 
 export function AppView({ controller }) {
@@ -88,6 +92,14 @@ export function AppView({ controller }) {
     groupMonthlyTotals,
     balanceModal,
     setBalanceModal,
+    settlementDraft,
+    setSettlementDraft,
+    receiptImagePreview,
+    receiptScannerState,
+    updateReceiptText,
+    handleReceiptImageChange,
+    beginSettlement,
+    submitSettlement,
     handleAuthSubmit,
     logout,
     saveGroup,
@@ -211,6 +223,10 @@ export function AppView({ controller }) {
                 groupMonthlyTotals={groupMonthlyTotals}
                 balanceModal={balanceModal}
                 setBalanceModal={setBalanceModal}
+                settlementDraft={settlementDraft}
+                setSettlementDraft={setSettlementDraft}
+                beginSettlement={beginSettlement}
+                submitSettlement={submitSettlement}
                 setPage={setPage}
                 setSelectedGroup={setSelectedGroup}
               />
@@ -262,6 +278,10 @@ export function AppView({ controller }) {
                 splitInputs={splitInputs}
                 percentTotal={percentTotal}
                 customTotal={customTotal}
+                receiptImagePreview={receiptImagePreview}
+                receiptScannerState={receiptScannerState}
+                updateReceiptText={updateReceiptText}
+                handleReceiptImageChange={handleReceiptImageChange}
                 updatePercentSplit={updatePercentSplit}
                 updateCustomSplit={updateCustomSplit}
                 applyEvenPercentSplit={applyEvenPercentSplit}
@@ -313,7 +333,20 @@ export function AppView({ controller }) {
   );
 }
 
-function HomePage({ dashboard, groups, expenses, groupMonthlyTotals, balanceModal, setBalanceModal, setPage, setSelectedGroup }) {
+function HomePage({
+  dashboard,
+  groups,
+  expenses,
+  groupMonthlyTotals,
+  balanceModal,
+  setBalanceModal,
+  settlementDraft,
+  setSettlementDraft,
+  beginSettlement,
+  submitSettlement,
+  setPage,
+  setSelectedGroup
+}) {
   return (
     <div className="page show" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
       <div className="balance-card">
@@ -361,13 +394,58 @@ function HomePage({ dashboard, groups, expenses, groupMonthlyTotals, balanceModa
               {(balanceModal === 'owedToYou' ? dashboard.balances.owedToYou : dashboard.balances.youOwe).length === 0
                 ? <div className="settlements-empty" style={{ padding: '24px 20px', textAlign: 'center' }}>{balanceModal === 'owedToYou' ? 'No one owes you right now.' : "You're all settled up!"}</div>
                 : (balanceModal === 'owedToYou' ? dashboard.balances.owedToYou : dashboard.balances.youOwe).map((person) => (
-                  <div className="settlement-row" key={person.id} style={{ padding: '14px 20px' }}>
-                    <UserAvatar user={person} />
-                    <div className="modal-person-info">
-                      <div className="p-name">{person.name}</div>
-                      <div className="modal-group-tags">{person.groups.map((group) => <span className="tag tag-muted" key={group.id}>{group.name}</span>)}</div>
+                  <div className="settlement-row settlement-row-stack" key={person.id} style={{ padding: '14px 20px' }}>
+                    <div className="settlement-row-main">
+                      <UserAvatar user={person} />
+                      <div className="modal-person-info">
+                        <div className="p-name">{person.name}</div>
+                        <div className="modal-group-tags">{person.groups.map((group) => <span className="tag tag-muted" key={group.id}>{group.name}</span>)}</div>
+                        <div className="modal-group-tags payout-tags">
+                          {person.payoutProfile?.zelleHandle ? <span className="tag tag-muted">Zelle: {person.payoutProfile.zelleHandle}</span> : null}
+                          {person.payoutProfile?.venmoHandle ? <span className="tag tag-muted">Venmo: {person.payoutProfile.venmoHandle}</span> : null}
+                          <span className="tag tag-muted">{person.payoutProfile?.cashNote || 'Cash / offline okay'}</span>
+                        </div>
+                      </div>
+                      <div className={`p-amount ${balanceModal === 'owedToYou' ? 'teal' : 'red'}`}>{money(person.amount)}</div>
                     </div>
-                    <div className={`p-amount ${balanceModal === 'owedToYou' ? 'teal' : 'red'}`}>{money(person.amount)}</div>
+                    {balanceModal === 'youOwe' ? (
+                      <div className="settlement-actions">
+                        <div className="settlement-methods">
+                          {payoutMethodOptions.map((method) => {
+                            const disabled = (method === 'zelle' && !person.payoutProfile?.zelleHandle) || (method === 'venmo' && !person.payoutProfile?.venmoHandle);
+                            return (
+                              <button
+                                key={method}
+                                type="button"
+                                className={`split-tab ${settlementDraft.payeeId === person.id && settlementDraft.method === method ? 'on' : ''}`}
+                                disabled={disabled}
+                                onClick={() => {
+                                  beginSettlement(person);
+                                  setSettlementDraft((current) => ({ ...current, payeeId: person.id, amount: String(person.amount), method }));
+                                }}
+                              >
+                                {formatPayoutMethod(method)}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <div className="settlement-inline">
+                          <input
+                            className="f-inp"
+                            value={settlementDraft.payeeId === person.id ? settlementDraft.note : ''}
+                            placeholder="Optional note"
+                            onFocus={() => beginSettlement(person)}
+                            onChange={(event) => setSettlementDraft((current) => ({
+                              ...current,
+                              payeeId: person.id,
+                              amount: String(person.amount),
+                              note: event.target.value
+                            }))}
+                          />
+                          <button className="btn btn-primary btn-sm" type="button" onClick={() => submitSettlement(person)}>Mark paid</button>
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 ))}
             </div>
@@ -699,6 +777,10 @@ function AddExpensePage({
   splitInputs,
   percentTotal,
   customTotal,
+  receiptImagePreview,
+  receiptScannerState,
+  updateReceiptText,
+  handleReceiptImageChange,
   updatePercentSplit,
   updateCustomSplit,
   applyEvenPercentSplit,
@@ -719,6 +801,10 @@ function AddExpensePage({
             <input className="f-inp" value={expenseForm.description} onChange={(e) => setExpenseForm({ ...expenseForm, description: e.target.value })} />
             <label className="f-label">Amount</label>
             <div className="amt-wrap"><span className="amt-sym">$</span><input className="amt-inp" value={expenseForm.amount} onChange={(e) => setExpenseForm({ ...expenseForm, amount: e.target.value })} /></div>
+            <label className="f-label">Merchant</label>
+            <input className="f-inp" value={expenseForm.merchant} onChange={(e) => setExpenseForm({ ...expenseForm, merchant: e.target.value })} placeholder="Whole Foods, Target, landlord, etc." />
+            <label className="f-label">Expense date</label>
+            <input className="f-inp" type="date" value={expenseForm.expenseDate} onChange={(e) => setExpenseForm({ ...expenseForm, expenseDate: e.target.value })} />
             <label className="f-label">Category</label>
             <div className="cat-grid">{categoryOptions.map((option) => <button className={`cat-btn ${expenseForm.category === option ? 'on' : ''}`} type="button" key={option} onClick={() => setExpenseForm({ ...expenseForm, category: option })}>{option}</button>)}</div>
             <label className="f-label">Split method</label>
@@ -737,7 +823,31 @@ function AddExpensePage({
         </div>
         <div className="card">
           <div className="card-head">Receipt scanning</div>
-          <div className="scan-box"><div className="scan-icon-wrap"><StackLogo size={20} /></div><div className="scan-box-title">Coming with the mobile app</div><div className="scan-box-sub">Receipt scanning is intentionally deferred for the mobile build. The rest of the web app saves real data now.</div></div>
+          {receiptScannerState.isMobile ? (
+            <div className="stack-form">
+              <label className="f-label">Capture receipt photo</label>
+              <input className="f-inp" type="file" accept="image/*" capture="environment" onChange={(e) => handleReceiptImageChange(e.target.files?.[0])} />
+              <div className="scanner-hint">Receipt capture is mobile-only. Attach a camera photo and SplitStack will try to read the merchant, date, and total automatically on-device.</div>
+              {receiptImagePreview ? (
+                <div className="receipt-preview">
+                  <img src={receiptImagePreview} alt="Receipt preview" className="receipt-img" />
+                </div>
+              ) : null}
+              {receiptScannerState.reading ? <div className="scanner-hint">Reading the receipt now… this can take a few seconds on the first scan.</div> : null}
+              <label className="f-label">Paste receipt text for auto-fill</label>
+              <textarea className="f-inp" rows="7" value={expenseForm.receiptRawText} onChange={(e) => updateReceiptText(e.target.value)} placeholder="Paste detected receipt text here to fill merchant, date, and total." />
+              {receiptScannerState.parsed ? (
+                <div className="ocr-preview">
+                  <div className="ocr-row"><span className="ocr-key">Merchant</span><span className="ocr-val">{receiptScannerState.parsed.merchant || 'Not detected yet'}</span></div>
+                  <div className="ocr-row"><span className="ocr-key">Date</span><span className="ocr-val">{receiptScannerState.parsed.expenseDate || 'Not detected yet'}</span></div>
+                  <div className="ocr-row"><span className="ocr-key">Total</span><span className="ocr-val">{receiptScannerState.parsed.amount ? money(receiptScannerState.parsed.amount) : 'Not detected yet'}</span></div>
+                </div>
+              ) : null}
+              {receiptScannerState.error ? <div className="scanner-hint">{receiptScannerState.error}</div> : null}
+            </div>
+          ) : (
+            <div className="scan-box"><div className="scan-icon-wrap"><StackLogo size={20} /></div><div className="scan-box-title">Mobile only</div><div className="scan-box-sub">Receipt capture is available on mobile devices only. On web, expenses can still be created manually with all fields.</div></div>
+          )}
         </div>
       </div>
     </div>
@@ -847,6 +957,17 @@ function SettingsPage({ settings, session, notifications, saveSettings }) {
           <select className="f-inp" value={settings.profileVisibility} onChange={(e) => saveSettings({ ...settings, profileVisibility: e.target.value })}><option value="group_members">Visible to group members</option><option value="private">Private</option></select>
           <label className="f-label mt-4">Activity visibility</label>
           <select className="f-inp" value={settings.activityVisibility} onChange={(e) => saveSettings({ ...settings, activityVisibility: e.target.value })}><option value="group_members">Visible to group members</option><option value="private">Private</option></select>
+          <div className="card-sub mt-4">Payout profile</div>
+          <label className="f-label">Zelle handle</label>
+          <input className="f-inp" value={settings.payoutProfile?.zelleHandle || ''} onChange={(e) => saveSettings({ ...settings, payoutProfile: { ...settings.payoutProfile, zelleHandle: e.target.value } })} placeholder="email or phone number" />
+          <label className="f-label mt-4">Venmo handle</label>
+          <input className="f-inp" value={settings.payoutProfile?.venmoHandle || ''} onChange={(e) => saveSettings({ ...settings, payoutProfile: { ...settings.payoutProfile, venmoHandle: e.target.value } })} placeholder="@username" />
+          <label className="f-label mt-4">Cash / offline note</label>
+          <textarea className="f-inp" rows="3" value={settings.payoutProfile?.cashNote || ''} onChange={(e) => saveSettings({ ...settings, payoutProfile: { ...settings.payoutProfile, cashNote: e.target.value } })} placeholder="Example: Cash after class or bank transfer by request." />
+          <label className="f-label mt-4">Default payout method</label>
+          <select className="f-inp" value={settings.payoutProfile?.preferredMethod || 'cash'} onChange={(e) => saveSettings({ ...settings, payoutProfile: { ...settings.payoutProfile, preferredMethod: e.target.value } })}>
+            {payoutMethodOptions.map((method) => <option key={method} value={method}>{formatPayoutMethod(method)}</option>)}
+          </select>
         </div>
       </div>
     </div>

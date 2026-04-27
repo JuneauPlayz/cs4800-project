@@ -225,6 +225,7 @@ svg { display: block; }
 .receipt-link { font-size: 12px; color: var(--teal); text-decoration: underline; margin-top: 4px; display: inline-block; }
 .split-tab { flex: 1; padding: 8px; border: none; border-radius: 7px; background: transparent; color: var(--muted); font-weight: 700; text-transform: capitalize; }
 .split-tab.on { background: var(--white); color: var(--teal); box-shadow: var(--sh1); }
+.split-tab:disabled { opacity: 0.45; cursor: not-allowed; }
 .split-box { background: var(--bg); border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; }
 .split-summary { display: flex; justify-content: space-between; align-items: center; font-size: 13px; font-weight: 700; color: var(--slate2); }
 .split-note { margin-top: 4px; margin-bottom: 8px; font-size: 12px; color: var(--muted); line-height: 1.5; }
@@ -381,6 +382,13 @@ svg { display: block; }
 .settlements-empty { font-size: 13px; color: var(--muted); }
 .settlement-row { display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--border2); }
 .settlement-row:last-child { border-bottom: none; }
+.settlement-row-stack { flex-direction: column; align-items: stretch; }
+.settlement-row-main { display: flex; align-items: center; gap: 12px; width: 100%; }
+.payout-tags { margin-top: 8px; }
+.settlement-actions { display: flex; flex-direction: column; gap: 10px; width: 100%; padding-left: 50px; }
+.settlement-methods { display: flex; gap: 6px; flex-wrap: wrap; }
+.settlement-inline { display: flex; gap: 8px; align-items: center; }
+.settlement-inline .f-inp { margin: 0; }
 .modal-overlay { position: fixed; inset: 0; background: rgba(15,23,42,.45); z-index: 100; display: flex; align-items: center; justify-content: center; padding: 20px; }
 .modal-box { background: var(--white); border-radius: 18px; width: 100%; max-width: 420px; box-shadow: var(--sh2); overflow: hidden; }
 .modal-head { display: flex; justify-content: space-between; align-items: center; padding: 18px 20px; border-bottom: 1px solid var(--border); font-weight: 800; font-size: 15px; }

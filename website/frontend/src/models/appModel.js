@@ -1,6 +1,7 @@
 export const SESSION_STORAGE_KEY = 'splitstack-session';
 
 export const categoryOptions = ['Groceries', 'Dining', 'Utilities', 'Rent', 'Travel', 'Furniture', 'Streaming', 'Electronics', 'Household', 'Other'];
+export const payoutMethodOptions = ['zelle', 'venmo', 'cash'];
 
 export const workspacePages = ['home', 'analytics', 'groups', 'add', 'vote', 'chat', 'progress', 'settings'];
 
@@ -27,11 +28,23 @@ export function getDiceBearUrl(seed) {
 }
 
 export const initialAuthForm = { name: '', email: 'jordan@splitstack.app', password: 'demo123', avatarEmoji: '' };
-export const initialExpenseForm = { groupId: '', description: '', amount: '', category: 'Groceries', splitMethod: 'equal', reason: '' };
+export const initialExpenseForm = {
+  groupId: '',
+  description: '',
+  amount: '',
+  category: 'Groceries',
+  splitMethod: 'equal',
+  reason: '',
+  merchant: '',
+  expenseDate: '',
+  receiptUrl: '',
+  receiptRawText: ''
+};
 export const initialGroupForm = { id: null, name: '', type: 'roommates', threshold: '', inviteEmail: '', inviteEmails: [], description: '' };
 export const initialChallengeForm = { groupId: '', name: '', description: '', goal: '', endDate: '' };
 export const initialChallengesState = { challenges: [], rings: [] };
 export const initialChatMessages = [{ role: 'ai', text: 'Hi! I’m the SplitStack assistant. Ask me about balances, spending, voting, or challenges.' }];
+export const initialSettlementDraft = { payeeId: '', amount: '', method: 'cash', note: '' };
 
 export function money(value) {
   return `$${Number(value || 0).toFixed(2)}`;
