@@ -44,11 +44,11 @@ export function upsertPayoutProfile({
     INSERT INTO user_payout_profiles (user_id, zelle_handle, venmo_handle, cash_note, preferred_method, updated_at)
     VALUES (@userId, @zelleHandle, @venmoHandle, @cashNote, @preferredMethod, @updatedAt)
     ON CONFLICT(user_id) DO UPDATE SET
-      zelle_handle = excluded.zelleHandle,
-      venmo_handle = excluded.venmoHandle,
-      cash_note = excluded.cashNote,
-      preferred_method = excluded.preferredMethod,
-      updated_at = excluded.updatedAt
+      zelle_handle = excluded.zelle_handle,
+      venmo_handle = excluded.venmo_handle,
+      cash_note = excluded.cash_note,
+      preferred_method = excluded.preferred_method,
+      updated_at = excluded.updated_at
   `).run(payload);
 
   return getPayoutProfile(userId);

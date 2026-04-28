@@ -18,7 +18,7 @@ import { getSplitStrategy } from '../splitStrategies';
 
 export function useAppController() {
   const [session, setSession] = useState(getStoredSession());
-  const [page, setPage] = useState('home');
+  const [page, setPageState] = useState('home');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [authMode, setAuthMode] = useState('login');
@@ -50,6 +50,11 @@ export function useAppController() {
   const chatMessagesRef = useRef(null);
   const savingGroupRef = useRef(false);
   const token = session?.token || null;
+
+  function setPage(nextPage) {
+    setError('');
+    setPageState(nextPage);
+  }
 
   function resetGroupForm() {
     setGroupForm(initialGroupForm);
