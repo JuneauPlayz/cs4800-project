@@ -92,6 +92,12 @@ export const splitStackApi = {
   sendChat(message, token) {
     return api('/api/ai/chat', { method: 'POST', body: JSON.stringify({ message }) }, token);
   },
+  getBudgetGoal(token) {
+    return api('/api/budget', {}, token);
+  },
+  saveBudgetGoal(payload, token) {
+    return api('/api/budget', { method: 'POST', body: JSON.stringify(payload) }, token);
+  },
   loadWorkspace(token) {
     return Promise.all([
       this.getMe(token),
@@ -103,7 +109,8 @@ export const splitStackApi = {
       this.getChallenges(token),
       this.getSettings(token),
       this.getNotifications(token),
-      this.getInvites(token)
+      this.getInvites(token),
+      this.getBudgetGoal(token)
     ]);
   },
   pollWorkspace(token) {

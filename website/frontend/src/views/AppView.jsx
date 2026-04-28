@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { DICEBEAR_SEEDS, categoryOptions, getDiceBearUrl, initials, money, navMeta, workspacePages } from '../models/appModel';
 
 function StackLogo({ size = 18 }) {
@@ -88,6 +88,8 @@ export function AppView({ controller }) {
     groupMonthlyTotals,
     balanceModal,
     setBalanceModal,
+    budgetGoal,
+    saveBudget,
     handleAuthSubmit,
     logout,
     saveGroup,
@@ -213,6 +215,10 @@ export function AppView({ controller }) {
                 setBalanceModal={setBalanceModal}
                 setPage={setPage}
                 setSelectedGroup={setSelectedGroup}
+                analytics={analytics}
+                userId={session.user.id}
+                budgetGoal={budgetGoal}
+                saveBudget={saveBudget}
               />
             )}
 
@@ -313,7 +319,127 @@ export function AppView({ controller }) {
   );
 }
 
-function HomePage({ dashboard, groups, expenses, groupMonthlyTotals, balanceModal, setBalanceModal, setPage, setSelectedGroup }) {
+function BudgetGoalCard({ budgetGoal, onSave, analytics, expenses, userId }) {
+  const [editing, setEditing] = useState(false);
+  const [formTotal, setFormTotal] = useState('');
+  const [formBreakdown, setFormBreakdown] = useState({});
+  const [showBreakdown, setShowBreakdown] = useState(false);
+
+  useEffect(() => {
+    if (budgetGoal) {
+      setFormTotal(String(budgetGoal.total || ''));
+      setFormBreakdown(budgetGoal.breakdown || {});
+    }
+  }, [budgetGoal]);
+
+  const currentMonth = new Date().toISOString().slice(0, 7);
+  const monthTotal = analytics?.monthlyTrend?.find((t) => t.month === currentMonth)?.total ?? 0;
+
+  const spentByCategory = expenses
+    .filter((e) => (e.expenseDate || e.createdAt || '').startsWith(currentMonth))
+    .reduce((acc, e) => {
+      const share = e.splits?.find((s) => s.userId === userId)?.amount ?? 0;
+      if (share > 0) acc[e.category] = (acc[e.category] || 0) + share;
+      return acc;
+    }, {});
+
+  const budgetTotal = budgetGoal?.total || 0;
+  const progressPct = budgetTotal ? Math.min(100, (monthTotal / budgetTotal) * 100) : 0;
+  const isOver = monthTotal > budgetTotal && budgetTotal > 0;
+  const isNew = !budgetGoal || !budgetGoal.total;
+
+  function handleSave() {
+    const cleanBreakdown = Object.fromEntries(
+      Object.entries(formBreakdown)
+        .filter(([, v]) => Number(v) > 0)
+        .map(([k, v]) => [k, Number(v)])
+    );
+    onSave(Number(formTotal || 0), cleanBreakdown);
+    setEditing(false);
+    setShowBreakdown(false);
+  }
+
+  if (!isNew && !editing) {
+    return (
+      <div className="card settlements-card">
+        <div className="settlements-label" style={{ color: 'var(--amber)' }}>Monthly Budget</div>
+        <div className="settlements-total" style={{ color: 'var(--slate)' }}>{money(budgetTotal)}</div>
+        <div className="settlements-count">{money(monthTotal)} spent · {progressPct.toFixed(0)}%</div>
+        <div className="budget-progress">
+          <div className="budget-progress-fill" style={{ width: `${progressPct}%`, background: isOver ? 'var(--red)' : 'var(--teal)' }} />
+        </div>
+        {Object.keys(budgetGoal.breakdown || {}).length > 0 && (
+          <div style={{ marginTop: 10 }}>
+            {Object.entries(budgetGoal.breakdown).map(([cat, limit]) => {
+              const spent = spentByCategory[cat] || 0;
+              const catPct = Math.min(100, (spent / limit) * 100);
+              return (
+                <div key={cat} style={{ marginBottom: 6 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--muted)', marginBottom: 3 }}>
+                    <span>{cat}</span>
+                    <span>{money(spent)} / {money(limit)}</span>
+                  </div>
+                  <div className="budget-progress">
+                    <div className="budget-progress-fill" style={{ width: `${catPct}%`, background: spent > limit ? 'var(--red)' : 'var(--teal-mid)' }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        <button className="btn btn-secondary btn-sm" style={{ marginTop: 10, alignSelf: 'flex-start' }} onClick={() => setEditing(true)}>Edit</button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="card settlements-card">
+      <div className="settlements-label" style={{ color: 'var(--amber)' }}>Monthly Budget</div>
+      <div style={{ marginTop: 8 }}>
+        <input
+          type="number"
+          className="f-inp"
+          placeholder="Total budget ($)"
+          min="0"
+          value={formTotal}
+          onChange={(e) => setFormTotal(e.target.value)}
+        />
+      </div>
+      <button
+        className="btn btn-secondary btn-sm"
+        style={{ marginTop: 8, textAlign: 'left' }}
+        onClick={() => setShowBreakdown((s) => !s)}
+      >
+        {showBreakdown ? '▲' : '▼'} Category Breakdown
+      </button>
+      {showBreakdown && (
+        <div className="budget-breakdown">
+          {categoryOptions.map((cat) => (
+            <div key={cat} className="budget-cat-row">
+              <span className="budget-cat-label">{cat}</span>
+              <input
+                type="number"
+                className="f-inp"
+                placeholder="$0"
+                min="0"
+                value={formBreakdown[cat] || ''}
+                onChange={(e) => setFormBreakdown((f) => ({ ...f, [cat]: e.target.value }))}
+              />
+            </div>
+          ))}
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+        <button className="btn btn-primary btn-sm" onClick={handleSave}>Set Budget</button>
+        {!isNew && (
+          <button className="btn btn-secondary btn-sm" onClick={() => { setEditing(false); setShowBreakdown(false); }}>Cancel</button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function HomePage({ dashboard, groups, expenses, groupMonthlyTotals, balanceModal, setBalanceModal, setPage, setSelectedGroup, analytics, userId, budgetGoal, saveBudget }) {
   return (
     <div className="page show" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
       <div className="balance-card">
@@ -337,7 +463,7 @@ function HomePage({ dashboard, groups, expenses, groupMonthlyTotals, balanceModa
         </div>
       </div>
 
-      <div className="g2">
+      <div className="g3">
         <div className="card settlements-card settlements-clickable" onClick={() => setBalanceModal('owedToYou')}>
           <div className="settlements-label teal">Owed to you</div>
           <div className="settlements-total teal">{money(dashboard.balances.totalOwedToYou)}</div>
@@ -348,6 +474,13 @@ function HomePage({ dashboard, groups, expenses, groupMonthlyTotals, balanceModa
           <div className="settlements-total red">{money(dashboard.balances.totalYouOwe)}</div>
           <div className="settlements-count">{dashboard.balances.youOwe.length} {dashboard.balances.youOwe.length === 1 ? 'person' : 'people'}</div>
         </div>
+        <BudgetGoalCard
+          budgetGoal={budgetGoal}
+          onSave={saveBudget}
+          analytics={analytics}
+          expenses={expenses}
+          userId={userId}
+        />
       </div>
 
       {balanceModal && (

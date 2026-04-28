@@ -155,6 +155,17 @@ function bootstrap() {
       status TEXT NOT NULL DEFAULT 'pending',
       created_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS budget_goals (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      month TEXT NOT NULL,
+      total REAL NOT NULL DEFAULT 0,
+      breakdown TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE(user_id, month)
+    );
   `);
 
   ensureColumn('groups_table', 'owner_id', 'owner_id TEXT');

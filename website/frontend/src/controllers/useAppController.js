@@ -3,6 +3,7 @@ import {
   buildEvenCustomMap,
   buildEvenPercentMap,
   initialAuthForm,
+  initialBudgetForm,
   initialChallengeForm,
   initialChallengesState,
   initialChatMessages,
@@ -41,6 +42,7 @@ export function useAppController() {
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [chatMessages, setChatMessages] = useState(initialChatMessages);
   const [balanceModal, setBalanceModal] = useState(null);
+  const [budgetGoal, setBudgetGoal] = useState(null);
 
   const chatMessagesRef = useRef(null);
   const savingGroupRef = useRef(false);
@@ -67,6 +69,7 @@ export function useAppController() {
     setSelectedGroup(null);
     setBalanceModal(null);
     setShowGroupModal(false);
+    setBudgetGoal(null);
   }
 
   function logout() {
@@ -93,7 +96,8 @@ export function useAppController() {
         challengesData,
         settingsData,
         notificationsData,
-        invitesData
+        invitesData,
+        budgetData
       ] = await splitStackApi.loadWorkspace(token);
 
       const nextSession = { user: meData.user, token };
@@ -108,6 +112,7 @@ export function useAppController() {
       setChallengesState(challengesData);
       setSettings(settingsData.settings);
       setNotifications(notificationsData.notifications);
+      setBudgetGoal(budgetData?.goal ?? null);
       setExpenseForm((current) => ({ ...current, groupId: current.groupId || groupsData.groups[0]?.id || '' }));
       setChallengeForm((current) => ({ ...current, groupId: current.groupId || groupsData.groups[0]?.id || '' }));
     } catch (nextError) {
@@ -417,6 +422,15 @@ export function useAppController() {
     }
   }
 
+  async function saveBudget(total, breakdown) {
+    try {
+      const data = await splitStackApi.saveBudgetGoal({ total, breakdown }, token);
+      setBudgetGoal(data.goal);
+    } catch (nextError) {
+      setError(nextError.message);
+    }
+  }
+
   async function sendChat(overrideMessage) {
     const question = (overrideMessage ?? chatInput).trim();
     if (!question) return;
@@ -481,6 +495,8 @@ export function useAppController() {
     groupMonthlyTotals,
     balanceModal,
     setBalanceModal,
+    budgetGoal,
+    saveBudget,
     loadAll,
     handleAuthSubmit,
     logout,
