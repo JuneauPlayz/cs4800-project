@@ -29,10 +29,10 @@ cs4800-project/
 Install dependencies in both apps:
 
 ```bash
-cd /Users/sarinakhara/Desktop/CS4800/cs4800-project/website/backend
+cd website/backend
 npm install
 
-cd /Users/sarinakhara/Desktop/CS4800/cs4800-project/website/frontend
+cd ../frontend
 npm install
 ```
 
@@ -43,7 +43,7 @@ You need two terminals open at the same time.
 ### Terminal 1: backend
 
 ```bash
-cd /Users/sarinakhara/Desktop/CS4800/cs4800-project/website/backend
+cd website/backend
 npm run dev
 ```
 
@@ -64,14 +64,14 @@ open http://localhost:3001/api/health
 For normal desktop testing:
 
 ```bash
-cd /Users/sarinakhara/Desktop/CS4800/cs4800-project/website/frontend
+cd website/frontend
 npm run dev
 ```
 
 For phone testing on the same Wi-Fi:
 
 ```bash
-cd /Users/sarinakhara/Desktop/CS4800/cs4800-project/website/frontend
+cd website/frontend
 npm run dev -- --host
 ```
 
@@ -85,7 +85,7 @@ Network: http://<your-local-ip>:5173/
 Open the frontend at:
 
 - Desktop: `http://localhost:5173/`
-- Phone: the `Network` URL shown in the frontend terminal
+- Phone: the first `Network` URL shown in the frontend terminal
 
 ## Demo Accounts
 
@@ -125,7 +125,7 @@ The user should still type:
 Backend:
 
 ```bash
-cd /Users/sarinakhara/Desktop/CS4800/cs4800-project/website/backend
+cd website/backend
 npm run dev
 npm run build
 npm run lint
@@ -134,7 +134,7 @@ npm run lint
 Frontend:
 
 ```bash
-cd /Users/sarinakhara/Desktop/CS4800/cs4800-project/website/frontend
+cd website/frontend
 npm run dev
 npm run dev -- --host
 npm run build
@@ -148,7 +148,7 @@ npm run lint
 If you changed backend schema or pulled new code, fully restart the backend:
 
 ```bash
-cd /Users/sarinakhara/Desktop/CS4800/cs4800-project/website/backend
+cd website/backend
 npm run dev
 ```
 
