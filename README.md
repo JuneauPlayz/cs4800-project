@@ -2,6 +2,8 @@
 
 SplitStack is a shared-expenses app with a React frontend, an Express + SQLite backend, AI assistant responses, group voting, challenges, settlements, and mobile-only receipt scanning.
 
+By default, the database starts empty so real users create real accounts, groups, expenses, votes, and challenges themselves.
+
 ## Requirements
 
 - Node.js 22
@@ -35,6 +37,19 @@ npm install
 cd ../frontend
 npm install
 ```
+
+## Real App Mode
+
+SplitStack now runs with a real empty database by default.
+
+If you already have old demo data in `website/backend/splitstack.db`, reset the database once:
+
+```bash
+cd website/backend
+npm run reset-db
+```
+
+That recreates the SQLite database with the schema only and no mock data.
 
 ## Run The App
 
@@ -87,12 +102,14 @@ Open the frontend at:
 - Desktop: `http://localhost:5173/`
 - Phone: the first `Network` URL shown in the frontend terminal
 
-## Demo Accounts
+## Creating Your First Real User
 
-- `jordan@splitstack.app` / `demo123`
-- `marcus@splitstack.app` / `demo123`
-- `priya@splitstack.app` / `demo123`
-- `sam@splitstack.app` / `demo123`
+1. Start the backend.
+2. Start the frontend.
+3. Open the app in your browser.
+4. Click `Create account`.
+5. Register a new user.
+6. Create your own group and invite other users by email.
 
 ## Mobile Testing
 
@@ -103,7 +120,7 @@ To test it:
 1. Start backend with `npm run dev`.
 2. Start frontend with `npm run dev -- --host`.
 3. On your phone, open the `Network` URL shown by Vite.
-4. Log in with one of the demo accounts.
+4. Sign in with a real account you created in SplitStack.
 5. Go to `Add Expense`.
 6. In the receipt section, use either:
    - `Upload from library`
@@ -129,6 +146,8 @@ cd website/backend
 npm run dev
 npm run build
 npm run lint
+npm run reset-db
+npm run seed-demo
 ```
 
 Frontend:
@@ -173,3 +192,4 @@ Install Node.js first.
 - The app uses a local SQLite database at `website/backend/splitstack.db`.
 - Frontend and backend must both be running for the app to work.
 - `npm audit fix` is optional cleanup and is not required to start the app.
+- `npm run seed-demo` is optional and only needed if you intentionally want demo/sample data back for a presentation.

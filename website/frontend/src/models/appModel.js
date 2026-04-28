@@ -27,7 +27,7 @@ export function getDiceBearUrl(seed) {
   return `https://api.dicebear.com/9.x/avataaars/svg?seed=${encodeURIComponent(seed)}&backgroundColor=b6e3f4,c0aede,d1d4f9,ffd5dc,ffdfbf`;
 }
 
-export const initialAuthForm = { name: '', email: 'jordan@splitstack.app', password: 'demo123', avatarEmoji: '' };
+export const initialAuthForm = { name: '', email: '', password: '', avatarEmoji: '' };
 export const initialExpenseForm = {
   groupId: '',
   description: '',

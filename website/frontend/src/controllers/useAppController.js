@@ -340,8 +340,12 @@ export function useAppController() {
       const data = authMode === 'login'
         ? await splitStackApi.login({ email: authForm.email, password: authForm.password })
         : await splitStackApi.register(authForm);
+      resetWorkspaceState();
+      clearStoredSession();
       setSession(data);
       setStoredSession(data);
+      setAuthForm(initialAuthForm);
+      setPage('home');
       setChatMessages([{ role: 'ai', text: `Welcome${data.user?.name ? `, ${data.user.name}` : ''}. Ask me about balances, spending, voting, or challenges.` }]);
     } catch (nextError) {
       setError(nextError.message);

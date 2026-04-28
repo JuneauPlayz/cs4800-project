@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { DICEBEAR_SEEDS, categoryOptions, getDiceBearUrl, money, navMeta, payoutMethodOptions, workspacePages } from '../models/appModel';
+import { DICEBEAR_SEEDS, categoryOptions, getDiceBearUrl, initialAuthForm, money, navMeta, payoutMethodOptions, workspacePages } from '../models/appModel';
 
 function StackLogo({ size = 18 }) {
   return (
@@ -161,7 +161,7 @@ export function AppView({ controller }) {
             <div className="f-row"><label className="f-label">Email</label><input className="f-inp" type="email" value={authForm.email} onChange={(e) => setAuthForm({ ...authForm, email: e.target.value })} /></div>
             <div className="f-row"><label className="f-label">Password</label><input className="f-inp" type="password" value={authForm.password} onChange={(e) => setAuthForm({ ...authForm, password: e.target.value })} /></div>
             <button className="btn-main" type="submit">{authMode === 'login' ? 'Sign in' : 'Create account'}</button>
-            <div className="auth-switch">{authMode === 'login' ? 'Need an account?' : 'Already have an account?'} <a onClick={() => setAuthMode(authMode === 'login' ? 'register' : 'login')}>{authMode === 'login' ? 'Create one' : 'Sign in'}</a></div>
+            <div className="auth-switch">{authMode === 'login' ? 'Need an account?' : 'Already have an account?'} <a onClick={() => { setAuthMode(authMode === 'login' ? 'register' : 'login'); setAuthForm(initialAuthForm); }}>{authMode === 'login' ? 'Create one' : 'Sign in'}</a></div>
           </form>
         </div>
       </div>

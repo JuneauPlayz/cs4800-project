@@ -129,12 +129,12 @@ export function upsertSettings(nextSettings) {
     INSERT INTO user_settings (user_id, email_votes, email_balance, push_settlements, ai_proactive, profile_visibility, activity_visibility)
     VALUES (@userId, @emailVotes, @emailBalance, @pushSettlements, @aiProactive, @profileVisibility, @activityVisibility)
     ON CONFLICT(user_id) DO UPDATE SET
-      email_votes = excluded.emailVotes,
-      email_balance = excluded.emailBalance,
-      push_settlements = excluded.pushSettlements,
-      ai_proactive = excluded.aiProactive,
-      profile_visibility = excluded.profileVisibility,
-      activity_visibility = excluded.activityVisibility
+      email_votes = excluded.email_votes,
+      email_balance = excluded.email_balance,
+      push_settlements = excluded.push_settlements,
+      ai_proactive = excluded.ai_proactive,
+      profile_visibility = excluded.profile_visibility,
+      activity_visibility = excluded.activity_visibility
   `).run(nextSettings);
   return getSettings(nextSettings.userId);
 }
