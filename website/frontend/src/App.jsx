@@ -500,9 +500,15 @@ export default function App() {
     const amount = Number(contributionAmounts[challengeId] || 0);
     if (!amount) return;
     try {
-      await api(`/api/challenges/${challengeId}/contribute`, { method: 'POST', body: JSON.stringify({ amount }) }, token);
+      const data = await api(`/api/challenges/${challengeId}/contribute`, { method: 'POST', body: JSON.stringify({ amount }) }, token);
       setContributionAmounts((current) => ({ ...current, [challengeId]: '' }));
-      await loadAll();
+      setChallengesState((current) => {
+        const challenges = current.challenges.map((challenge) => (challenge.id === challengeId ? data.challenge : challenge));
+        return {
+          challenges,
+          rings: challenges.slice(0, 3).map((challenge) => ({ id: challenge.id, label: challenge.name, value: challenge.current, max: challenge.goal, color: challenge.color }))
+        };
+      });
     } catch (nextError) {
       setError(nextError.message);
     }
@@ -1010,7 +1016,7 @@ export default function App() {
                   <div className="card">
                     <div className="card-head">Active challenges</div>
                     {challengesState.challenges.map((challenge) => (
-                      <div className="challenge-card" key={challenge.id}><div className="row-b"><div><div className="ch-name">{challenge.name}</div><div className="ch-desc">{challenge.groupName} · {challenge.description}</div></div><span className="tag tag-teal">{money(challenge.current)} / {money(challenge.goal)}</span></div><div className="ch-bar"><div className="ch-fill" style={{ width: `${Math.min((challenge.current / challenge.goal) * 100, 100)}%`, background: challenge.color }} /></div><div className="row-b"><span className="ch-nums">Created by {challenge.createdByName}</span><span className="ch-nums">Ends {challenge.endDate || 'Any time'}</span></div><div className="split-member detailed mt-3"><div className="split-member-main"><div className="sm-name">Add progress</div></div><div className="split-input-wrap money"><span className="sm-prefix">$</span><input className="sm-inp" type="number" min="0" step="0.01" value={contributionAmounts[challenge.id] ?? ''} onChange={(e) => setContributionAmounts((current) => ({ ...current, [challenge.id]: e.target.value }))} /></div><button className="btn btn-primary btn-sm" type="button" onClick={() => addContribution(challenge.id)}>Add</button></div>{challenge.contributions.slice(0, 3).map((item) => <div className="notification-row compact-row" key={item.id}><div className="row gap-2"><div className="ava-sm" style={{ background: item.avatarColor }}>{item.initials}</div><div><div className="p-name">{item.name}</div><div className="p-group">Added progress</div></div></div><strong>{money(item.amount)}</strong></div>)}</div>
+                      <div className="challenge-card" key={challenge.id}><div className="row-b"><div><div className="ch-name">{challenge.name}</div><div className="ch-desc">{challenge.groupName} · {challenge.description}</div></div><span className="tag tag-teal">{money(challenge.current)} / {money(challenge.goal)}</span></div><div className="ch-bar"><div className="ch-fill" style={{ width: `${Math.min(((challenge.current || 0) / (challenge.goal || 1)) * 100, 100)}%`, background: challenge.color }} /></div><div className="row-b"><span className="ch-nums">Created by {challenge.createdByName}</span><span className="ch-nums">Ends {challenge.endDate || 'Any time'}</span></div><div className="split-member detailed mt-3"><div className="split-member-main"><div className="sm-name">Add progress</div></div><div className="split-input-wrap money"><span className="sm-prefix">$</span><input className="sm-inp" type="number" min="0" step="0.01" value={contributionAmounts[challenge.id] ?? ''} onChange={(e) => setContributionAmounts((current) => ({ ...current, [challenge.id]: e.target.value }))} /></div><button className="btn btn-primary btn-sm" type="button" onClick={() => addContribution(challenge.id)}>Add</button></div>{(challenge.contributions || []).slice(0, 3).map((item) => <div className="notification-row compact-row" key={item.id}><div className="row gap-2"><div className="ava-sm" style={{ background: item.avatarColor }}>{item.initials}</div><div><div className="p-name">{item.name}</div><div className="p-group">Added progress</div></div></div><strong>{money(item.amount)}</strong></div>)}</div>
                     ))}
                   </div>
                 </div>

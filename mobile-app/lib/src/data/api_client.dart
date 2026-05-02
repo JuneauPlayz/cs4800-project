@@ -151,16 +151,19 @@ class ApiClient {
     );
   }
 
-  Future<void> contributeToChallenge(
+  Future<Challenge> contributeToChallenge(
     String token, {
     required String challengeId,
     required double amount,
-  }) {
-    return _request(
+  }) async {
+    final json = await _request(
       'POST',
       '/api/challenges/$challengeId/contribute',
       token: token,
       body: {'amount': amount},
+    );
+    return Challenge.fromJson(
+      json['challenge'] as Map<String, dynamic>? ?? const {},
     );
   }
 

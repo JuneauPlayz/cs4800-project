@@ -1442,8 +1442,11 @@ class _ChallengesTab extends StatelessWidget {
             )
           else
             ...data.challenges.map(
-              (challenge) =>
-                  _ChallengeCard(challenge: challenge, controller: controller),
+              (challenge) => _ChallengeCard(
+                key: ValueKey(challenge.id),
+                challenge: challenge,
+                controller: controller,
+              ),
             ),
         ],
       ),
@@ -1498,7 +1501,11 @@ class _ChallengeRingTile extends StatelessWidget {
 }
 
 class _ChallengeCard extends StatefulWidget {
-  const _ChallengeCard({required this.challenge, required this.controller});
+  const _ChallengeCard({
+    super.key,
+    required this.challenge,
+    required this.controller,
+  });
 
   final Challenge challenge;
   final AppController controller;
@@ -1509,8 +1516,7 @@ class _ChallengeCard extends StatefulWidget {
 
 class _ChallengeCardState extends State<_ChallengeCard> {
   final _amountController = TextEditingController();
-  bool _showContributionForm = false;
-  bool _savingContribution = false;
+  String? _errorText;
 
   @override
   void dispose() {
@@ -1620,26 +1626,43 @@ class _ChallengeCardState extends State<_ChallengeCard> {
                 }),
               ],
               const SizedBox(height: 14),
-              if (_showContributionForm)
-                _InlineContributionForm(
-                  controller: _amountController,
-                  saving: _savingContribution || widget.controller.loading,
-                  onCancel: () {
-                    setState(() {
-                      _showContributionForm = false;
-                      _amountController.clear();
-                    });
-                  },
-                  onSubmit: _submitContribution,
-                )
-              else
-                OutlinedButton.icon(
-                  onPressed: widget.controller.loading
-                      ? null
-                      : () => setState(() => _showContributionForm = true),
-                  icon: const Icon(Icons.add_card_rounded),
-                  label: const Text('Add contribution'),
-                ),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _amountController,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      decoration: InputDecoration(
+                        labelText: 'Contribution amount',
+                        prefixText: '\$',
+                        errorText: _errorText,
+                      ),
+                      onChanged: (_) {
+                        if (_errorText != null) {
+                          setState(() => _errorText = null);
+                        }
+                      },
+                      onSubmitted: (_) => _submitContribution(),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  SizedBox(
+                    width: 96,
+                    height: 54,
+                    child: FilledButton.icon(
+                      onPressed: _submitContribution,
+                      style: FilledButton.styleFrom(
+                        minimumSize: Size.zero,
+                        padding: const EdgeInsets.symmetric(horizontal: 14),
+                      ),
+                      icon: const Icon(Icons.add_rounded),
+                      label: const Text('Add'),
+                    ),
+                  ),
+                ],
+              ),
             ],
           ),
         ),
@@ -1647,88 +1670,34 @@ class _ChallengeCardState extends State<_ChallengeCard> {
     );
   }
 
-  Future<void> _submitContribution() async {
+  void _submitContribution() {
     final amount = double.tryParse(_amountController.text.trim());
-    if (amount == null || amount <= 0) return;
-    FocusManager.instance.primaryFocus?.unfocus();
-    setState(() {
-      _savingContribution = true;
-      _showContributionForm = false;
-      _amountController.clear();
-    });
-    await Future<void>.delayed(const Duration(milliseconds: 250));
-    try {
-      await widget.controller.contributeToChallenge(
-        challengeId: widget.challenge.id,
-        amount: amount,
-      );
-    } catch (_) {
-      // Keep the UI stable; the controller exposes the error on refresh.
-    } finally {
-      if (mounted) setState(() => _savingContribution = false);
+    if (amount == null || amount <= 0) {
+      setState(() => _errorText = 'Enter a positive amount');
+      return;
     }
-  }
-}
 
-class _InlineContributionForm extends StatelessWidget {
-  const _InlineContributionForm({
-    required this.controller,
-    required this.saving,
-    required this.onCancel,
-    required this.onSubmit,
-  });
+    FocusManager.instance.primaryFocus?.unfocus();
+    _amountController.clear();
+    setState(() => _errorText = null);
 
-  final TextEditingController controller;
-  final bool saving;
-  final VoidCallback onCancel;
-  final VoidCallback onSubmit;
-
-  @override
-  Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
-        border: Border.all(color: AppTheme.border),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: controller,
-                enabled: !saving,
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                decoration: const InputDecoration(labelText: 'Amount'),
-                onSubmitted: (_) => saving ? null : onSubmit(),
+    widget.controller
+        .contributeToChallenge(challengeId: widget.challenge.id, amount: amount)
+        .catchError((_) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                widget.controller.errorMessage ??
+                    'Unable to save contribution.',
               ),
             ),
-            const SizedBox(width: 10),
-            IconButton(
-              tooltip: 'Cancel',
-              onPressed: saving ? null : onCancel,
-              icon: const Icon(Icons.close_rounded),
-            ),
-            FilledButton(
-              onPressed: saving ? null : onSubmit,
-              child: saving
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                      ),
-                    )
-                  : const Text('Add'),
-            ),
-          ],
-        ),
-      ),
-    );
+          );
+        });
+
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Contribution added.')));
   }
 }
 
@@ -3294,7 +3263,9 @@ String formatDate(String raw) {
 
 Color colorFromHex(String hex) {
   final normalized = hex.replaceAll('#', '');
-  if (normalized.length != 6) return AppTheme.teal;
+  if (!RegExp(r'^[0-9a-fA-F]{6}$').hasMatch(normalized)) {
+    return AppTheme.teal;
+  }
   return Color(int.parse('FF$normalized', radix: 16));
 }
 
