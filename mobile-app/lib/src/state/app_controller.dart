@@ -230,9 +230,7 @@ class AppController extends ChangeNotifier {
     required double amount,
   }) async {
     final token = _requireToken();
-    loading = true;
     errorMessage = null;
-    notifyListeners();
     try {
       await apiClient.contributeToChallenge(
         token,
@@ -240,9 +238,10 @@ class AppController extends ChangeNotifier {
         amount: amount,
       );
       await refreshAll(showLoader: false);
-    } finally {
-      loading = false;
+    } catch (error) {
+      errorMessage = error.toString();
       notifyListeners();
+      rethrow;
     }
   }
 
