@@ -3,6 +3,21 @@ import 'package:flutter/material.dart';
 import '../core/app_theme.dart';
 import '../state/app_controller.dart';
 
+const _avatarSeeds = [
+  'Jasper',
+  'Luna',
+  'Felix',
+  'River',
+  'Sage',
+  'Quinn',
+  'Milo',
+  'Ivy',
+  'Oscar',
+  'Willow',
+  'Leo',
+  'Aurora',
+];
+
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key, required this.controller});
 
@@ -13,11 +28,12 @@ class AuthScreen extends StatefulWidget {
 }
 
 class _AuthScreenState extends State<AuthScreen> {
-  final _nameController = TextEditingController(text: 'Jordan Lee');
-  final _emailController = TextEditingController(text: 'jordan@splitstack.app');
-  final _passwordController = TextEditingController(text: 'demo123');
+  final _nameController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   bool _register = false;
+  String _avatarSeed = _avatarSeeds.first;
 
   @override
   void dispose() {
@@ -125,6 +141,13 @@ class _AuthScreenState extends State<AuthScreen> {
                                   },
                                 ),
                                 const SizedBox(height: 14),
+                                _AvatarPicker(
+                                  selectedSeed: _avatarSeed,
+                                  onSelected: (seed) {
+                                    setState(() => _avatarSeed = seed);
+                                  },
+                                ),
+                                const SizedBox(height: 14),
                               ],
                               TextFormField(
                                 controller: _emailController,
@@ -188,7 +211,7 @@ class _AuthScreenState extends State<AuthScreen> {
                               const SizedBox(height: 14),
                               const _InlineMessage(
                                 text:
-                                    'Demo account: jordan@splitstack.app / demo123',
+                                    'New here? Register with your real team email, then create or accept a group invite.',
                                 color: AppTheme.tealDark,
                                 background: Color(0xFFF0FDFA),
                               ),
@@ -216,6 +239,7 @@ class _AuthScreenState extends State<AuthScreen> {
           name: _nameController.text.trim(),
           email: _emailController.text.trim(),
           password: _passwordController.text,
+          avatarEmoji: _avatarSeed,
         );
       } else {
         await widget.controller.login(
@@ -232,6 +256,82 @@ class _AuthScreenState extends State<AuthScreen> {
       );
     }
   }
+}
+
+class _AvatarPicker extends StatelessWidget {
+  const _AvatarPicker({required this.selectedSeed, required this.onSelected});
+
+  final String selectedSeed;
+  final ValueChanged<String> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Choose your avatar',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          height: 64,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: _avatarSeeds.length,
+            separatorBuilder: (context, index) => const SizedBox(width: 10),
+            itemBuilder: (context, index) {
+              final seed = _avatarSeeds[index];
+              final selected = seed == selectedSeed;
+              return Tooltip(
+                message: seed,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(999),
+                  onTap: () => onSelected(seed),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 140),
+                    width: 58,
+                    height: 58,
+                    padding: const EdgeInsets.all(3),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: selected ? AppTheme.teal : AppTheme.border,
+                        width: selected ? 3 : 1,
+                      ),
+                    ),
+                    child: ClipOval(
+                      child: Image.network(
+                        diceBearUrl(seed),
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) =>
+                            ColoredBox(
+                              color: AppTheme.teal.withValues(alpha: 0.12),
+                              child: Center(
+                                child: Text(
+                                  seed[0],
+                                  style: const TextStyle(
+                                    color: AppTheme.teal,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ),
+                            ),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+String diceBearUrl(String seed) {
+  return 'https://api.dicebear.com/9.x/avataaars/png?seed=${Uri.encodeComponent(seed)}&backgroundColor=b6e3f4,c0aede,d1d4f9,ffd5dc,ffdfbf';
 }
 
 class _AuthBrand extends StatelessWidget {
@@ -268,7 +368,7 @@ class _AuthBrand extends StatelessWidget {
             ),
             SizedBox(height: 4),
             Text(
-              'Mobile MVP in Flutter',
+              'Shared expenses for real groups',
               style: TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
             ),
           ],

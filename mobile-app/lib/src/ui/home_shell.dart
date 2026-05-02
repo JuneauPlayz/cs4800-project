@@ -17,6 +17,21 @@ const _categoryOptions = [
   'Other',
 ];
 
+const _avatarSeeds = [
+  'Jasper',
+  'Luna',
+  'Felix',
+  'River',
+  'Sage',
+  'Quinn',
+  'Milo',
+  'Ivy',
+  'Oscar',
+  'Willow',
+  'Leo',
+  'Aurora',
+];
+
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key, required this.controller});
 
@@ -333,6 +348,17 @@ class _GroupsTab extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
+          if (controller.invites.isNotEmpty) ...[
+            _SectionTitle(
+              title: 'Pending invites',
+              subtitle: 'Join groups that teammates have invited you to.',
+            ),
+            const SizedBox(height: 10),
+            ...controller.invites.map(
+              (invite) => _InviteCard(invite: invite, controller: controller),
+            ),
+            const SizedBox(height: 6),
+          ],
           if (controller.groups.isEmpty)
             const _CenteredState(
               icon: Icons.groups_rounded,
@@ -846,32 +872,58 @@ class _SettingsTabState extends State<_SettingsTab> {
         Card(
           child: Padding(
             padding: const EdgeInsets.all(20),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                CircleAvatar(
-                  radius: 28,
-                  backgroundColor: colorFromHex(user.avatarColor),
-                  child: Text(
-                    user.initials,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 14),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                Row(
                   children: [
-                    Text(
-                      user.name,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
-                      ),
+                    _ProfileAvatar(
+                      initials: user.initials,
+                      avatarColor: user.avatarColor,
+                      avatarEmoji: user.avatarEmoji,
+                      radius: 28,
                     ),
-                    Text(user.email),
+                    const SizedBox(width: 14),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          user.name,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        Text(user.email),
+                      ],
+                    ),
                   ],
+                ),
+                const SizedBox(height: 18),
+                _SettingsAvatarPicker(
+                  selectedSeed: user.avatarEmoji.isEmpty
+                      ? _avatarSeeds.first
+                      : user.avatarEmoji,
+                  saving: widget.controller.savingSettings,
+                  onSelected: (seed) async {
+                    try {
+                      await widget.controller.saveAvatar(seed);
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Avatar updated.')),
+                      );
+                    } catch (_) {
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            widget.controller.errorMessage ??
+                                'Unable to update avatar.',
+                          ),
+                        ),
+                      );
+                    }
+                  },
                 ),
               ],
             ),
@@ -1162,16 +1214,13 @@ class _BalanceHero extends StatelessWidget {
         children: [
           Row(
             children: [
-              CircleAvatar(
+              _ProfileAvatar(
+                initials: user.initials,
+                avatarColor: user.avatarColor,
+                avatarEmoji: user.avatarEmoji,
                 radius: 24,
-                backgroundColor: Colors.white.withValues(alpha: 0.14),
-                child: Text(
-                  user.initials,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
+                fallbackTextColor: Colors.white,
+                fallbackBackgroundColor: Colors.white.withValues(alpha: 0.14),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -1515,6 +1564,99 @@ class _VoteCard extends StatelessWidget {
   }
 }
 
+class _InviteCard extends StatelessWidget {
+  const _InviteCard({required this.invite, required this.controller});
+
+  final GroupInvite invite;
+  final AppController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  CircleAvatar(
+                    backgroundColor: AppTheme.amber.withValues(alpha: 0.14),
+                    foregroundColor: AppTheme.amber,
+                    child: const Icon(Icons.mail_outline_rounded),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          invite.groupName,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        Text(
+                          'Invited by ${invite.invitedByName} as ${invite.role}',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: controller.loading
+                          ? null
+                          : () => _respond(context, accept: false),
+                      child: const Text('Decline'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: controller.loading
+                          ? null
+                          : () => _respond(context, accept: true),
+                      child: const Text('Accept'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _respond(BuildContext context, {required bool accept}) async {
+    try {
+      await controller.respondToInvite(inviteId: invite.id, accept: accept);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(accept ? 'Invite accepted.' : 'Invite declined.'),
+        ),
+      );
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(controller.errorMessage ?? 'Unable to update invite.'),
+        ),
+      );
+    }
+  }
+}
+
 class _StatusChip extends StatelessWidget {
   const _StatusChip({required this.label, required this.dark});
 
@@ -1711,15 +1853,10 @@ class _GroupDetailsSheet extends StatelessWidget {
         ...group.members.map((member) {
           return ListTile(
             contentPadding: EdgeInsets.zero,
-            leading: CircleAvatar(
-              backgroundColor: colorFromHex(member.avatarColor),
-              child: Text(
-                member.initials,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
+            leading: _ProfileAvatar(
+              initials: member.initials,
+              avatarColor: member.avatarColor,
+              avatarEmoji: member.avatarEmoji,
             ),
             title: Text(member.name),
             subtitle: Text(member.email),
@@ -1785,6 +1922,131 @@ class _SplitSummary extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _SettingsAvatarPicker extends StatelessWidget {
+  const _SettingsAvatarPicker({
+    required this.selectedSeed,
+    required this.saving,
+    required this.onSelected,
+  });
+
+  final String selectedSeed;
+  final bool saving;
+  final ValueChanged<String> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Profile picture', style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 8),
+        SizedBox(
+          height: 58,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: _avatarSeeds.length,
+            separatorBuilder: (context, index) => const SizedBox(width: 10),
+            itemBuilder: (context, index) {
+              final seed = _avatarSeeds[index];
+              final selected = seed == selectedSeed;
+              return Tooltip(
+                message: seed,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(999),
+                  onTap: saving ? null : () => onSelected(seed),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 140),
+                    width: 54,
+                    height: 54,
+                    padding: const EdgeInsets.all(3),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: selected ? AppTheme.teal : AppTheme.border,
+                        width: selected ? 3 : 1,
+                      ),
+                    ),
+                    child: ClipOval(
+                      child: Image.network(
+                        _diceBearUrl(seed),
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) =>
+                            ColoredBox(
+                              color: AppTheme.teal.withValues(alpha: 0.12),
+                              child: Center(
+                                child: Text(
+                                  seed[0],
+                                  style: const TextStyle(
+                                    color: AppTheme.teal,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ),
+                            ),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ProfileAvatar extends StatelessWidget {
+  const _ProfileAvatar({
+    required this.initials,
+    required this.avatarColor,
+    required this.avatarEmoji,
+    this.radius = 20,
+    this.fallbackTextColor = Colors.white,
+    this.fallbackBackgroundColor,
+  });
+
+  final String initials;
+  final String avatarColor;
+  final String avatarEmoji;
+  final double radius;
+  final Color fallbackTextColor;
+  final Color? fallbackBackgroundColor;
+
+  @override
+  Widget build(BuildContext context) {
+    if (avatarEmoji.isNotEmpty) {
+      return CircleAvatar(
+        radius: radius,
+        backgroundColor: AppTheme.border,
+        foregroundImage: NetworkImage(_diceBearUrl(avatarEmoji)),
+        onForegroundImageError: (error, stackTrace) {},
+        child: Text(
+          initials,
+          style: TextStyle(
+            color: AppTheme.tealDark,
+            fontWeight: FontWeight.w800,
+            fontSize: radius * 0.62,
+          ),
+        ),
+      );
+    }
+
+    return CircleAvatar(
+      radius: radius,
+      backgroundColor: fallbackBackgroundColor ?? colorFromHex(avatarColor),
+      child: Text(
+        initials,
+        style: TextStyle(
+          color: fallbackTextColor,
+          fontWeight: FontWeight.w800,
+          fontSize: radius * 0.62,
+        ),
       ),
     );
   }
@@ -1856,6 +2118,10 @@ Color colorFromHex(String hex) {
   final normalized = hex.replaceAll('#', '');
   if (normalized.length != 6) return AppTheme.teal;
   return Color(int.parse('FF$normalized', radix: 16));
+}
+
+String _diceBearUrl(String seed) {
+  return 'https://api.dicebear.com/9.x/avataaars/png?seed=${Uri.encodeComponent(seed)}&backgroundColor=b6e3f4,c0aede,d1d4f9,ffd5dc,ffdfbf';
 }
 
 List<String> _parseInviteEmails(String raw) {

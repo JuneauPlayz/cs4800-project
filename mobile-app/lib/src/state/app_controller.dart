@@ -21,6 +21,7 @@ class AppController extends ChangeNotifier {
   DashboardData? dashboard;
   AnalyticsData? analytics;
   List<Group> groups = const [];
+  List<GroupInvite> invites = const [];
   List<Expense> expenses = const [];
   List<Vote> votes = const [];
   SettingsData? settings;
@@ -58,10 +59,15 @@ class AppController extends ChangeNotifier {
     required String name,
     required String email,
     required String password,
+    String? avatarEmoji,
   }) async {
     await _authenticate(
-      action: () =>
-          apiClient.register(name: name, email: email, password: password),
+      action: () => apiClient.register(
+        name: name,
+        email: email,
+        password: password,
+        avatarEmoji: avatarEmoji,
+      ),
     );
   }
 
@@ -80,6 +86,7 @@ class AppController extends ChangeNotifier {
         apiClient.getMe(token),
         apiClient.getDashboard(token),
         apiClient.getGroups(token),
+        apiClient.getInvites(token),
         apiClient.getExpenses(token),
         apiClient.getVotes(token),
         apiClient.getAnalytics(token),
@@ -89,10 +96,11 @@ class AppController extends ChangeNotifier {
       user = results[0] as User;
       dashboard = results[1] as DashboardData;
       groups = results[2] as List<Group>;
-      expenses = results[3] as List<Expense>;
-      votes = results[4] as List<Vote>;
-      analytics = results[5] as AnalyticsData;
-      settings = results[6] as SettingsData;
+      invites = results[3] as List<GroupInvite>;
+      expenses = results[4] as List<Expense>;
+      votes = results[5] as List<Vote>;
+      analytics = results[6] as AnalyticsData;
+      settings = results[7] as SettingsData;
       errorMessage = null;
     } catch (error) {
       final message = error.toString();
@@ -150,6 +158,27 @@ class AppController extends ChangeNotifier {
     }
   }
 
+  Future<void> respondToInvite({
+    required String inviteId,
+    required bool accept,
+  }) async {
+    final token = _requireToken();
+    loading = true;
+    errorMessage = null;
+    notifyListeners();
+    try {
+      await apiClient.respondToInvite(
+        token,
+        inviteId: inviteId,
+        decision: accept ? 'accepted' : 'declined',
+      );
+      await refreshAll(showLoader: false);
+    } finally {
+      loading = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> respondToVote({
     required String voteId,
     required String decision,
@@ -174,6 +203,20 @@ class AppController extends ChangeNotifier {
     notifyListeners();
     try {
       settings = await apiClient.updateSettings(token, settings: next);
+    } finally {
+      savingSettings = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> saveAvatar(String avatarEmoji) async {
+    final token = _requireToken();
+    savingSettings = true;
+    errorMessage = null;
+    notifyListeners();
+    try {
+      user = await apiClient.updateMe(token, avatarEmoji: avatarEmoji);
+      await refreshAll(showLoader: false);
     } finally {
       savingSettings = false;
       notifyListeners();
@@ -208,6 +251,7 @@ class AppController extends ChangeNotifier {
     dashboard = null;
     analytics = null;
     groups = const [];
+    invites = const [];
     expenses = const [];
     votes = const [];
     settings = null;

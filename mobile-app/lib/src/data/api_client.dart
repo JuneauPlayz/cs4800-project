@@ -30,17 +30,34 @@ class ApiClient {
     required String name,
     required String email,
     required String password,
+    String? avatarEmoji,
   }) async {
     final json = await _request(
       'POST',
       '/api/auth/register',
-      body: {'name': name, 'email': email, 'password': password},
+      body: {
+        'name': name,
+        'email': email,
+        'password': password,
+        if (avatarEmoji != null && avatarEmoji.isNotEmpty)
+          'avatarEmoji': avatarEmoji,
+      },
     );
     return UserSession.fromJson(json);
   }
 
   Future<User> getMe(String token) async {
     final json = await _request('GET', '/api/me', token: token);
+    return User.fromJson(json['user'] as Map<String, dynamic>? ?? const {});
+  }
+
+  Future<User> updateMe(String token, {required String avatarEmoji}) async {
+    final json = await _request(
+      'PUT',
+      '/api/me',
+      token: token,
+      body: {'avatarEmoji': avatarEmoji},
+    );
     return User.fromJson(json['user'] as Map<String, dynamic>? ?? const {});
   }
 
@@ -52,6 +69,11 @@ class ApiClient {
   Future<List<Group>> getGroups(String token) async {
     final json = await _request('GET', '/api/groups', token: token);
     return _mapList(json['groups'], Group.fromJson);
+  }
+
+  Future<List<GroupInvite>> getInvites(String token) async {
+    final json = await _request('GET', '/api/invites', token: token);
+    return _mapList(json['invites'], GroupInvite.fromJson);
   }
 
   Future<List<Expense>> getExpenses(String token) async {
@@ -95,6 +117,19 @@ class ApiClient {
         'description': description,
         'inviteEmails': inviteEmails,
       },
+    );
+  }
+
+  Future<void> respondToInvite(
+    String token, {
+    required String inviteId,
+    required String decision,
+  }) {
+    return _request(
+      'POST',
+      '/api/invites/$inviteId/respond',
+      token: token,
+      body: {'decision': decision},
     );
   }
 

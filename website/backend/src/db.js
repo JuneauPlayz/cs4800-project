@@ -27,6 +27,7 @@ function bootstrap() {
       password TEXT NOT NULL,
       initials TEXT NOT NULL,
       avatar_color TEXT NOT NULL,
+      avatar_emoji TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -161,20 +162,21 @@ function bootstrap() {
   ensureColumn('groups_table', 'description', 'description TEXT');
   ensureColumn('group_members', 'joined_at', 'joined_at TEXT DEFAULT CURRENT_TIMESTAMP');
   ensureColumn('users', 'created_at', 'created_at TEXT DEFAULT CURRENT_TIMESTAMP');
+  ensureColumn('users', 'avatar_emoji', 'avatar_emoji TEXT');
   ensureColumn('user_settings', 'profile_visibility', "profile_visibility TEXT NOT NULL DEFAULT 'group_members'");
   ensureColumn('user_settings', 'activity_visibility', "activity_visibility TEXT NOT NULL DEFAULT 'group_members'");
 
   const hasUsers = db.prepare('SELECT COUNT(*) as count FROM users').get().count;
-  if (hasUsers > 0) return;
+  if (hasUsers > 0 || process.env.SPLITSTACK_SEED_DEMO !== 'true') return;
 
   const now = new Date().toISOString();
   const users = [
-    ['u1', 'Jordan Lee', 'jordan@splitstack.app', 'demo123', 'JL', '#0D9488'],
-    ['u2', 'Marcus Chen', 'marcus@splitstack.app', 'demo123', 'MC', '#8B5CF6'],
-    ['u3', 'Priya Sharma', 'priya@splitstack.app', 'demo123', 'PS', '#F59E0B'],
-    ['u4', 'Sam Rivera', 'sam@splitstack.app', 'demo123', 'SR', '#EF4444']
+    ['u1', 'Jordan Lee', 'jordan@splitstack.app', 'demo123', 'JL', '#0D9488', 'Jasper'],
+    ['u2', 'Marcus Chen', 'marcus@splitstack.app', 'demo123', 'MC', '#8B5CF6', 'Felix'],
+    ['u3', 'Priya Sharma', 'priya@splitstack.app', 'demo123', 'PS', '#F59E0B', 'Luna'],
+    ['u4', 'Sam Rivera', 'sam@splitstack.app', 'demo123', 'SR', '#EF4444', 'River']
   ];
-  const insertUser = db.prepare('INSERT INTO users (id, name, email, password, initials, avatar_color, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)');
+  const insertUser = db.prepare('INSERT INTO users (id, name, email, password, initials, avatar_color, avatar_emoji, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
   users.forEach((u) => insertUser.run(...u, now));
 
   const insertSettings = db.prepare(`

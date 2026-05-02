@@ -26,13 +26,10 @@ import {
   respondToVote,
   upsertSettings,
   updateGroup,
+  updateUserProfile,
   contributeToChallenge,
   requireMembership
 } from './services.js';
-
-function currentUserId(req) {
-  return req.headers['x-user-id'] || 'u1';
-}
 
 const app = express();
 const PORT = Number(process.env.PORT || 3001);
@@ -64,10 +61,10 @@ app.post('/api/auth/login', (req, res) => {
 });
 
 app.post('/api/auth/register', (req, res) => {
-  const { name, email, password } = req.body ?? {};
+  const { name, email, password, avatarEmoji } = req.body ?? {};
   if (!name || !email || !password) return res.status(400).json({ message: 'name, email, and password are required.' });
   if (getUserByEmail(email)) return res.status(409).json({ message: 'Email already exists.' });
-  const user = createUser({ name, email, password });
+  const user = createUser({ name, email, password, avatarEmoji });
   res.status(201).json({ user, token: user.id });
 });
 
@@ -75,6 +72,14 @@ app.use('/api', auth);
 
 app.get('/api/me', (req, res) => {
   res.json({ user: req.user, invites: getPendingInvitesForUser(req.user) });
+});
+
+app.put('/api/me', (req, res) => {
+  const user = updateUserProfile(req.user.id, {
+    avatarEmoji: req.body?.avatarEmoji
+  });
+  if (!user) return res.status(404).json({ message: 'User not found.' });
+  res.json({ user });
 });
 
 app.get('/api/dashboard', (req, res) => {

@@ -19,6 +19,7 @@ class User {
     required this.email,
     required this.initials,
     required this.avatarColor,
+    required this.avatarEmoji,
   });
 
   factory User.fromJson(Map<String, dynamic> json) {
@@ -28,6 +29,7 @@ class User {
       email: _string(json['email']),
       initials: _string(json['initials']),
       avatarColor: _string(json['avatarColor']),
+      avatarEmoji: _string(json['avatarEmoji']),
     );
   }
 
@@ -36,6 +38,7 @@ class User {
   final String email;
   final String initials;
   final String avatarColor;
+  final String avatarEmoji;
 }
 
 class DashboardData {
@@ -98,6 +101,7 @@ class CounterpartyBalance {
     required this.name,
     required this.initials,
     required this.avatarColor,
+    required this.avatarEmoji,
     required this.amount,
     required this.groups,
   });
@@ -108,6 +112,7 @@ class CounterpartyBalance {
       name: _string(json['name']),
       initials: _string(json['initials']),
       avatarColor: _string(json['avatarColor']),
+      avatarEmoji: _string(json['avatarEmoji']),
       amount: _double(json['amount']),
       groups: _list(json['groups'], (item) => GroupRef.fromJson(item)),
     );
@@ -117,6 +122,7 @@ class CounterpartyBalance {
   final String name;
   final String initials;
   final String avatarColor;
+  final String avatarEmoji;
   final double amount;
   final List<GroupRef> groups;
 }
@@ -127,6 +133,7 @@ class PersonBalance {
     required this.name,
     required this.initials,
     required this.avatarColor,
+    required this.avatarEmoji,
     required this.net,
     required this.paid,
     required this.owed,
@@ -138,6 +145,7 @@ class PersonBalance {
       name: _string(json['name']),
       initials: _string(json['initials']),
       avatarColor: _string(json['avatarColor']),
+      avatarEmoji: _string(json['avatarEmoji']),
       net: _double(json['net']),
       paid: _double(json['paid']),
       owed: _double(json['owed']),
@@ -148,6 +156,7 @@ class PersonBalance {
   final String name;
   final String initials;
   final String avatarColor;
+  final String avatarEmoji;
   final double net;
   final double paid;
   final double owed;
@@ -212,6 +221,7 @@ class GroupMember {
     required this.email,
     required this.initials,
     required this.avatarColor,
+    required this.avatarEmoji,
     required this.role,
   });
 
@@ -222,6 +232,7 @@ class GroupMember {
       email: _string(json['email']),
       initials: _string(json['initials']),
       avatarColor: _string(json['avatarColor']),
+      avatarEmoji: _string(json['avatarEmoji']),
       role: _string(json['role']),
     );
   }
@@ -231,6 +242,7 @@ class GroupMember {
   final String email;
   final String initials;
   final String avatarColor;
+  final String avatarEmoji;
   final String role;
 }
 
@@ -248,6 +260,38 @@ class PendingInvite {
   final String id;
   final String email;
   final String status;
+}
+
+class GroupInvite {
+  GroupInvite({
+    required this.id,
+    required this.groupId,
+    required this.groupName,
+    required this.groupType,
+    required this.invitedByName,
+    required this.role,
+    required this.createdAt,
+  });
+
+  factory GroupInvite.fromJson(Map<String, dynamic> json) {
+    return GroupInvite(
+      id: _string(json['id']),
+      groupId: _string(json['groupId']),
+      groupName: _string(json['groupName']),
+      groupType: _string(json['groupType']),
+      invitedByName: _string(json['invitedByName']),
+      role: _string(json['role']),
+      createdAt: _string(json['createdAt']),
+    );
+  }
+
+  final String id;
+  final String groupId;
+  final String groupName;
+  final String groupType;
+  final String invitedByName;
+  final String role;
+  final String createdAt;
 }
 
 class Expense {

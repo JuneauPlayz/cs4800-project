@@ -36,14 +36,14 @@ function ensureSettings(userId) {
 }
 
 export function getUserById(userId) {
-  return db.prepare('SELECT id, name, email, initials, avatar_color as avatarColor, created_at as createdAt FROM users WHERE id = ?').get(userId);
+  return db.prepare('SELECT id, name, email, initials, avatar_color as avatarColor, avatar_emoji as avatarEmoji, created_at as createdAt FROM users WHERE id = ?').get(userId);
 }
 
 export function getUserByEmail(email) {
-  return db.prepare('SELECT id, name, email, initials, avatar_color as avatarColor, password FROM users WHERE lower(email) = lower(?)').get(email);
+  return db.prepare('SELECT id, name, email, initials, avatar_color as avatarColor, avatar_emoji as avatarEmoji, password FROM users WHERE lower(email) = lower(?)').get(email);
 }
 
-export function createUser({ name, email, password }) {
+export function createUser({ name, email, password, avatarEmoji }) {
   const count = db.prepare('SELECT COUNT(*) as count FROM users').get().count;
   const normalizedEmail = email.trim().toLowerCase();
   const user = {
@@ -53,10 +53,11 @@ export function createUser({ name, email, password }) {
     password,
     initials: initials(name),
     avatarColor: avatarPalette[count % avatarPalette.length],
+    avatarEmoji: avatarEmoji || null,
     createdAt: new Date().toISOString()
   };
-  db.prepare('INSERT INTO users (id, name, email, password, initials, avatar_color, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
-    .run(user.id, user.name, user.email, user.password, user.initials, user.avatarColor, user.createdAt);
+  db.prepare('INSERT INTO users (id, name, email, password, initials, avatar_color, avatar_emoji, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(user.id, user.name, user.email, user.password, user.initials, user.avatarColor, user.avatarEmoji, user.createdAt);
   ensureSettings(user.id);
   createNotification(user.id, 'account', 'Account ready', `Welcome to SplitStack, ${user.name}. Your account is ready to use.`);
   const pendingInviteCount = db.prepare("SELECT COUNT(*) as count FROM group_invites WHERE lower(email) = lower(?) AND status = 'pending'").get(normalizedEmail).count;
@@ -64,6 +65,14 @@ export function createUser({ name, email, password }) {
     createNotification(user.id, 'invite', 'Pending invites ready', `You have ${pendingInviteCount} pending group invite${pendingInviteCount === 1 ? '' : 's'} waiting for this email.`);
   }
   return getUserById(user.id);
+}
+
+export function updateUserProfile(userId, { avatarEmoji }) {
+  const current = getUserById(userId);
+  if (!current) return null;
+  const normalizedAvatar = String(avatarEmoji || '').trim() || null;
+  db.prepare('UPDATE users SET avatar_emoji = ? WHERE id = ?').run(normalizedAvatar, userId);
+  return getUserById(userId);
 }
 
 export function createNotification(userId, type, title, body) {
@@ -90,7 +99,7 @@ export function getPendingInvitesForUser(user) {
 
 export function getMembersByGroup(groupId) {
   return db.prepare(`
-    SELECT u.id, u.name, u.email, u.initials, u.avatar_color as avatarColor, gm.role, gm.joined_at as joinedAt
+    SELECT u.id, u.name, u.email, u.initials, u.avatar_color as avatarColor, u.avatar_emoji as avatarEmoji, gm.role, gm.joined_at as joinedAt
     FROM group_members gm
     JOIN users u ON u.id = gm.user_id
     WHERE gm.group_id = ?
@@ -151,7 +160,7 @@ export function calculateBalances(userId) {
 
   const relatedUserIds = [...new Set(groups.flatMap((g) => g.members.map((m) => m.id)))];
   const userRows = relatedUserIds.length
-    ? db.prepare(`SELECT id, name, initials, avatar_color as avatarColor FROM users WHERE id IN (${relatedUserIds.map(() => '?').join(',')})`).all(...relatedUserIds)
+    ? db.prepare(`SELECT id, name, initials, avatar_color as avatarColor, avatar_emoji as avatarEmoji FROM users WHERE id IN (${relatedUserIds.map(() => '?').join(',')})`).all(...relatedUserIds)
     : [];
 
   const summary = Object.fromEntries(userRows.map((user) => [user.id, { ...user, paid: 0, owed: 0, net: 0 }]));
@@ -281,12 +290,12 @@ export function upsertSettings(nextSettings) {
     INSERT INTO user_settings (user_id, email_votes, email_balance, push_settlements, ai_proactive, profile_visibility, activity_visibility)
     VALUES (@userId, @emailVotes, @emailBalance, @pushSettlements, @aiProactive, @profileVisibility, @activityVisibility)
     ON CONFLICT(user_id) DO UPDATE SET
-      email_votes = excluded.emailVotes,
-      email_balance = excluded.emailBalance,
-      push_settlements = excluded.pushSettlements,
-      ai_proactive = excluded.aiProactive,
-      profile_visibility = excluded.profileVisibility,
-      activity_visibility = excluded.activityVisibility
+      email_votes = excluded.email_votes,
+      email_balance = excluded.email_balance,
+      push_settlements = excluded.push_settlements,
+      ai_proactive = excluded.ai_proactive,
+      profile_visibility = excluded.profile_visibility,
+      activity_visibility = excluded.activity_visibility
   `).run(nextSettings);
   return getSettings(nextSettings.userId);
 }
@@ -579,7 +588,7 @@ export function getChallenges(userId) {
     ORDER BY c.created_at DESC
   `).all(...groupIds);
   const contribStmt = db.prepare(`
-    SELECT cc.id, cc.user_id as userId, cc.amount, cc.created_at as createdAt, u.name, u.initials, u.avatar_color as avatarColor
+    SELECT cc.id, cc.user_id as userId, cc.amount, cc.created_at as createdAt, u.name, u.initials, u.avatar_color as avatarColor, u.avatar_emoji as avatarEmoji
     FROM challenge_contributions cc
     JOIN users u ON u.id = cc.user_id
     WHERE cc.challenge_id = ?
@@ -690,7 +699,7 @@ export function respondToInvitation(invitationId, userId, decision) {
   if (!invite) throw new Error('Invitation not found.');
   if (invite.status !== 'pending') throw new Error('Invitation has already been responded to.');
 
-  const user = db.prepare('SELECT id, name, initials, avatar_color as avatarColor FROM users WHERE id = ?').get(userId);
+  const user = db.prepare('SELECT id, name, initials, avatar_color as avatarColor, avatar_emoji as avatarEmoji FROM users WHERE id = ?').get(userId);
   if (!user) throw new Error('User not found.');
 
   db.prepare('UPDATE group_invitations SET status = ?, invited_user_id = ? WHERE id = ?').run(decision, userId, invitationId);
