@@ -91,6 +91,11 @@ class ApiClient {
     return AnalyticsData.fromJson(json);
   }
 
+  Future<ChallengeData> getChallenges(String token) async {
+    final json = await _request('GET', '/api/challenges', token: token);
+    return ChallengeData.fromJson(json);
+  }
+
   Future<SettingsData> getSettings(String token) async {
     final json = await _request('GET', '/api/settings', token: token);
     return SettingsData.fromJson(
@@ -122,6 +127,41 @@ class ApiClient {
 
   Future<void> leaveGroup(String token, {required String groupId}) {
     return _request('DELETE', '/api/groups/$groupId/membership', token: token);
+  }
+
+  Future<void> createChallenge(
+    String token, {
+    required String groupId,
+    required String name,
+    required String description,
+    required double goal,
+    String endDate = '',
+  }) {
+    return _request(
+      'POST',
+      '/api/challenges',
+      token: token,
+      body: {
+        'groupId': groupId,
+        'name': name,
+        'description': description,
+        'goal': goal,
+        if (endDate.isNotEmpty) 'endDate': endDate,
+      },
+    );
+  }
+
+  Future<void> contributeToChallenge(
+    String token, {
+    required String challengeId,
+    required double amount,
+  }) {
+    return _request(
+      'POST',
+      '/api/challenges/$challengeId/contribute',
+      token: token,
+      body: {'amount': amount},
+    );
   }
 
   Future<void> respondToInvite(
@@ -217,6 +257,8 @@ class ApiClient {
         response = await _client.post(uri, headers: headers, body: encoded);
       case 'PUT':
         response = await _client.put(uri, headers: headers, body: encoded);
+      case 'DELETE':
+        response = await _client.delete(uri, headers: headers, body: encoded);
       default:
         throw UnsupportedError('Unsupported method $method');
     }

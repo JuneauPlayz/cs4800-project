@@ -339,10 +339,43 @@ export function createSettlement({ userId, expenseId, method = 'Other', note = '
   const id = makeId('set');
   const normalizedMethod = String(method || 'Other').trim() || 'Other';
   const createdAt = new Date().toISOString();
+  const settlementCols = db.pragma('table_info(settlements)').map((c) => c.name);
+  const settlementRow = {
+    id,
+    group_id: expense.groupId,
+    expense_id: expense.id,
+    from_user: userId,
+    to_user: expense.paidBy,
+    payer_id: userId,
+    payee_id: expense.paidBy,
+    amount: paymentAmount,
+    method: normalizedMethod,
+    note: String(note || '').trim() || null,
+    status: 'completed',
+    created_at: createdAt,
+    completed_by: userId,
+    completed_at: createdAt
+  };
+  const insertCols = [
+    'id',
+    'group_id',
+    'expense_id',
+    'from_user',
+    'to_user',
+    'payer_id',
+    'payee_id',
+    'amount',
+    'method',
+    'note',
+    'status',
+    'created_at',
+    'completed_by',
+    'completed_at'
+  ].filter((column) => settlementCols.includes(column));
   db.prepare(`
-    INSERT INTO settlements (id, group_id, expense_id, from_user, to_user, amount, method, note, status, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'completed', ?)
-  `).run(id, expense.groupId, expense.id, userId, expense.paidBy, paymentAmount, normalizedMethod, String(note || '').trim() || null, createdAt);
+    INSERT INTO settlements (${insertCols.join(', ')})
+    VALUES (${insertCols.map(() => '?').join(', ')})
+  `).run(...insertCols.map((column) => settlementRow[column]));
 
   const fromUser = getUserById(userId);
   createNotification(userId, 'settlement', 'Payment recorded', `${moneyLike(paymentAmount)} marked paid for ${expense.description} via ${normalizedMethod}.`);
@@ -394,6 +427,13 @@ export function getSettings(userId) {
 }
 
 export function upsertSettings(nextSettings) {
+  const normalized = {
+    ...nextSettings,
+    emailVotes: nextSettings.emailVotes ? 1 : 0,
+    emailBalance: nextSettings.emailBalance ? 1 : 0,
+    pushSettlements: nextSettings.pushSettlements ? 1 : 0,
+    aiProactive: nextSettings.aiProactive ? 1 : 0
+  };
   db.prepare(`
     INSERT INTO user_settings (user_id, email_votes, email_balance, push_settlements, ai_proactive, profile_visibility, activity_visibility)
     VALUES (@userId, @emailVotes, @emailBalance, @pushSettlements, @aiProactive, @profileVisibility, @activityVisibility)
@@ -404,8 +444,8 @@ export function upsertSettings(nextSettings) {
       ai_proactive = excluded.ai_proactive,
       profile_visibility = excluded.profile_visibility,
       activity_visibility = excluded.activity_visibility
-  `).run(nextSettings);
-  return getSettings(nextSettings.userId);
+  `).run(normalized);
+  return getSettings(normalized.userId);
 }
 
 function createInvites(groupId, userId, inviteEntries = []) {
@@ -741,17 +781,30 @@ export function generateAiReply(userId, question) {
   const balances = calculateBalances(userId);
   const analytics = getAnalytics(userId);
   const pendingVotes = getVotes(userId).filter((vote) => vote.status === 'pending');
+  const expenses = getExpenses(userId);
+  const groups = getGroups(userId);
+  const challenges = getChallenges(userId).challenges;
   const lower = question.toLowerCase();
-  if (lower.includes('owe')) {
+  if (lower.includes('owe') || lower.includes('balance') || lower.includes('settle') || lower.includes('pay')) {
     const top = balances.people[0];
-    return top ? `${top.name} has the largest current imbalance at ${moneyLike(top.net)}. Your overall net balance is ${moneyLike(balances.net)}.` : 'There are no active balances yet.';
+    const youOwe = balances.youOwe[0];
+    const owedToYou = balances.owedToYou[0];
+    if (!top) return 'There are no active balances yet.';
+    return [
+      `Your net balance is ${moneyLike(balances.net)}.`,
+      youOwe ? `Your largest payment due is ${moneyLike(youOwe.amount)} to ${youOwe.name}.` : 'You do not owe anyone right now.',
+      owedToYou ? `${owedToYou.name} owes you ${moneyLike(owedToYou.amount)}.` : 'No one currently owes you.'
+    ].join(' ');
   }
-  if (lower.includes('grocery')) {
-    const groceries = analytics.byCategory.find((item) => item.category.toLowerCase() === 'groceries');
-    return `Groceries total ${moneyLike(groceries?.total ?? 0)} across your active groups. The biggest category overall is ${analytics.byCategory[0]?.category ?? 'none yet'} at ${moneyLike(analytics.byCategory[0]?.total ?? 0)}.`;
+  if (lower.includes('grocery') || lower.includes('category') || lower.includes('spend') || lower.includes('spent')) {
+    const requestedCategory = analytics.byCategory.find((item) => lower.includes(item.category.toLowerCase()));
+    const top = requestedCategory || analytics.byCategory[0];
+    return top
+      ? `${top.category} spending is ${moneyLike(top.total)}. This month you have ${expenses.length} approved expense${expenses.length === 1 ? '' : 's'} totaling ${moneyLike(analytics.monthTotal)}, with an average expense of ${moneyLike(analytics.avgExpense)}.`
+      : 'There is not enough expense data yet to summarize spending.';
   }
-  if (lower.includes('challenge')) {
-    const challenge = getChallenges(userId).challenges[0];
+  if (lower.includes('challenge') || lower.includes('goal') || lower.includes('budget')) {
+    const challenge = challenges[0];
     return challenge ? `${challenge.name} is currently at ${moneyLike(challenge.current)} out of ${moneyLike(challenge.goal)} in ${challenge.groupName}.` : 'No challenges exist yet. Create one on the Challenges page.';
   }
   if (lower.includes('vote')) {
@@ -759,7 +812,24 @@ export function generateAiReply(userId, question) {
     const vote = pendingVotes[0];
     return `The current pending vote is ${vote.description} for ${moneyLike(vote.amount)} in ${vote.groupName}. ${vote.decisions.length} decision(s) have been logged so far.`;
   }
-  return `You have ${pendingVotes.length} pending vote${pendingVotes.length === 1 ? '' : 's'} and your current net balance is ${moneyLike(balances.net)}. Your top spending category is ${analytics.byCategory[0]?.category ?? 'not enough data yet'}.`;
+  if (lower.includes('group')) {
+    const topGroup = analytics.byGroup.slice().sort((a, b) => b.total - a.total)[0];
+    return topGroup
+      ? `${topGroup.name} has the highest tracked spend at ${moneyLike(topGroup.total)}. You are in ${groups.length} active group${groups.length === 1 ? '' : 's'}.`
+      : `You are in ${groups.length} active group${groups.length === 1 ? '' : 's'}, but there is no spending to compare yet.`;
+  }
+  if (lower.includes('receipt') || lower.includes('scan')) {
+    const withReceipts = expenses.filter((expense) => expense.receiptUrl).length;
+    return `${withReceipts} of your ${expenses.length} approved expense${expenses.length === 1 ? '' : 's'} currently have receipt images attached.`;
+  }
+  const topCategory = analytics.byCategory[0];
+  const topGroup = analytics.byGroup.slice().sort((a, b) => b.total - a.total)[0];
+  return [
+    `I can help with that using your SplitStack data.`,
+    `Your net balance is ${moneyLike(balances.net)}, you have ${pendingVotes.length} pending vote${pendingVotes.length === 1 ? '' : 's'}, and ${expenses.length} approved expense${expenses.length === 1 ? '' : 's'}.`,
+    topCategory ? `Top category: ${topCategory.category} at ${moneyLike(topCategory.total)}.` : 'No top category yet.',
+    topGroup ? `Top group: ${topGroup.name} at ${moneyLike(topGroup.total)}.` : ''
+  ].filter(Boolean).join(' ');
 }
 
 function moneyLike(value) {

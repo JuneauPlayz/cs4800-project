@@ -24,6 +24,7 @@ class AppController extends ChangeNotifier {
   List<GroupInvite> invites = const [];
   List<Expense> expenses = const [];
   List<Vote> votes = const [];
+  ChallengeData? challengeData;
   SettingsData? settings;
   List<ChatMessage> chatMessages = [
     ChatMessage(
@@ -91,6 +92,7 @@ class AppController extends ChangeNotifier {
         apiClient.getVotes(token),
         apiClient.getAnalytics(token),
         apiClient.getSettings(token),
+        apiClient.getChallenges(token),
       ]);
 
       user = results[0] as User;
@@ -101,6 +103,7 @@ class AppController extends ChangeNotifier {
       votes = results[5] as List<Vote>;
       analytics = results[6] as AnalyticsData;
       settings = results[7] as SettingsData;
+      challengeData = results[8] as ChallengeData;
       errorMessage = null;
     } catch (error) {
       final message = error.toString();
@@ -187,6 +190,54 @@ class AppController extends ChangeNotifier {
         expenseId: expenseId,
         method: method,
         note: note,
+      );
+      await refreshAll(showLoader: false);
+    } finally {
+      loading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> createChallenge({
+    required String groupId,
+    required String name,
+    required String description,
+    required double goal,
+    String endDate = '',
+  }) async {
+    final token = _requireToken();
+    loading = true;
+    errorMessage = null;
+    notifyListeners();
+    try {
+      await apiClient.createChallenge(
+        token,
+        groupId: groupId,
+        name: name,
+        description: description,
+        goal: goal,
+        endDate: endDate,
+      );
+      await refreshAll(showLoader: false);
+    } finally {
+      loading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> contributeToChallenge({
+    required String challengeId,
+    required double amount,
+  }) async {
+    final token = _requireToken();
+    loading = true;
+    errorMessage = null;
+    notifyListeners();
+    try {
+      await apiClient.contributeToChallenge(
+        token,
+        challengeId: challengeId,
+        amount: amount,
       );
       await refreshAll(showLoader: false);
     } finally {
@@ -291,6 +342,7 @@ class AppController extends ChangeNotifier {
     invites = const [];
     expenses = const [];
     votes = const [];
+    challengeData = null;
     settings = null;
     chatMessages = [
       ChatMessage(

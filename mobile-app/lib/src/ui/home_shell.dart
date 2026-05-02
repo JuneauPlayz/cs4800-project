@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../core/app_theme.dart';
@@ -28,6 +29,15 @@ const _payoutMethods = [
   'Apple Cash',
   'PayPal',
   'Other',
+];
+
+const _assistantSuggestions = [
+  'Who do I owe right now?',
+  'What is my top spending category?',
+  'Which group spent the most?',
+  'Do I have pending votes?',
+  'How many receipts are attached?',
+  'How are my challenges doing?',
 ];
 
 const _avatarSeeds = [
@@ -63,6 +73,7 @@ class _HomeShellState extends State<HomeShell> {
     'Groups',
     'Add Expense',
     'Voting',
+    'Challenges',
     'Settings',
   ];
 
@@ -73,6 +84,7 @@ class _HomeShellState extends State<HomeShell> {
       _GroupsTab(controller: widget.controller),
       _AddExpenseTab(controller: widget.controller),
       _VotesTab(controller: widget.controller),
+      _ChallengesTab(controller: widget.controller),
       _SettingsTab(controller: widget.controller),
     ];
 
@@ -136,6 +148,11 @@ class _HomeShellState extends State<HomeShell> {
                 icon: Icon(Icons.how_to_vote_outlined),
                 selectedIcon: Icon(Icons.how_to_vote_rounded),
                 label: 'Votes',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.emoji_events_outlined),
+                selectedIcon: Icon(Icons.emoji_events_rounded),
+                label: 'Goals',
               ),
               NavigationDestination(
                 icon: Icon(Icons.settings_outlined),
@@ -361,7 +378,7 @@ class _DashboardTab extends StatelessWidget {
   Future<void> _showPaymentSheet(BuildContext context, Expense expense) async {
     final noteController = TextEditingController();
     String method = _payoutMethods.first;
-    final paid = await showModalBottomSheet<bool>(
+    final payment = await showModalBottomSheet<Map<String, String>>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
@@ -380,7 +397,7 @@ class _DashboardTab extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Mark payment',
+                    'Pay expense',
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
                   const SizedBox(height: 8),
@@ -412,28 +429,12 @@ class _DashboardTab extends StatelessWidget {
                   ),
                   const SizedBox(height: 18),
                   FilledButton.icon(
-                    onPressed: () async {
-                      try {
-                        await controller.recordExpensePayment(
-                          expenseId: expense.id,
-                          method: method,
-                          note: noteController.text.trim(),
-                        );
-                        if (context.mounted) Navigator.of(context).pop(true);
-                      } catch (_) {
-                        if (!context.mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              controller.errorMessage ??
-                                  'Unable to record payment.',
-                            ),
-                          ),
-                        );
-                      }
-                    },
-                    icon: const Icon(Icons.check_circle_rounded),
-                    label: const Text('Mark as paid'),
+                    onPressed: () => Navigator.of(context).pop({
+                      'method': method,
+                      'note': noteController.text.trim(),
+                    }),
+                    icon: const Icon(Icons.payments_rounded),
+                    label: const Text('Pay'),
                   ),
                 ],
               ),
@@ -443,10 +444,26 @@ class _DashboardTab extends StatelessWidget {
       },
     );
     noteController.dispose();
-    if (paid == true && context.mounted) {
+    if (payment == null || !context.mounted) return;
+    try {
+      await controller.recordExpensePayment(
+        expenseId: expense.id,
+        method: payment['method'] ?? _payoutMethods.first,
+        note: payment['note'] ?? '',
+      );
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(controller.errorMessage ?? 'Unable to record payment.'),
+        ),
+      );
+      return;
+    }
+    if (context.mounted) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('Payment recorded.')));
+      ).showSnackBar(const SnackBar(content: Text('Expense marked paid.')));
     }
   }
 }
@@ -621,6 +638,7 @@ class _AddExpenseTabState extends State<_AddExpenseTab> {
   String? _receiptMimeType;
   String? _receiptSourceLabel;
   bool _pickingReceipt = false;
+  bool _scanningReceipt = false;
   final Map<String, TextEditingController> _splitControllers = {};
 
   @override
@@ -762,6 +780,7 @@ class _AddExpenseTabState extends State<_AddExpenseTab> {
                     fileName: _receiptFileName,
                     sourceLabel: _receiptSourceLabel,
                     picking: _pickingReceipt,
+                    scanning: _scanningReceipt,
                     onUpload: () => _pickReceipt(ImageSource.gallery),
                     onCamera: () => _pickReceipt(ImageSource.camera),
                     onRemove: _clearReceipt,
@@ -974,6 +993,7 @@ class _AddExpenseTabState extends State<_AddExpenseTab> {
             ? 'Camera capture'
             : 'Uploaded image';
       });
+      await _scanReceipt(picked.path);
     } catch (_) {
       if (mounted) {
         _showMessage('Unable to attach receipt image.');
@@ -985,6 +1005,50 @@ class _AddExpenseTabState extends State<_AddExpenseTab> {
     }
   }
 
+  Future<void> _scanReceipt(String imagePath) async {
+    if (imagePath.isEmpty) return;
+    setState(() => _scanningReceipt = true);
+    final recognizer = TextRecognizer(script: TextRecognitionScript.latin);
+    try {
+      final result = await recognizer.processImage(
+        InputImage.fromFilePath(imagePath),
+      );
+      final details = _parseReceiptText(result.text);
+      if (!mounted) return;
+      setState(() {
+        if (details.description != null) {
+          _descriptionController.text = details.description!;
+        }
+        if (details.amount != null) {
+          _amountController.text = details.amount!.toStringAsFixed(2);
+        }
+        if (details.date != null) {
+          _expenseDate = details.date!;
+        }
+        _syncSplitControllers();
+      });
+      final found = [
+        if (details.description != null) 'description',
+        if (details.amount != null) 'amount',
+        if (details.date != null) 'date',
+      ];
+      _showMessage(
+        found.isEmpty
+            ? 'Receipt attached. Review and enter any missing details.'
+            : 'Receipt scan filled ${found.join(', ')}. Review before submitting.',
+      );
+    } catch (_) {
+      if (mounted) {
+        _showMessage('Receipt attached, but text scan was not readable.');
+      }
+    } finally {
+      await recognizer.close();
+      if (mounted) {
+        setState(() => _scanningReceipt = false);
+      }
+    }
+  }
+
   void _clearReceipt({bool showUpdate = true}) {
     if (showUpdate) {
       setState(() {
@@ -992,6 +1056,7 @@ class _AddExpenseTabState extends State<_AddExpenseTab> {
         _receiptFileName = null;
         _receiptMimeType = null;
         _receiptSourceLabel = null;
+        _scanningReceipt = false;
       });
       return;
     }
@@ -999,6 +1064,7 @@ class _AddExpenseTabState extends State<_AddExpenseTab> {
     _receiptFileName = null;
     _receiptMimeType = null;
     _receiptSourceLabel = null;
+    _scanningReceipt = false;
   }
 
   Future<void> _pickExpenseDate() async {
@@ -1019,6 +1085,7 @@ class _ReceiptScannerPanel extends StatelessWidget {
     required this.fileName,
     required this.sourceLabel,
     required this.picking,
+    required this.scanning,
     required this.onUpload,
     required this.onCamera,
     required this.onRemove,
@@ -1028,6 +1095,7 @@ class _ReceiptScannerPanel extends StatelessWidget {
   final String? fileName;
   final String? sourceLabel;
   final bool picking;
+  final bool scanning;
   final VoidCallback onUpload;
   final VoidCallback onCamera;
   final VoidCallback onRemove;
@@ -1070,9 +1138,11 @@ class _ReceiptScannerPanel extends StatelessWidget {
                 ),
               ],
             ),
-            if (picking) ...[
+            if (picking || scanning) ...[
               const SizedBox(height: 12),
               const LinearProgressIndicator(minHeight: 3),
+              const SizedBox(height: 8),
+              Text(scanning ? 'Scanning receipt text...' : 'Opening picker...'),
             ],
             if (imageBytes != null) ...[
               const SizedBox(height: 14),
@@ -1106,6 +1176,136 @@ class _ReceiptScannerPanel extends StatelessWidget {
       ),
     );
   }
+}
+
+class _ReceiptDetails {
+  const _ReceiptDetails({this.description, this.amount, this.date});
+
+  final String? description;
+  final double? amount;
+  final DateTime? date;
+}
+
+_ReceiptDetails _parseReceiptText(String rawText) {
+  final lines = rawText
+      .split(RegExp(r'\r?\n'))
+      .map((line) => line.trim())
+      .where((line) => line.isNotEmpty)
+      .toList();
+  return _ReceiptDetails(
+    description: _receiptDescription(lines),
+    amount: _receiptAmount(lines),
+    date: _receiptDate(rawText),
+  );
+}
+
+String? _receiptDescription(List<String> lines) {
+  final ignored = RegExp(
+    r'(receipt|invoice|order|cashier|terminal|subtotal|total|tax|visa|mastercard|amex|debit|credit|change|balance)',
+    caseSensitive: false,
+  );
+  for (final line in lines.take(8)) {
+    final cleaned = line.replaceAll(RegExp(r"[^A-Za-z0-9 &.'-]"), '').trim();
+    if (cleaned.length >= 3 && !ignored.hasMatch(cleaned)) {
+      return cleaned;
+    }
+  }
+  return null;
+}
+
+double? _receiptAmount(List<String> lines) {
+  final moneyPattern = RegExp(
+    r'(?<!\d)(?:\$)?\s*(\d{1,4}(?:,\d{3})*(?:\.\d{2}))(?!\d)',
+  );
+  final totalWords = RegExp(
+    r'(grand\s+total|amount\s+due|balance\s+due|total)',
+    caseSensitive: false,
+  );
+  final ignoreWords = RegExp(
+    r'(subtotal|tax|tip|change|cash|card|visa|mastercard|amex)',
+    caseSensitive: false,
+  );
+
+  for (var i = lines.length - 1; i >= 0; i--) {
+    final line = lines[i];
+    if (!totalWords.hasMatch(line) || ignoreWords.hasMatch(line)) continue;
+    final matches = moneyPattern.allMatches(line).toList();
+    if (matches.isNotEmpty) {
+      return _moneyValue(matches.last.group(1));
+    }
+    if (i + 1 < lines.length) {
+      final nextMatches = moneyPattern.allMatches(lines[i + 1]).toList();
+      if (nextMatches.isNotEmpty) {
+        return _moneyValue(nextMatches.last.group(1));
+      }
+    }
+  }
+
+  final allAmounts = <double>[];
+  for (final line in lines) {
+    if (ignoreWords.hasMatch(line)) continue;
+    for (final match in moneyPattern.allMatches(line)) {
+      final value = _moneyValue(match.group(1));
+      if (value != null && value > 0) allAmounts.add(value);
+    }
+  }
+  if (allAmounts.isEmpty) return null;
+  allAmounts.sort();
+  return allAmounts.last;
+}
+
+double? _moneyValue(String? raw) {
+  if (raw == null) return null;
+  return double.tryParse(raw.replaceAll(',', '').trim());
+}
+
+DateTime? _receiptDate(String rawText) {
+  final numeric = RegExp(
+    r'\b(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})\b',
+  ).firstMatch(rawText);
+  if (numeric != null) {
+    final first = int.tryParse(numeric.group(1)!);
+    final second = int.tryParse(numeric.group(2)!);
+    var year = int.tryParse(numeric.group(3)!);
+    if (first != null && second != null && year != null) {
+      if (year < 100) year += 2000;
+      final month = first > 12 ? second : first;
+      final day = first > 12 ? first : second;
+      final parsed = DateTime.tryParse(
+        '${year.toString().padLeft(4, '0')}-${month.toString().padLeft(2, '0')}-${day.toString().padLeft(2, '0')}',
+      );
+      if (parsed != null) return parsed;
+    }
+  }
+
+  final wordDate = RegExp(
+    r'\b(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+(\d{1,2}),?\s+(\d{2,4})\b',
+    caseSensitive: false,
+  ).firstMatch(rawText);
+  if (wordDate == null) return null;
+  const months = {
+    'jan': 1,
+    'feb': 2,
+    'mar': 3,
+    'apr': 4,
+    'may': 5,
+    'jun': 6,
+    'jul': 7,
+    'aug': 8,
+    'sep': 9,
+    'sept': 9,
+    'oct': 10,
+    'nov': 11,
+    'dec': 12,
+  };
+  final month = months[wordDate.group(1)!.toLowerCase()];
+  final day = int.tryParse(wordDate.group(2)!);
+  var year = int.tryParse(wordDate.group(3)!);
+  if (month == null || day == null || year == null) return null;
+  if (year < 100) year += 2000;
+  return DateTime.tryParse(
+    '${year.toString().padLeft(4, '0')}-${month.toString().padLeft(2, '0')}-${day.toString().padLeft(2, '0')}',
+  );
 }
 
 class _VotesTab extends StatelessWidget {
@@ -1163,6 +1363,489 @@ class _VotesTab extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class _ChallengesTab extends StatelessWidget {
+  const _ChallengesTab({required this.controller});
+
+  final AppController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final data = controller.challengeData;
+    if (data == null) {
+      return const _CenteredState(
+        icon: Icons.emoji_events_rounded,
+        title: 'Loading challenges',
+        subtitle: 'Pulling group goals and progress from the API.',
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: () => controller.refreshAll(showLoader: false),
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+        children: [
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Group challenges',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Create shared savings or spending goals, then track contributions from the group.',
+                  ),
+                  const SizedBox(height: 16),
+                  FilledButton.icon(
+                    onPressed: controller.groups.isEmpty || controller.loading
+                        ? null
+                        : () => showModalBottomSheet<void>(
+                            context: context,
+                            isScrollControlled: true,
+                            useSafeArea: true,
+                            builder: (_) =>
+                                _NewChallengeSheet(controller: controller),
+                          ),
+                    icon: const Icon(Icons.add_rounded),
+                    label: const Text('New challenge'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          if (data.rings.isNotEmpty) ...[
+            _SectionTitle(
+              title: 'Progress snapshot',
+              subtitle: 'Top active challenge progress.',
+            ),
+            const SizedBox(height: 10),
+            ...data.rings.map((ring) => _ChallengeRingTile(ring: ring)),
+            const SizedBox(height: 16),
+          ],
+          _SectionTitle(
+            title: 'Active challenges',
+            subtitle: 'Contribute when your group makes progress.',
+          ),
+          const SizedBox(height: 10),
+          if (data.challenges.isEmpty)
+            const _CenteredState(
+              icon: Icons.flag_rounded,
+              title: 'No challenges yet',
+              subtitle: 'Create a challenge for a group goal or budget target.',
+            )
+          else
+            ...data.challenges.map(
+              (challenge) =>
+                  _ChallengeCard(challenge: challenge, controller: controller),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ChallengeRingTile extends StatelessWidget {
+  const _ChallengeRingTile({required this.ring});
+
+  final ChallengeRing ring;
+
+  @override
+  Widget build(BuildContext context) {
+    final ratio = ring.max <= 0 ? 0.0 : (ring.value / ring.max).clamp(0.0, 1.0);
+    final color = colorFromHex(ring.color);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 54,
+              height: 54,
+              child: CircularProgressIndicator(
+                value: ratio,
+                strokeWidth: 7,
+                backgroundColor: const Color(0xFFE2E8F0),
+                valueColor: AlwaysStoppedAnimation<Color>(color),
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    ring.label,
+                    style: const TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 4),
+                  Text('${money(ring.value)} of ${money(ring.max)}'),
+                ],
+              ),
+            ),
+            Text('${(ratio * 100).round()}%'),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ChallengeCard extends StatelessWidget {
+  const _ChallengeCard({required this.challenge, required this.controller});
+
+  final Challenge challenge;
+  final AppController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final ratio = challenge.goal <= 0
+        ? 0.0
+        : (challenge.current / challenge.goal).clamp(0.0, 1.0);
+    final remaining = (challenge.goal - challenge.current).clamp(
+      0.0,
+      double.infinity,
+    );
+    final color = colorFromHex(challenge.color);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  CircleAvatar(
+                    backgroundColor: color.withValues(alpha: 0.14),
+                    foregroundColor: color,
+                    child: const Icon(Icons.emoji_events_rounded),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          challenge.name,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        Text(
+                          '${challenge.groupName} • by ${challenge.createdByName}',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              if (challenge.description.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Text(challenge.description),
+              ],
+              const SizedBox(height: 14),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(999),
+                child: LinearProgressIndicator(
+                  minHeight: 10,
+                  value: ratio,
+                  backgroundColor: const Color(0xFFE2E8F0),
+                  valueColor: AlwaysStoppedAnimation<Color>(color),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Text(
+                    '${money(challenge.current)} / ${money(challenge.goal)}',
+                    style: const TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                  const Spacer(),
+                  Text('${money(remaining)} left'),
+                ],
+              ),
+              if (challenge.endDate.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'Ends ${formatDate(challenge.endDate)}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+              if (challenge.contributions.isNotEmpty) ...[
+                const SizedBox(height: 14),
+                Text(
+                  'Recent contributions',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                const SizedBox(height: 6),
+                ...challenge.contributions.take(3).map((contribution) {
+                  return ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    leading: _ProfileAvatar(
+                      initials: contribution.initials,
+                      avatarColor: contribution.avatarColor,
+                      avatarEmoji: contribution.avatarEmoji,
+                      radius: 16,
+                    ),
+                    title: Text(contribution.name),
+                    trailing: Text(money(contribution.amount)),
+                  );
+                }),
+              ],
+              const SizedBox(height: 14),
+              OutlinedButton.icon(
+                onPressed: controller.loading
+                    ? null
+                    : () => _showContributionSheet(context),
+                icon: const Icon(Icons.add_card_rounded),
+                label: const Text('Add contribution'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showContributionSheet(BuildContext context) async {
+    final amountController = TextEditingController();
+    final amount = await showModalBottomSheet<double>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (sheetContext) {
+        return Padding(
+          padding: EdgeInsets.fromLTRB(
+            20,
+            20,
+            20,
+            MediaQuery.of(sheetContext).viewInsets.bottom + 20,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Add contribution',
+                style: Theme.of(sheetContext).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: amountController,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                decoration: const InputDecoration(labelText: 'Amount'),
+              ),
+              const SizedBox(height: 18),
+              FilledButton.icon(
+                onPressed: () {
+                  final amount = double.tryParse(amountController.text.trim());
+                  if (amount == null || amount <= 0) return;
+                  Navigator.of(sheetContext).pop(amount);
+                },
+                icon: const Icon(Icons.check_rounded),
+                label: const Text('Add'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    amountController.dispose();
+    if (amount == null || !context.mounted) return;
+    try {
+      await controller.contributeToChallenge(
+        challengeId: challenge.id,
+        amount: amount,
+      );
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Contribution added.')));
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            controller.errorMessage ?? 'Unable to add contribution.',
+          ),
+        ),
+      );
+    }
+  }
+}
+
+class _NewChallengeSheet extends StatefulWidget {
+  const _NewChallengeSheet({required this.controller});
+
+  final AppController controller;
+
+  @override
+  State<_NewChallengeSheet> createState() => _NewChallengeSheetState();
+}
+
+class _NewChallengeSheetState extends State<_NewChallengeSheet> {
+  final _formKey = GlobalKey<FormState>();
+  final _nameController = TextEditingController();
+  final _descriptionController = TextEditingController();
+  final _goalController = TextEditingController();
+  String? _groupId;
+  DateTime? _endDate;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.controller.groups.isNotEmpty) {
+      _groupId = widget.controller.groups.first.id;
+    }
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _descriptionController.dispose();
+    _goalController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final groups = widget.controller.groups;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        20,
+        20,
+        20,
+        MediaQuery.of(context).viewInsets.bottom + 20,
+      ),
+      child: Form(
+        key: _formKey,
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            const Text(
+              'New challenge',
+              style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<String>(
+              initialValue: _groupId,
+              decoration: const InputDecoration(labelText: 'Group'),
+              items: groups
+                  .map(
+                    (group) => DropdownMenuItem(
+                      value: group.id,
+                      child: Text('${group.emoji} ${group.name}'),
+                    ),
+                  )
+                  .toList(),
+              validator: (value) => value == null ? 'Choose a group' : null,
+              onChanged: (value) => setState(() => _groupId = value),
+            ),
+            const SizedBox(height: 14),
+            TextFormField(
+              controller: _nameController,
+              decoration: const InputDecoration(labelText: 'Challenge name'),
+              validator: (value) =>
+                  (value ?? '').trim().isEmpty ? 'Enter a name' : null,
+            ),
+            const SizedBox(height: 14),
+            TextFormField(
+              controller: _descriptionController,
+              minLines: 2,
+              maxLines: 3,
+              decoration: const InputDecoration(labelText: 'Description'),
+              validator: (value) =>
+                  (value ?? '').trim().isEmpty ? 'Enter a description' : null,
+            ),
+            const SizedBox(height: 14),
+            TextFormField(
+              controller: _goalController,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              decoration: const InputDecoration(labelText: 'Goal amount'),
+              validator: (value) {
+                final goal = double.tryParse((value ?? '').trim());
+                if (goal == null || goal <= 0) return 'Enter a valid goal';
+                return null;
+              },
+            ),
+            const SizedBox(height: 14),
+            InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: _pickEndDate,
+              child: InputDecorator(
+                decoration: const InputDecoration(
+                  labelText: 'End date optional',
+                  suffixIcon: Icon(Icons.calendar_today_rounded),
+                ),
+                child: Text(
+                  _endDate == null
+                      ? 'No end date'
+                      : formatDate(_datePayload(_endDate!)),
+                ),
+              ),
+            ),
+            const SizedBox(height: 18),
+            FilledButton(
+              onPressed: widget.controller.loading ? null : _submit,
+              child: const Text('Create challenge'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickEndDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _endDate ?? DateTime.now().add(const Duration(days: 30)),
+      firstDate: DateTime.now(),
+      lastDate: DateTime.now().add(const Duration(days: 730)),
+    );
+    if (picked == null || !mounted) return;
+    setState(() => _endDate = picked);
+  }
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+    try {
+      await widget.controller.createChallenge(
+        groupId: _groupId!,
+        name: _nameController.text.trim(),
+        description: _descriptionController.text.trim(),
+        goal: double.parse(_goalController.text.trim()),
+        endDate: _endDate == null ? '' : _datePayload(_endDate!),
+      );
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Challenge created.')));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            widget.controller.errorMessage ?? 'Unable to create challenge.',
+          ),
+        ),
+      );
+    }
   }
 }
 
@@ -1460,36 +2143,62 @@ class _AssistantScreenState extends State<AssistantScreen> {
                 top: false,
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                  child: Row(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _inputController,
-                          decoration: const InputDecoration(
-                            hintText: 'Ask about balances or spending',
-                          ),
-                          onSubmitted: (_) => _send(),
+                      SizedBox(
+                        height: 42,
+                        child: ListView.separated(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: _assistantSuggestions.length,
+                          separatorBuilder: (context, index) =>
+                              const SizedBox(width: 8),
+                          itemBuilder: (context, index) {
+                            final suggestion = _assistantSuggestions[index];
+                            return ActionChip(
+                              label: Text(suggestion),
+                              onPressed: widget.controller.sendingChat
+                                  ? null
+                                  : () => _send(suggestion),
+                            );
+                          },
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      FilledButton(
-                        onPressed: widget.controller.sendingChat ? null : _send,
-                        style: FilledButton.styleFrom(
-                          minimumSize: const Size(54, 54),
-                          padding: EdgeInsets.zero,
-                        ),
-                        child: widget.controller.sendingChat
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2.2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                    Colors.white,
-                                  ),
-                                ),
-                              )
-                            : const Icon(Icons.send_rounded),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _inputController,
+                              decoration: const InputDecoration(
+                                hintText: 'Ask anything about your SplitStack',
+                              ),
+                              onSubmitted: (_) => _send(),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          FilledButton(
+                            onPressed: widget.controller.sendingChat
+                                ? null
+                                : () => _send(),
+                            style: FilledButton.styleFrom(
+                              minimumSize: const Size(54, 54),
+                              padding: EdgeInsets.zero,
+                            ),
+                            child: widget.controller.sendingChat
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2.2,
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                        Colors.white,
+                                      ),
+                                    ),
+                                  )
+                                : const Icon(Icons.send_rounded),
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -1502,10 +2211,12 @@ class _AssistantScreenState extends State<AssistantScreen> {
     );
   }
 
-  Future<void> _send() async {
-    final text = _inputController.text.trim();
+  Future<void> _send([String? override]) async {
+    final text = (override ?? _inputController.text).trim();
     if (text.isEmpty) return;
-    _inputController.clear();
+    if (override == null) {
+      _inputController.clear();
+    }
     try {
       await widget.controller.sendChatMessage(text);
     } catch (_) {

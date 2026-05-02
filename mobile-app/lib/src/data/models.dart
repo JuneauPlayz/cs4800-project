@@ -481,6 +481,134 @@ class GroupSpend {
   final double total;
 }
 
+class ChallengeData {
+  ChallengeData({required this.challenges, required this.rings});
+
+  factory ChallengeData.fromJson(Map<String, dynamic> json) {
+    return ChallengeData(
+      challenges: _list(json['challenges'], (item) => Challenge.fromJson(item)),
+      rings: _list(json['rings'], (item) => ChallengeRing.fromJson(item)),
+    );
+  }
+
+  final List<Challenge> challenges;
+  final List<ChallengeRing> rings;
+}
+
+class Challenge {
+  Challenge({
+    required this.id,
+    required this.groupId,
+    required this.groupName,
+    required this.name,
+    required this.description,
+    required this.goal,
+    required this.current,
+    required this.unit,
+    required this.color,
+    required this.startDate,
+    required this.endDate,
+    required this.createdByName,
+    required this.contributions,
+  });
+
+  factory Challenge.fromJson(Map<String, dynamic> json) {
+    return Challenge(
+      id: _string(json['id']),
+      groupId: _string(json['groupId']),
+      groupName: _string(json['groupName']),
+      name: _string(json['name']),
+      description: _string(json['description']),
+      goal: _double(json['goal']),
+      current: _double(json['current']),
+      unit: _string(json['unit']),
+      color: _string(json['color']),
+      startDate: _string(json['startDate']),
+      endDate: _string(json['endDate']),
+      createdByName: _string(json['createdByName']),
+      contributions: _list(
+        json['contributions'],
+        (item) => ChallengeContribution.fromJson(item),
+      ),
+    );
+  }
+
+  final String id;
+  final String groupId;
+  final String groupName;
+  final String name;
+  final String description;
+  final double goal;
+  final double current;
+  final String unit;
+  final String color;
+  final String startDate;
+  final String endDate;
+  final String createdByName;
+  final List<ChallengeContribution> contributions;
+}
+
+class ChallengeContribution {
+  ChallengeContribution({
+    required this.id,
+    required this.userId,
+    required this.amount,
+    required this.createdAt,
+    required this.name,
+    required this.initials,
+    required this.avatarColor,
+    required this.avatarEmoji,
+  });
+
+  factory ChallengeContribution.fromJson(Map<String, dynamic> json) {
+    return ChallengeContribution(
+      id: _string(json['id']),
+      userId: _string(json['userId']),
+      amount: _double(json['amount']),
+      createdAt: _string(json['createdAt']),
+      name: _string(json['name']),
+      initials: _string(json['initials']),
+      avatarColor: _string(json['avatarColor']),
+      avatarEmoji: _string(json['avatarEmoji']),
+    );
+  }
+
+  final String id;
+  final String userId;
+  final double amount;
+  final String createdAt;
+  final String name;
+  final String initials;
+  final String avatarColor;
+  final String avatarEmoji;
+}
+
+class ChallengeRing {
+  ChallengeRing({
+    required this.id,
+    required this.label,
+    required this.value,
+    required this.max,
+    required this.color,
+  });
+
+  factory ChallengeRing.fromJson(Map<String, dynamic> json) {
+    return ChallengeRing(
+      id: _string(json['id']),
+      label: _string(json['label']),
+      value: _double(json['value']),
+      max: _double(json['max']),
+      color: _string(json['color']),
+    );
+  }
+
+  final String id;
+  final String label;
+  final double value;
+  final double max;
+  final String color;
+}
+
 class SettingsData {
   SettingsData({
     required this.userId,
