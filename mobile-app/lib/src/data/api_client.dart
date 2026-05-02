@@ -120,6 +120,10 @@ class ApiClient {
     );
   }
 
+  Future<void> leaveGroup(String token, {required String groupId}) {
+    return _request('DELETE', '/api/groups/$groupId/membership', token: token);
+  }
+
   Future<void> respondToInvite(
     String token, {
     required String inviteId,
@@ -138,6 +142,20 @@ class ApiClient {
     required Map<String, dynamic> payload,
   }) {
     return _request('POST', '/api/expenses', token: token, body: payload);
+  }
+
+  Future<void> recordExpensePayment(
+    String token, {
+    required String expenseId,
+    required String method,
+    String note = '',
+  }) {
+    return _request(
+      'POST',
+      '/api/expenses/$expenseId/settlements',
+      token: token,
+      body: {'method': method, 'note': note},
+    );
   }
 
   Future<void> respondToVote(

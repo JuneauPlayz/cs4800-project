@@ -1,6 +1,8 @@
 import express from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   calculateBalances,
   createChallenge,
@@ -11,6 +13,7 @@ import {
   getAnalytics,
   getChallenges,
   getExpenses,
+  createSettlement,
   getGroups,
   getNotifications,
   getPendingInvitesForUser,
@@ -33,10 +36,13 @@ import {
 
 const app = express();
 const PORT = Number(process.env.PORT || 3001);
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const receiptUploadDir = path.resolve(__dirname, '../uploads/receipts');
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '12mb' }));
 app.use(morgan('dev'));
+app.use('/receipts', express.static(receiptUploadDir));
 
 function auth(req, res, next) {
   const authHeader = req.headers.authorization || '';
@@ -143,6 +149,18 @@ app.post('/api/expenses', (req, res) => {
   if (!groupId || !description || !amount || !category) return res.status(400).json({ message: 'groupId, description, amount, and category are required.' });
   if (!requireMembership(groupId, req.user.id)) return res.status(403).json({ message: 'You are not a member of this group.' });
   const result = createExpense({ ...req.body, amount: Number(amount), splitMethod, paidBy: req.user.id });
+  res.status(201).json(result);
+});
+
+app.post('/api/expenses/:id/settlements', (req, res) => {
+  const result = createSettlement({
+    userId: req.user.id,
+    expenseId: req.params.id,
+    method: req.body?.method,
+    note: req.body?.note,
+    amount: req.body?.amount
+  });
+  if (!result?.ok) return res.status(400).json({ message: result?.message || 'Unable to record payment.' });
   res.status(201).json(result);
 });
 

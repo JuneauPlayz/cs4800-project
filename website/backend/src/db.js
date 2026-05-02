@@ -84,6 +84,19 @@ function bootstrap() {
       PRIMARY KEY (expense_id, user_id)
     );
 
+    CREATE TABLE IF NOT EXISTS settlements (
+      id TEXT PRIMARY KEY,
+      group_id TEXT NOT NULL,
+      expense_id TEXT,
+      from_user TEXT NOT NULL,
+      to_user TEXT NOT NULL,
+      amount REAL NOT NULL,
+      method TEXT NOT NULL,
+      note TEXT,
+      status TEXT NOT NULL DEFAULT 'completed',
+      created_at TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS votes (
       id TEXT PRIMARY KEY,
       group_id TEXT NOT NULL,
@@ -165,6 +178,20 @@ function bootstrap() {
   ensureColumn('users', 'avatar_emoji', 'avatar_emoji TEXT');
   ensureColumn('user_settings', 'profile_visibility', "profile_visibility TEXT NOT NULL DEFAULT 'group_members'");
   ensureColumn('user_settings', 'activity_visibility', "activity_visibility TEXT NOT NULL DEFAULT 'group_members'");
+  ensureColumn('settlements', 'group_id', 'group_id TEXT');
+  ensureColumn('settlements', 'expense_id', 'expense_id TEXT');
+  ensureColumn('settlements', 'from_user', 'from_user TEXT');
+  ensureColumn('settlements', 'to_user', 'to_user TEXT');
+
+  const settlementCols = db.pragma('table_info(settlements)').map((c) => c.name);
+  if (settlementCols.includes('payer_id') && settlementCols.includes('payee_id')) {
+    db.exec(`
+      UPDATE settlements
+      SET from_user = COALESCE(from_user, payer_id),
+          to_user = COALESCE(to_user, payee_id)
+      WHERE from_user IS NULL OR to_user IS NULL
+    `);
+  }
 
   const hasUsers = db.prepare('SELECT COUNT(*) as count FROM users').get().count;
   if (hasUsers > 0 || process.env.SPLITSTACK_SEED_DEMO !== 'true') return;

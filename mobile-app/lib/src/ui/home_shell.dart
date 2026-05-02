@@ -1,4 +1,8 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../core/app_theme.dart';
 import '../data/models.dart';
@@ -17,7 +21,17 @@ const _categoryOptions = [
   'Other',
 ];
 
+const _payoutMethods = [
+  'Venmo',
+  'Zelle',
+  'Cash',
+  'Apple Cash',
+  'PayPal',
+  'Other',
+];
+
 const _avatarSeeds = [
+  '',
   'Jasper',
   'Luna',
   'Felix',
@@ -273,6 +287,7 @@ class _DashboardTab extends StatelessWidget {
             subtitle: 'Latest activity across your groups',
             child: Column(
               children: controller.expenses.take(6).map((expense) {
+                final canMarkPaid = expense.userPaymentStatus == 'open';
                 return ListTile(
                   contentPadding: EdgeInsets.zero,
                   leading: CircleAvatar(
@@ -281,7 +296,45 @@ class _DashboardTab extends StatelessWidget {
                     child: const Icon(Icons.receipt_long_rounded),
                   ),
                   title: Text(expense.description),
-                  subtitle: Text('${expense.groupName} • ${expense.category}'),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${expense.groupName} • ${expense.category} • ${formatDate(expense.expenseDate)}',
+                      ),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Chip(
+                            visualDensity: VisualDensity.compact,
+                            label: Text(
+                              expense.settlementStatus == 'paid'
+                                  ? 'Finished'
+                                  : 'Open',
+                            ),
+                          ),
+                          if (expense.userPaymentStatus == 'paid')
+                            const Chip(
+                              visualDensity: VisualDensity.compact,
+                              label: Text('You paid'),
+                            ),
+                          if (canMarkPaid)
+                            TextButton.icon(
+                              onPressed: controller.loading
+                                  ? null
+                                  : () => _showPaymentSheet(context, expense),
+                              icon: const Icon(Icons.payments_rounded),
+                              label: Text(
+                                'Pay ${money(expense.userOwes - expense.userPaid)}',
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
                   trailing: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.end,
@@ -291,7 +344,7 @@ class _DashboardTab extends StatelessWidget {
                         style: const TextStyle(fontWeight: FontWeight.w800),
                       ),
                       Text(
-                        expense.expenseDate,
+                        formatDate(expense.expenseDate),
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ],
@@ -303,6 +356,98 @@ class _DashboardTab extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _showPaymentSheet(BuildContext context, Expense expense) async {
+    final noteController = TextEditingController();
+    String method = _payoutMethods.first;
+    final paid = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return Padding(
+              padding: EdgeInsets.fromLTRB(
+                20,
+                20,
+                20,
+                MediaQuery.of(context).viewInsets.bottom + 20,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Mark payment',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '${expense.description} • ${money(expense.userOwes - expense.userPaid)}',
+                  ),
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<String>(
+                    initialValue: method,
+                    decoration: const InputDecoration(
+                      labelText: 'Payout method',
+                    ),
+                    items: _payoutMethods
+                        .map(
+                          (item) =>
+                              DropdownMenuItem(value: item, child: Text(item)),
+                        )
+                        .toList(),
+                    onChanged: (value) {
+                      if (value != null) setSheetState(() => method = value);
+                    },
+                  ),
+                  const SizedBox(height: 14),
+                  TextField(
+                    controller: noteController,
+                    decoration: const InputDecoration(
+                      labelText: 'Note or confirmation optional',
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  FilledButton.icon(
+                    onPressed: () async {
+                      try {
+                        await controller.recordExpensePayment(
+                          expenseId: expense.id,
+                          method: method,
+                          note: noteController.text.trim(),
+                        );
+                        if (context.mounted) Navigator.of(context).pop(true);
+                      } catch (_) {
+                        if (!context.mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              controller.errorMessage ??
+                                  'Unable to record payment.',
+                            ),
+                          ),
+                        );
+                      }
+                    },
+                    icon: const Icon(Icons.check_circle_rounded),
+                    label: const Text('Mark as paid'),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+    noteController.dispose();
+    if (paid == true && context.mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Payment recorded.')));
+    }
   }
 }
 
@@ -376,7 +521,10 @@ class _GroupsTab extends StatelessWidget {
                       context: context,
                       isScrollControlled: true,
                       useSafeArea: true,
-                      builder: (_) => _GroupDetailsSheet(group: group),
+                      builder: (_) => _GroupDetailsSheet(
+                        group: group,
+                        controller: controller,
+                      ),
                     ),
                     child: Padding(
                       padding: const EdgeInsets.all(20),
@@ -464,9 +612,15 @@ class _AddExpenseTabState extends State<_AddExpenseTab> {
   final _descriptionController = TextEditingController();
   final _amountController = TextEditingController();
   final _reasonController = TextEditingController();
+  DateTime _expenseDate = DateTime.now();
   String? _groupId;
   String _category = _categoryOptions.first;
   String _splitMethod = 'equal';
+  Uint8List? _receiptImageBytes;
+  String? _receiptFileName;
+  String? _receiptMimeType;
+  String? _receiptSourceLabel;
+  bool _pickingReceipt = false;
   final Map<String, TextEditingController> _splitControllers = {};
 
   @override
@@ -577,6 +731,18 @@ class _AddExpenseTabState extends State<_AddExpenseTab> {
                     onChanged: (_) => setState(_syncSplitControllers),
                   ),
                   const SizedBox(height: 14),
+                  InkWell(
+                    borderRadius: BorderRadius.circular(12),
+                    onTap: _pickExpenseDate,
+                    child: InputDecorator(
+                      decoration: const InputDecoration(
+                        labelText: 'Expense date',
+                        suffixIcon: Icon(Icons.calendar_today_rounded),
+                      ),
+                      child: Text(formatDate(_datePayload(_expenseDate))),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
                   DropdownButtonFormField<String>(
                     initialValue: _category,
                     decoration: const InputDecoration(labelText: 'Category'),
@@ -589,6 +755,16 @@ class _AddExpenseTabState extends State<_AddExpenseTab> {
                     onChanged: (value) {
                       setState(() => _category = value ?? _category);
                     },
+                  ),
+                  const SizedBox(height: 14),
+                  _ReceiptScannerPanel(
+                    imageBytes: _receiptImageBytes,
+                    fileName: _receiptFileName,
+                    sourceLabel: _receiptSourceLabel,
+                    picking: _pickingReceipt,
+                    onUpload: () => _pickReceipt(ImageSource.gallery),
+                    onCamera: () => _pickReceipt(ImageSource.camera),
+                    onRemove: _clearReceipt,
                   ),
                   const SizedBox(height: 14),
                   DropdownButtonFormField<String>(
@@ -743,14 +919,21 @@ class _AddExpenseTabState extends State<_AddExpenseTab> {
         'description': _descriptionController.text.trim(),
         'amount': amount,
         'category': _category,
+        'expenseDate': _datePayload(_expenseDate),
         'splitMethod': _splitMethod,
         'reason': _reasonController.text.trim(),
+        if (_receiptImageBytes != null) ...{
+          'receiptImageBase64': base64Encode(_receiptImageBytes!),
+          'receiptFileName': _receiptFileName ?? 'receipt.jpg',
+          'receiptMimeType': _receiptMimeType ?? 'image/jpeg',
+        },
         if (_splitMethod != 'equal') 'splits': splits,
       });
       if (!mounted) return;
       _descriptionController.clear();
       _amountController.clear();
       _reasonController.clear();
+      _clearReceipt(showUpdate: false);
       for (final field in _splitControllers.values) {
         field.clear();
       }
@@ -769,6 +952,159 @@ class _AddExpenseTabState extends State<_AddExpenseTab> {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _pickReceipt(ImageSource source) async {
+    setState(() => _pickingReceipt = true);
+    try {
+      final picker = ImagePicker();
+      final picked = await picker.pickImage(
+        source: source,
+        imageQuality: 100,
+        maxWidth: 2400,
+      );
+      if (picked == null) return;
+      final bytes = await picked.readAsBytes();
+      if (!mounted) return;
+      setState(() {
+        _receiptImageBytes = bytes;
+        _receiptFileName = picked.name;
+        _receiptMimeType = picked.mimeType ?? 'image/jpeg';
+        _receiptSourceLabel = source == ImageSource.camera
+            ? 'Camera capture'
+            : 'Uploaded image';
+      });
+    } catch (_) {
+      if (mounted) {
+        _showMessage('Unable to attach receipt image.');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _pickingReceipt = false);
+      }
+    }
+  }
+
+  void _clearReceipt({bool showUpdate = true}) {
+    if (showUpdate) {
+      setState(() {
+        _receiptImageBytes = null;
+        _receiptFileName = null;
+        _receiptMimeType = null;
+        _receiptSourceLabel = null;
+      });
+      return;
+    }
+    _receiptImageBytes = null;
+    _receiptFileName = null;
+    _receiptMimeType = null;
+    _receiptSourceLabel = null;
+  }
+
+  Future<void> _pickExpenseDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _expenseDate,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+    );
+    if (picked == null || !mounted) return;
+    setState(() => _expenseDate = picked);
+  }
+}
+
+class _ReceiptScannerPanel extends StatelessWidget {
+  const _ReceiptScannerPanel({
+    required this.imageBytes,
+    required this.fileName,
+    required this.sourceLabel,
+    required this.picking,
+    required this.onUpload,
+    required this.onCamera,
+    required this.onRemove,
+  });
+
+  final Uint8List? imageBytes;
+  final String? fileName;
+  final String? sourceLabel;
+  final bool picking;
+  final VoidCallback onUpload;
+  final VoidCallback onCamera;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: AppTheme.teal.withValues(alpha: 0.06),
+        border: Border.all(color: AppTheme.border),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.document_scanner_rounded),
+                const SizedBox(width: 10),
+                Text('Receipt scanner', style: theme.textTheme.titleMedium),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: picking ? null : onUpload,
+                  icon: const Icon(Icons.upload_file_rounded),
+                  label: const Text('Upload receipt'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: picking ? null : onCamera,
+                  icon: const Icon(Icons.photo_camera_rounded),
+                  label: const Text('Take picture'),
+                ),
+              ],
+            ),
+            if (picking) ...[
+              const SizedBox(height: 12),
+              const LinearProgressIndicator(minHeight: 3),
+            ],
+            if (imageBytes != null) ...[
+              const SizedBox(height: 14),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(14),
+                child: AspectRatio(
+                  aspectRatio: 16 / 9,
+                  child: Image.memory(imageBytes!, fit: BoxFit.cover),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '${sourceLabel ?? 'Receipt'} attached: ${fileName ?? 'receipt image'}',
+                      style: theme.textTheme.bodySmall,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  TextButton.icon(
+                    onPressed: picking ? null : onRemove,
+                    icon: const Icon(Icons.close_rounded),
+                    label: const Text('Remove'),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -901,9 +1237,8 @@ class _SettingsTabState extends State<_SettingsTab> {
                 ),
                 const SizedBox(height: 18),
                 _SettingsAvatarPicker(
-                  selectedSeed: user.avatarEmoji.isEmpty
-                      ? _avatarSeeds.first
-                      : user.avatarEmoji,
+                  initials: user.initials,
+                  selectedSeed: user.avatarEmoji,
                   saving: widget.controller.savingSettings,
                   onSelected: (seed) async {
                     try {
@@ -1810,9 +2145,10 @@ class _NewGroupSheetState extends State<_NewGroupSheet> {
 }
 
 class _GroupDetailsSheet extends StatelessWidget {
-  const _GroupDetailsSheet({required this.group});
+  const _GroupDetailsSheet({required this.group, required this.controller});
 
   final Group group;
+  final AppController controller;
 
   @override
   Widget build(BuildContext context) {
@@ -1881,8 +2217,54 @@ class _GroupDetailsSheet extends StatelessWidget {
             ),
           ),
         ],
+        const SizedBox(height: 18),
+        OutlinedButton.icon(
+          onPressed: group.isOwner || controller.loading
+              ? null
+              : () => _confirmLeave(context),
+          icon: const Icon(Icons.logout_rounded),
+          label: Text(group.isOwner ? 'Owner cannot leave' : 'Leave group'),
+        ),
       ],
     );
+  }
+
+  Future<void> _confirmLeave(BuildContext context) async {
+    final shouldLeave = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Leave ${group.name}?'),
+        content: const Text(
+          'You will stop seeing this group, its balances, and future expenses.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Leave'),
+          ),
+        ],
+      ),
+    );
+    if (shouldLeave != true || !context.mounted) return;
+    try {
+      await controller.leaveGroup(group.id);
+      if (!context.mounted) return;
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Left group.')));
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(controller.errorMessage ?? 'Unable to leave group.'),
+        ),
+      );
+    }
   }
 }
 
@@ -1929,11 +2311,13 @@ class _SplitSummary extends StatelessWidget {
 
 class _SettingsAvatarPicker extends StatelessWidget {
   const _SettingsAvatarPicker({
+    required this.initials,
     required this.selectedSeed,
     required this.saving,
     required this.onSelected,
   });
 
+  final String initials;
   final String selectedSeed;
   final bool saving;
   final ValueChanged<String> onSelected;
@@ -1955,7 +2339,7 @@ class _SettingsAvatarPicker extends StatelessWidget {
               final seed = _avatarSeeds[index];
               final selected = seed == selectedSeed;
               return Tooltip(
-                message: seed,
+                message: seed.isEmpty ? 'Initial' : seed,
                 child: InkWell(
                   borderRadius: BorderRadius.circular(999),
                   onTap: saving ? null : () => onSelected(seed),
@@ -1972,23 +2356,27 @@ class _SettingsAvatarPicker extends StatelessWidget {
                       ),
                     ),
                     child: ClipOval(
-                      child: Image.network(
-                        _diceBearUrl(seed),
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) =>
-                            ColoredBox(
-                              color: AppTheme.teal.withValues(alpha: 0.12),
-                              child: Center(
-                                child: Text(
-                                  seed[0],
-                                  style: const TextStyle(
-                                    color: AppTheme.teal,
-                                    fontWeight: FontWeight.w800,
+                      child: seed.isEmpty
+                          ? _InitialAvatarPreview(initials: initials)
+                          : Image.network(
+                              _diceBearUrl(seed),
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) =>
+                                  ColoredBox(
+                                    color: AppTheme.teal.withValues(
+                                      alpha: 0.12,
+                                    ),
+                                    child: Center(
+                                      child: Text(
+                                        seed[0],
+                                        style: const TextStyle(
+                                          color: AppTheme.teal,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                    ),
                                   ),
-                                ),
-                              ),
                             ),
-                      ),
                     ),
                   ),
                 ),
@@ -1997,6 +2385,28 @@ class _SettingsAvatarPicker extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _InitialAvatarPreview extends StatelessWidget {
+  const _InitialAvatarPreview({required this.initials});
+
+  final String initials;
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: AppTheme.teal.withValues(alpha: 0.12),
+      child: Center(
+        child: Text(
+          initials.isEmpty ? '?' : initials,
+          style: const TextStyle(
+            color: AppTheme.teal,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ),
     );
   }
 }
@@ -2112,6 +2522,18 @@ class _EmptyCard extends StatelessWidget {
 String money(double value) {
   final sign = value < 0 ? '-' : '';
   return '$sign\$${value.abs().toStringAsFixed(2)}';
+}
+
+String _datePayload(DateTime date) {
+  final month = date.month.toString().padLeft(2, '0');
+  final day = date.day.toString().padLeft(2, '0');
+  return '${date.year}-$month-$day';
+}
+
+String formatDate(String raw) {
+  final parsed = DateTime.tryParse(raw);
+  if (parsed == null) return raw;
+  return '${parsed.month}/${parsed.day}/${parsed.year}';
 }
 
 Color colorFromHex(String hex) {

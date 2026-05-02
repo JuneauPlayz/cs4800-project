@@ -4,6 +4,7 @@ import '../core/app_theme.dart';
 import '../state/app_controller.dart';
 
 const _avatarSeeds = [
+  '',
   'Jasper',
   'Luna',
   'Felix',
@@ -36,7 +37,20 @@ class _AuthScreenState extends State<AuthScreen> {
   String _avatarSeed = _avatarSeeds.first;
 
   @override
+  void initState() {
+    super.initState();
+    _nameController.addListener(_refreshInitialAvatar);
+  }
+
+  void _refreshInitialAvatar() {
+    if (_register && _avatarSeed.isEmpty) {
+      setState(() {});
+    }
+  }
+
+  @override
   void dispose() {
+    _nameController.removeListener(_refreshInitialAvatar);
     _nameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
@@ -142,6 +156,7 @@ class _AuthScreenState extends State<AuthScreen> {
                                 ),
                                 const SizedBox(height: 14),
                                 _AvatarPicker(
+                                  initials: _firstInitial(_nameController.text),
                                   selectedSeed: _avatarSeed,
                                   onSelected: (seed) {
                                     setState(() => _avatarSeed = seed);
@@ -259,8 +274,13 @@ class _AuthScreenState extends State<AuthScreen> {
 }
 
 class _AvatarPicker extends StatelessWidget {
-  const _AvatarPicker({required this.selectedSeed, required this.onSelected});
+  const _AvatarPicker({
+    required this.initials,
+    required this.selectedSeed,
+    required this.onSelected,
+  });
 
+  final String initials;
   final String selectedSeed;
   final ValueChanged<String> onSelected;
 
@@ -284,7 +304,7 @@ class _AvatarPicker extends StatelessWidget {
               final seed = _avatarSeeds[index];
               final selected = seed == selectedSeed;
               return Tooltip(
-                message: seed,
+                message: seed.isEmpty ? 'Initial' : seed,
                 child: InkWell(
                   borderRadius: BorderRadius.circular(999),
                   onTap: () => onSelected(seed),
@@ -301,23 +321,27 @@ class _AvatarPicker extends StatelessWidget {
                       ),
                     ),
                     child: ClipOval(
-                      child: Image.network(
-                        diceBearUrl(seed),
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) =>
-                            ColoredBox(
-                              color: AppTheme.teal.withValues(alpha: 0.12),
-                              child: Center(
-                                child: Text(
-                                  seed[0],
-                                  style: const TextStyle(
-                                    color: AppTheme.teal,
-                                    fontWeight: FontWeight.w800,
+                      child: seed.isEmpty
+                          ? _InitialAvatarPreview(initials: initials)
+                          : Image.network(
+                              diceBearUrl(seed),
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) =>
+                                  ColoredBox(
+                                    color: AppTheme.teal.withValues(
+                                      alpha: 0.12,
+                                    ),
+                                    child: Center(
+                                      child: Text(
+                                        seed[0],
+                                        style: const TextStyle(
+                                          color: AppTheme.teal,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                    ),
                                   ),
-                                ),
-                              ),
                             ),
-                      ),
                     ),
                   ),
                 ),
@@ -328,6 +352,34 @@ class _AvatarPicker extends StatelessWidget {
       ],
     );
   }
+}
+
+class _InitialAvatarPreview extends StatelessWidget {
+  const _InitialAvatarPreview({required this.initials});
+
+  final String initials;
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: AppTheme.teal.withValues(alpha: 0.12),
+      child: Center(
+        child: Text(
+          initials,
+          style: const TextStyle(
+            color: AppTheme.teal,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+String _firstInitial(String name) {
+  final trimmed = name.trim();
+  if (trimmed.isEmpty) return '?';
+  return trimmed.substring(0, 1).toUpperCase();
 }
 
 String diceBearUrl(String seed) {

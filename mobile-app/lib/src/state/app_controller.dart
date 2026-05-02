@@ -142,6 +142,20 @@ class AppController extends ChangeNotifier {
     }
   }
 
+  Future<void> leaveGroup(String groupId) async {
+    final token = _requireToken();
+    loading = true;
+    errorMessage = null;
+    notifyListeners();
+    try {
+      await apiClient.leaveGroup(token, groupId: groupId);
+      await refreshAll(showLoader: false);
+    } finally {
+      loading = false;
+      notifyListeners();
+    }
+  }
+
   Future<String?> createExpense(Map<String, dynamic> payload) async {
     final token = _requireToken();
     loading = true;
@@ -152,6 +166,29 @@ class AppController extends ChangeNotifier {
       await refreshAll(showLoader: false);
       final triggeredVote = json['triggeredVote'];
       return triggeredVote?.toString();
+    } finally {
+      loading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> recordExpensePayment({
+    required String expenseId,
+    required String method,
+    String note = '',
+  }) async {
+    final token = _requireToken();
+    loading = true;
+    errorMessage = null;
+    notifyListeners();
+    try {
+      await apiClient.recordExpensePayment(
+        token,
+        expenseId: expenseId,
+        method: method,
+        note: note,
+      );
+      await refreshAll(showLoader: false);
     } finally {
       loading = false;
       notifyListeners();

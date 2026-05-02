@@ -305,6 +305,10 @@ class Expense {
     required this.paidByName,
     required this.expenseDate,
     required this.splitMethod,
+    required this.userOwes,
+    required this.userPaid,
+    required this.settlementStatus,
+    required this.userPaymentStatus,
     required this.splits,
   });
 
@@ -319,6 +323,10 @@ class Expense {
       paidByName: _string(json['paidByName']),
       expenseDate: _string(json['expenseDate']),
       splitMethod: _string(json['splitMethod']),
+      userOwes: _double(json['userOwes']),
+      userPaid: _double(json['userPaid']),
+      settlementStatus: _string(json['settlementStatus']),
+      userPaymentStatus: _string(json['userPaymentStatus']),
       splits: _list(json['splits'], (item) => ExpenseSplit.fromJson(item)),
     );
   }
@@ -332,6 +340,10 @@ class Expense {
   final String paidByName;
   final String expenseDate;
   final String splitMethod;
+  final double userOwes;
+  final double userPaid;
+  final String settlementStatus;
+  final String userPaymentStatus;
   final List<ExpenseSplit> splits;
 }
 

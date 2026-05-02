@@ -50,5 +50,9 @@
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>
 	</dict>
+	<key>NSCameraUsageDescription</key>
+	<string>SplitStack uses the camera to attach receipt photos to expenses.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>SplitStack uses your photo library so you can upload receipt images.</string>
 </dict>
 </plist>
