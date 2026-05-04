@@ -358,16 +358,17 @@ export function useAppController() {
 
   async function submitExpense(event) {
     event.preventDefault();
-    if (!currentGroup) return;
-    if (expenseForm.splitMethod === 'percent' && Math.abs(percentTotal - 100) > 0.01) {
+    const isSelf = expenseForm.groupId === 'self';
+    if (!isSelf && !currentGroup) return;
+    if (!isSelf && expenseForm.splitMethod === 'percent' && Math.abs(percentTotal - 100) > 0.01) {
       setError('Percent split must add up to 100%.');
       return;
     }
-    if (expenseForm.splitMethod === 'custom' && Math.abs(customTotal - amountNumber) > 0.01) {
+    if (!isSelf && expenseForm.splitMethod === 'custom' && Math.abs(customTotal - amountNumber) > 0.01) {
       setError('Custom split amounts must match the expense total.');
       return;
     }
-    const splits = memberShares.map((member) => expenseForm.splitMethod === 'percent'
+    const splits = isSelf ? [] : memberShares.map((member) => expenseForm.splitMethod === 'percent'
       ? { userId: member.id, percent: Number(member.percent || 0) }
       : { userId: member.id, amount: Number(member.amount || 0) });
     try {

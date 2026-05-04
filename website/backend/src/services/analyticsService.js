@@ -28,6 +28,21 @@ export function getAnalytics(userId) {
     .sort(([first], [second]) => first.localeCompare(second))
     .map(([month, total]) => ({ month, total: Number(total.toFixed(2)) }));
 
+  const currentMonth = new Date().toISOString().slice(0, 7);
+  const currentMonthByCategory = Object.fromEntries(
+    Object.entries(
+      expenses
+        .filter((expense) => (expense.expenseDate || expense.createdAt || '').slice(0, 7) === currentMonth)
+        .reduce((acc, expense) => {
+          const share = userShare(expense);
+          if (share > 0) {
+            acc[expense.category] = (acc[expense.category] || 0) + share;
+          }
+          return acc;
+        }, {})
+    ).map(([cat, total]) => [cat, Number(total.toFixed(2))])
+  );
+
   const topExpenses = expenses
     .map((expense) => ({ id: expense.id, description: expense.description, groupName: expense.groupName, date: expense.expenseDate || expense.createdAt, amount: userShare(expense) }))
     .filter((expense) => expense.amount > 0)
@@ -40,5 +55,5 @@ export function getAnalytics(userId) {
     return acc;
   }, {})).sort((first, second) => second.count - first.count);
 
-  return { totalSpend, avgPerMonth, expenseCount: expenses.length, byCategory, monthlyTrend, topExpenses, byFrequency };
+  return { totalSpend, avgPerMonth, expenseCount: expenses.length, byCategory, monthlyTrend, currentMonthByCategory, topExpenses, byFrequency };
 }

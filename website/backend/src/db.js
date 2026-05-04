@@ -175,6 +175,7 @@ function bootstrap() {
   ensureColumn('users', 'avatar_emoji', 'avatar_emoji TEXT');
   ensureColumn('user_settings', 'profile_visibility', "profile_visibility TEXT NOT NULL DEFAULT 'group_members'");
   ensureColumn('user_settings', 'activity_visibility', "activity_visibility TEXT NOT NULL DEFAULT 'group_members'");
+  ensureColumn('votes', 'resolved_at', 'resolved_at TEXT');
 
   const hasUsers = db.prepare('SELECT COUNT(*) as count FROM users').get().count;
   if (hasUsers > 0) return;
