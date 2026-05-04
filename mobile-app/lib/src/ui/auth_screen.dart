@@ -134,11 +134,6 @@ class _AuthScreenState extends State<AuthScreen> {
                                     : 'Sign in to SplitStack',
                                 style: theme.textTheme.titleLarge,
                               ),
-                              const SizedBox(height: 6),
-                              Text(
-                                'API: ${widget.controller.apiBaseUrl}',
-                                style: theme.textTheme.bodySmall,
-                              ),
                               const SizedBox(height: 18),
                               if (_register) ...[
                                 TextFormField(
