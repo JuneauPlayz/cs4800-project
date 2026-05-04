@@ -34,16 +34,14 @@ class _SplitStackAppState extends State<SplitStackApp> {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, _) {
-        return MaterialApp(
-          title: 'SplitStack',
-          debugShowCheckedModeBanner: false,
-          theme: AppTheme.light(),
-          home: _buildHome(),
-        );
-      },
+    return MaterialApp(
+      title: 'SplitStack',
+      debugShowCheckedModeBanner: false,
+      theme: AppTheme.light(),
+      home: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, _) => _buildHome(),
+      ),
     );
   }
 
