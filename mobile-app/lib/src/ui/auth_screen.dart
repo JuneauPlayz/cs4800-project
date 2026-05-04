@@ -90,7 +90,7 @@ class _AuthScreenState extends State<AuthScreen> {
                           _AuthBrand(),
                           SizedBox(height: 20),
                           Text(
-                            'Manage balances, group spending, approvals, and AI answers from the same live SplitStack backend.',
+                            'Manage balances, group spending, approvals, and AI answers all in one place.',
                             style: TextStyle(
                               color: Colors.white,
                               fontSize: 16,
