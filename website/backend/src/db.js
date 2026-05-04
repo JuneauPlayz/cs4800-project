@@ -155,6 +155,17 @@ function bootstrap() {
       status TEXT NOT NULL DEFAULT 'pending',
       created_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS budget_goals (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      month TEXT NOT NULL,
+      total REAL NOT NULL DEFAULT 0,
+      breakdown TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE(user_id, month)
+    );
   `);
 
   ensureColumn('groups_table', 'owner_id', 'owner_id TEXT');
@@ -164,6 +175,7 @@ function bootstrap() {
   ensureColumn('users', 'avatar_emoji', 'avatar_emoji TEXT');
   ensureColumn('user_settings', 'profile_visibility', "profile_visibility TEXT NOT NULL DEFAULT 'group_members'");
   ensureColumn('user_settings', 'activity_visibility', "activity_visibility TEXT NOT NULL DEFAULT 'group_members'");
+  ensureColumn('votes', 'resolved_at', 'resolved_at TEXT');
 
   const hasUsers = db.prepare('SELECT COUNT(*) as count FROM users').get().count;
   if (hasUsers > 0) return;

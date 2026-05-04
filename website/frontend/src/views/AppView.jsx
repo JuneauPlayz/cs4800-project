@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { DICEBEAR_SEEDS, categoryOptions, getDiceBearUrl, initials, money, navMeta, workspacePages } from '../models/appModel';
 
 function StackLogo({ size = 18 }) {
@@ -88,6 +88,8 @@ export function AppView({ controller }) {
     groupMonthlyTotals,
     balanceModal,
     setBalanceModal,
+    budgetGoal,
+    saveBudget,
     handleAuthSubmit,
     logout,
     saveGroup,
@@ -213,6 +215,10 @@ export function AppView({ controller }) {
                 setBalanceModal={setBalanceModal}
                 setPage={setPage}
                 setSelectedGroup={setSelectedGroup}
+                analytics={analytics}
+                userId={session.user.id}
+                budgetGoal={budgetGoal}
+                saveBudget={saveBudget}
               />
             )}
 
@@ -226,7 +232,7 @@ export function AppView({ controller }) {
             )}
 
             {page === 'analytics' && analytics && (
-              <AnalyticsPage analytics={analytics} expenses={expenses} groups={groups} userId={session.user.id} />
+              <AnalyticsPage analytics={analytics} expenses={expenses} groups={groups} userId={session.user.id} budgetGoal={budgetGoal} />
             )}
 
             {page === 'groups' && (
@@ -271,7 +277,7 @@ export function AppView({ controller }) {
             )}
 
             {page === 'vote' && (
-              <VotePage votes={votes} onRespond={handleVoteResponse} />
+              <VotePage votes={votes} onRespond={handleVoteResponse} userId={session.user.id} />
             )}
 
             {page === 'chat' && (
@@ -313,7 +319,111 @@ export function AppView({ controller }) {
   );
 }
 
-function HomePage({ dashboard, groups, expenses, groupMonthlyTotals, balanceModal, setBalanceModal, setPage, setSelectedGroup }) {
+function BudgetGoalCard({ budgetGoal, onSave, analytics, expenses, userId, setPage }) {
+  const [editing, setEditing] = useState(false);
+  const [formTotal, setFormTotal] = useState('');
+  const [formBreakdown, setFormBreakdown] = useState({});
+  const [showBreakdown, setShowBreakdown] = useState(false);
+
+  useEffect(() => {
+    if (budgetGoal) {
+      setFormTotal(String(budgetGoal.total || ''));
+      setFormBreakdown(budgetGoal.breakdown || {});
+    }
+  }, [budgetGoal]);
+
+  const currentMonth = new Date().toISOString().slice(0, 7);
+  const monthTotal = analytics?.monthlyTrend?.find((t) => t.month === currentMonth)?.total ?? 0;
+
+  const budgetTotal = budgetGoal?.total || 0;
+  const progressPct = budgetTotal ? Math.min(100, (monthTotal / budgetTotal) * 100) : 0;
+  const isOver = monthTotal > budgetTotal && budgetTotal > 0;
+  const isNew = !budgetGoal || !budgetGoal.total;
+
+  const breakdownSum = Object.values(formBreakdown).reduce((sum, v) => sum + (Number(v) || 0), 0);
+  const breakdownOverBudget = Number(formTotal) > 0 && breakdownSum > Number(formTotal);
+
+  function handleSave() {
+    const cleanBreakdown = Object.fromEntries(
+      Object.entries(formBreakdown)
+        .filter(([, v]) => Number(v) > 0)
+        .map(([k, v]) => [k, Number(v)])
+    );
+    onSave(Number(formTotal || 0), cleanBreakdown);
+    setEditing(false);
+    setShowBreakdown(false);
+  }
+
+  if (!isNew && !editing) {
+    return (
+      <div className="card settlements-card">
+        <div className="settlements-label" style={{ color: 'var(--amber)' }}>Monthly Budget</div>
+        <div className="settlements-total" style={{ color: 'var(--slate)' }}>{money(budgetTotal)}</div>
+        <div className="settlements-count">{money(monthTotal)} spent · {progressPct.toFixed(0)}%</div>
+        <div className="budget-progress">
+          <div className="budget-progress-fill" style={{ width: `${progressPct}%`, background: isOver ? 'var(--red)' : 'var(--teal)' }} />
+        </div>
+        <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+          <button className="btn btn-secondary btn-sm" onClick={() => setEditing(true)}>Edit</button>
+          <button className="btn btn-secondary btn-sm" onClick={() => setPage('analytics')}>View breakdown</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="card settlements-card">
+      <div className="settlements-label" style={{ color: 'var(--amber)' }}>Monthly Budget</div>
+      <div style={{ marginTop: 8 }}>
+        <input
+          type="number"
+          className="f-inp"
+          placeholder="Total budget ($)"
+          min="0"
+          value={formTotal}
+          onChange={(e) => setFormTotal(e.target.value)}
+        />
+      </div>
+      <button
+        className="btn btn-secondary btn-sm"
+        style={{ marginTop: 8, textAlign: 'left' }}
+        onClick={() => setShowBreakdown((s) => !s)}
+      >
+        {showBreakdown ? '▲' : '▼'} Category Breakdown
+      </button>
+      {showBreakdown && (
+        <div className="budget-breakdown">
+          {categoryOptions.map((cat) => (
+            <div key={cat} className="budget-cat-row">
+              <span className="budget-cat-label">{cat}</span>
+              <input
+                type="number"
+                className="f-inp"
+                placeholder="$0"
+                min="0"
+                value={formBreakdown[cat] || ''}
+                onChange={(e) => setFormBreakdown((f) => ({ ...f, [cat]: e.target.value }))}
+              />
+            </div>
+          ))}
+        </div>
+      )}
+      {breakdownOverBudget && (
+        <div style={{ marginTop: 8, padding: '8px 10px', background: 'var(--red-soft, #FEF2F2)', border: '1px solid var(--red)', borderRadius: 6, fontSize: 13, color: 'var(--red)' }}>
+          Category totals ({money(breakdownSum)}) exceed your total budget ({money(Number(formTotal))}). Increase your total budget or reduce your category amounts.
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+        <button className="btn btn-primary btn-sm" onClick={handleSave}>Set Budget</button>
+        {!isNew && (
+          <button className="btn btn-secondary btn-sm" onClick={() => { setEditing(false); setShowBreakdown(false); }}>Cancel</button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function HomePage({ dashboard, groups, expenses, groupMonthlyTotals, balanceModal, setBalanceModal, setPage, setSelectedGroup, analytics, userId, budgetGoal, saveBudget }) {
   return (
     <div className="page show" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
       <div className="balance-card">
@@ -337,7 +447,7 @@ function HomePage({ dashboard, groups, expenses, groupMonthlyTotals, balanceModa
         </div>
       </div>
 
-      <div className="g2">
+      <div className="g3">
         <div className="card settlements-card settlements-clickable" onClick={() => setBalanceModal('owedToYou')}>
           <div className="settlements-label teal">Owed to you</div>
           <div className="settlements-total teal">{money(dashboard.balances.totalOwedToYou)}</div>
@@ -348,6 +458,14 @@ function HomePage({ dashboard, groups, expenses, groupMonthlyTotals, balanceModa
           <div className="settlements-total red">{money(dashboard.balances.totalYouOwe)}</div>
           <div className="settlements-count">{dashboard.balances.youOwe.length} {dashboard.balances.youOwe.length === 1 ? 'person' : 'people'}</div>
         </div>
+        <BudgetGoalCard
+          budgetGoal={budgetGoal}
+          onSave={saveBudget}
+          analytics={analytics}
+          expenses={expenses}
+          userId={userId}
+          setPage={setPage}
+        />
       </div>
 
       {balanceModal && (
@@ -714,24 +832,31 @@ function AddExpensePage({
           <div className="card-head">Add an expense</div>
           <form onSubmit={submitExpense} className="stack-form">
             <label className="f-label">Group</label>
-            <select className="f-inp" value={expenseForm.groupId} onChange={(e) => setExpenseForm({ ...expenseForm, groupId: e.target.value })}>{groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}</select>
+            <select className="f-inp" value={expenseForm.groupId} onChange={(e) => setExpenseForm({ ...expenseForm, groupId: e.target.value })}>
+              <option value="self">Self</option>
+              {groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
+            </select>
             <label className="f-label">Description</label>
             <input className="f-inp" value={expenseForm.description} onChange={(e) => setExpenseForm({ ...expenseForm, description: e.target.value })} />
             <label className="f-label">Amount</label>
             <div className="amt-wrap"><span className="amt-sym">$</span><input className="amt-inp" value={expenseForm.amount} onChange={(e) => setExpenseForm({ ...expenseForm, amount: e.target.value })} /></div>
             <label className="f-label">Category</label>
             <div className="cat-grid">{categoryOptions.map((option) => <button className={`cat-btn ${expenseForm.category === option ? 'on' : ''}`} type="button" key={option} onClick={() => setExpenseForm({ ...expenseForm, category: option })}>{option}</button>)}</div>
-            <label className="f-label">Split method</label>
-            <div className="split-tabs">{['equal', 'percent', 'custom'].map((method) => <button className={`split-tab ${expenseForm.splitMethod === method ? 'on' : ''}`} type="button" key={method} onClick={() => setExpenseForm({ ...expenseForm, splitMethod: method })}>{method}</button>)}</div>
-            {expenseForm.splitMethod === 'equal' ? <div className="scanner-hint">Each current member pays {money(memberShares[0]?.amount || 0)} automatically.</div> : null}
-            {expenseForm.splitMethod === 'percent' ? (
-              <div className="split-box"><div className="split-summary"><span>Percent total</span><strong className={Math.abs(percentTotal - 100) < 0.01 ? 'ok-text' : 'warn-text'}>{percentTotal.toFixed(2)}%</strong></div><div className="split-note">Set each member&apos;s percentage. Amounts update automatically.</div><div className="split-actions"><button className="btn btn-secondary btn-sm" type="button" onClick={applyEvenPercentSplit}>Split percentages evenly</button></div>{memberShares.map((member) => <div className="split-member detailed" key={member.id}><div className="split-member-main"><div className="ava-sm" style={{ background: member.avatarColor }}>{member.initials}</div><div className="sm-name">{member.name}</div></div><div className="split-input-wrap"><input className="sm-inp" type="number" step="0.01" min="0" max="100" value={splitInputs.percent[member.id] ?? ''} onChange={(e) => updatePercentSplit(member.id, e.target.value)} /><span className="sm-suffix">%</span></div><div className="sm-amt">{money(member.amount)}</div></div>)}</div>
-            ) : null}
-            {expenseForm.splitMethod === 'custom' ? (
-              <div className="split-box"><div className="split-summary"><span>Assigned total</span><strong className={Math.abs(customTotal - amountNumber) < 0.01 ? 'ok-text' : 'warn-text'}>{money(customTotal)}</strong></div><div className="split-note">Enter the exact amount each person should pay.</div><div className="split-actions"><button className="btn btn-secondary btn-sm" type="button" onClick={applyEvenCustomSplit}>Distribute amounts evenly</button></div>{memberShares.map((member) => <div className="split-member detailed" key={member.id}><div className="split-member-main"><div className="ava-sm" style={{ background: member.avatarColor }}>{member.initials}</div><div className="sm-name">{member.name}</div></div><div className="split-input-wrap money"><span className="sm-prefix">$</span><input className="sm-inp" type="number" step="0.01" min="0" value={splitInputs.custom[member.id] ?? ''} onChange={(e) => updateCustomSplit(member.id, e.target.value)} /></div></div>)}</div>
-            ) : null}
-            <label className="f-label">Reason for vote (optional)</label>
-            <textarea className="f-inp" rows="3" value={expenseForm.reason} onChange={(e) => setExpenseForm({ ...expenseForm, reason: e.target.value })} placeholder="Used only if this purchase exceeds the voting threshold." />
+            {expenseForm.groupId !== 'self' && (
+              <>
+                <label className="f-label">Split method</label>
+                <div className="split-tabs">{['equal', 'percent', 'custom'].map((method) => <button className={`split-tab ${expenseForm.splitMethod === method ? 'on' : ''}`} type="button" key={method} onClick={() => setExpenseForm({ ...expenseForm, splitMethod: method })}>{method}</button>)}</div>
+                {expenseForm.splitMethod === 'equal' ? <div className="scanner-hint">Each current member pays {money(memberShares[0]?.amount || 0)} automatically.</div> : null}
+                {expenseForm.splitMethod === 'percent' ? (
+                  <div className="split-box"><div className="split-summary"><span>Percent total</span><strong className={Math.abs(percentTotal - 100) < 0.01 ? 'ok-text' : 'warn-text'}>{percentTotal.toFixed(2)}%</strong></div><div className="split-note">Set each member&apos;s percentage. Amounts update automatically.</div><div className="split-actions"><button className="btn btn-secondary btn-sm" type="button" onClick={applyEvenPercentSplit}>Split percentages evenly</button></div>{memberShares.map((member) => <div className="split-member detailed" key={member.id}><div className="split-member-main"><div className="ava-sm" style={{ background: member.avatarColor }}>{member.initials}</div><div className="sm-name">{member.name}</div></div><div className="split-input-wrap"><input className="sm-inp" type="number" step="0.01" min="0" max="100" value={splitInputs.percent[member.id] ?? ''} onChange={(e) => updatePercentSplit(member.id, e.target.value)} /><span className="sm-suffix">%</span></div><div className="sm-amt">{money(member.amount)}</div></div>)}</div>
+                ) : null}
+                {expenseForm.splitMethod === 'custom' ? (
+                  <div className="split-box"><div className="split-summary"><span>Assigned total</span><strong className={Math.abs(customTotal - amountNumber) < 0.01 ? 'ok-text' : 'warn-text'}>{money(customTotal)}</strong></div><div className="split-note">Enter the exact amount each person should pay.</div><div className="split-actions"><button className="btn btn-secondary btn-sm" type="button" onClick={applyEvenCustomSplit}>Distribute amounts evenly</button></div>{memberShares.map((member) => <div className="split-member detailed" key={member.id}><div className="split-member-main"><div className="ava-sm" style={{ background: member.avatarColor }}>{member.initials}</div><div className="sm-name">{member.name}</div></div><div className="split-input-wrap money"><span className="sm-prefix">$</span><input className="sm-inp" type="number" step="0.01" min="0" value={splitInputs.custom[member.id] ?? ''} onChange={(e) => updateCustomSplit(member.id, e.target.value)} /></div></div>)}</div>
+                ) : null}
+                <label className="f-label">Reason for vote (optional)</label>
+                <textarea className="f-inp" rows="3" value={expenseForm.reason} onChange={(e) => setExpenseForm({ ...expenseForm, reason: e.target.value })} placeholder="Used only if this purchase exceeds the voting threshold." />
+              </>
+            )}
             <button className="btn btn-primary" type="submit">Save expense</button>
           </form>
         </div>
@@ -744,36 +869,91 @@ function AddExpensePage({
   );
 }
 
-function VotePage({ votes, onRespond }) {
+function VoteCard({ vote, userId, onRespond }) {
+  const myDecision = vote.decisions.find((d) => d.userId === userId);
+  const [undoing, setUndoing] = useState(false);
+  const showButtons = !myDecision || undoing;
+
+  function handleRespond(decision) {
+    setUndoing(false);
+    onRespond(vote.id, decision);
+  }
+
+  return (
+    <div className="vote-card">
+      <div className="vc-top">
+        <div className="vc-tag">Pending approval</div>
+        <div className="vc-desc">{vote.description}</div>
+        <div className="vc-amt">{money(vote.amount)}</div>
+        {vote.reason ? <div className="vc-reason">{vote.reason}</div> : null}
+      </div>
+      <div className="vc-meta">
+        <div className="vc-meta-item"><strong>{vote.category}</strong>Category</div>
+        <div className="vc-meta-item"><strong>{vote.requestedByName}</strong>Requested by</div>
+        <div className="vc-meta-item"><strong>{new Date(vote.createdAt).toLocaleDateString()}</strong>Created</div>
+      </div>
+      <div className="vc-voters">
+        <div className="vc-tally">
+          {vote.decisions.filter((d) => d.decision === 'yes').length} / {vote.memberCount} voted yes — unanimous approval required
+        </div>
+        {vote.decisions.map((d) => (
+          <div className="vc-voter" key={d.userId}>
+            <span className="vote-dot" style={{ background: d.decision === 'yes' ? '#22C55E' : '#EF4444' }} />
+            {d.name} voted {d.decision}
+          </div>
+        ))}
+      </div>
+      <div className="vc-actions">
+        {showButtons ? (
+          <>
+            <button className="btn-vote-yes" onClick={() => handleRespond('yes')}>Approve</button>
+            <button className="btn-vote-no" onClick={() => handleRespond('no')}>Decline</button>
+          </>
+        ) : (
+          <>
+            <span style={{ fontSize: 14, fontWeight: 600, color: myDecision.decision === 'yes' ? '#22C55E' : '#EF4444' }}>
+              {myDecision.decision === 'yes' ? 'You approved' : 'You declined'}
+            </span>
+            <button className="btn btn-secondary btn-sm" onClick={() => setUndoing(true)}>Undo</button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function VotePage({ votes, onRespond, userId }) {
+  const pending = votes.filter((v) => v.status === 'pending');
+  const resolved = votes.filter((v) => v.status === 'approved' || v.status === 'declined');
+
   return (
     <div className="page show">
-      {votes.filter((vote) => vote.status === 'pending').map((vote) => (
-        <div className="vote-card" key={vote.id}>
-          <div className="vc-top">
-            <div className="vc-tag">Pending approval</div>
-            <div className="vc-desc">{vote.description}</div>
-            <div className="vc-amt">{money(vote.amount)}</div>
-            <div className="vc-reason">{vote.reason}</div>
-          </div>
-          <div className="vc-meta">
-            <div className="vc-meta-item"><strong>{vote.category}</strong>Category</div>
-            <div className="vc-meta-item"><strong>{vote.requestedByName}</strong>Requested by</div>
-            <div className="vc-meta-item"><strong>{new Date(vote.createdAt).toLocaleDateString()}</strong>Created</div>
-          </div>
-          <div className="vc-voters">
-            <div className="vc-tally">
-              {vote.decisions.filter((decision) => decision.decision === 'yes').length} / {vote.memberCount} voted yes — unanimous approval required
-            </div>
-            {vote.decisions.map((decision) => (
-              <div className="vc-voter" key={decision.userId}><span className="vote-dot" style={{ background: decision.decision === 'yes' ? '#22C55E' : '#EF4444' }} />{decision.name} voted {decision.decision}</div>
-            ))}
-          </div>
-          <div className="vc-actions">
-            <button className="btn-vote-yes" onClick={() => onRespond(vote.id, 'yes')}>Approve</button>
-            <button className="btn-vote-no" onClick={() => onRespond(vote.id, 'no')}>Decline</button>
-          </div>
-        </div>
+      {pending.length === 0 && <div className="card" style={{ color: 'var(--muted)', padding: '24px 20px' }}>No pending votes right now.</div>}
+      {pending.map((vote) => (
+        <VoteCard key={vote.id} vote={vote} userId={userId} onRespond={onRespond} />
       ))}
+      {resolved.length > 0 && (
+        <div className="card mt-4">
+          <div className="card-head">Resolved purchases</div>
+          {resolved.map((vote) => (
+            <div className="activity-row" key={vote.id}>
+              <div className="act-icon" style={{ background: vote.status === 'approved' ? '#22C55E' : '#EF4444', color: '#fff' }}>
+                {vote.status === 'approved' ? '✓' : '✕'}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="act-name">{vote.description}</div>
+                <div className="act-meta">{vote.category} · Requested by {vote.requestedByName} · {vote.groupName}</div>
+                {vote.resolvedAt && (
+                  <div className="act-meta" style={{ color: vote.status === 'approved' ? '#22C55E' : '#EF4444', marginTop: 2 }}>
+                    {vote.status === 'approved' ? 'Approved' : 'Declined'} {new Date(vote.resolvedAt).toLocaleDateString()}
+                  </div>
+                )}
+              </div>
+              <div className="act-amt">{money(vote.amount)}</div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -882,7 +1062,7 @@ function CategoryDropdown({ cat, max }) {
   );
 }
 
-function AnalyticsPage({ analytics, expenses, groups, userId }) {
+function AnalyticsPage({ analytics, expenses, groups, userId, budgetGoal }) {
   const [selectedMonth, setSelectedMonth] = useState(null);
 
   const userShare = (expense) => expense.splits?.find((split) => split.userId === userId)?.amount ?? 0;
@@ -922,10 +1102,26 @@ function AnalyticsPage({ analytics, expenses, groups, userId }) {
           <div className="card-sub" style={{ marginBottom: 8 }}>Click a month to see your breakdown</div>
           <MonthBarChart data={analytics.monthlyTrend} selected={selectedMonth} onSelect={setSelectedMonth} />
         </div>
-        <div className="card">
-          <div className="card-head">Spend by category</div>
-          {analytics.byCategory.map((item) => <BarRow key={item.category} label={item.category} value={item.total} max={analytics.byCategory[0]?.total || 1} />)}
-        </div>
+        {budgetGoal && Object.keys(budgetGoal.breakdown || {}).length > 0 && (
+          <div className="card">
+            <div className="card-head">Breakdown of personal budget</div>
+            {Object.entries(budgetGoal.breakdown).map(([cat, limit]) => {
+              const spent = analytics.currentMonthByCategory?.[cat] || 0;
+              const catPct = Math.min(100, (spent / limit) * 100);
+              return (
+                <div key={cat} style={{ marginBottom: 10, padding: '0 20px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>
+                    <span>{cat}</span>
+                    <span>{money(spent)} / {money(limit)}</span>
+                  </div>
+                  <div className="budget-progress">
+                    <div className="budget-progress-fill" style={{ width: `${catPct}%`, background: spent > limit ? 'var(--red)' : 'var(--teal-mid)' }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
       {selectedMonth && (
         <div className="mt-4">

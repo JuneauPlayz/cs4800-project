@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import * as authController from '../controllers/authController.js';
+import * as budgetController from '../controllers/budgetController.js';
 import * as challengeController from '../controllers/challengeController.js';
 import * as expenseController from '../controllers/expenseController.js';
 import * as groupController from '../controllers/groupController.js';
@@ -46,5 +47,8 @@ router.get('/settings', workspaceController.settings);
 router.put('/settings', workspaceController.updateSettings);
 
 router.post('/ai/chat', workspaceController.chat);
+
+router.get('/budget', budgetController.getBudget);
+router.post('/budget', budgetController.saveBudget);
 
 export default router;

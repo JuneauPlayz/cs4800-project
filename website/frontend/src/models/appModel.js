@@ -32,6 +32,7 @@ export const initialGroupForm = { id: null, name: '', type: 'roommates', thresho
 export const initialChallengeForm = { groupId: '', name: '', description: '', goal: '', endDate: '' };
 export const initialChallengesState = { challenges: [], rings: [] };
 export const initialChatMessages = [{ role: 'ai', text: 'Hi! I’m the SplitStack assistant. Ask me about balances, spending, voting, or challenges.' }];
+export const initialBudgetForm = { total: '', breakdown: {} };
 
 export function money(value) {
   return `$${Number(value || 0).toFixed(2)}`;
