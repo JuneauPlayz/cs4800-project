@@ -3,14 +3,17 @@ import { createNotification, moneyLike } from './sharedService.js';
 
 function buildVoteRows(groupIds) {
   const placeholders = groupIds.map(() => '?').join(',');
+  const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
   const voteStmt = db.prepare(`
     SELECT v.id, v.group_id as groupId, v.requested_by as requestedBy, v.description, v.amount, v.category,
-           v.reason, v.status, v.created_at as createdAt, u.name as requestedByName, gt.name as groupName,
+           v.reason, v.status, v.created_at as createdAt, v.resolved_at as resolvedAt,
+           u.name as requestedByName, gt.name as groupName,
            (SELECT COUNT(*) FROM group_members gm WHERE gm.group_id = v.group_id) as memberCount
     FROM votes v
     JOIN users u ON u.id = v.requested_by
     JOIN groups_table gt ON gt.id = v.group_id
     WHERE v.group_id IN (${placeholders})
+      AND (v.resolved_at IS NULL OR v.resolved_at > '${cutoff}')
     ORDER BY CASE v.status WHEN 'pending' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END, v.created_at DESC
   `);
   const decisionStmt = db.prepare(`
@@ -49,7 +52,8 @@ export function respondToVote(voteId, decision, userId) {
   if (no >= 1) status = 'declined';
   else if (yes >= groupSize) status = 'approved';
 
-  db.prepare('UPDATE votes SET status = ? WHERE id = ?').run(status, voteId);
+  const resolvedAt = status !== 'pending' ? now : null;
+  db.prepare('UPDATE votes SET status = ?, resolved_at = COALESCE(resolved_at, ?) WHERE id = ?').run(status, resolvedAt, voteId);
   if (status === 'approved') {
     createNotification(vote.requested_by, 'vote', 'Expense approved', `"${vote.description}" for ${moneyLike(vote.amount)} was unanimously approved and has been added to the group balance.`);
   } else if (status === 'declined') {

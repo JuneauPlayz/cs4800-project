@@ -4,21 +4,29 @@ import { createNotification, getGroups, getMembersByGroup, getUserById, moneyLik
 export function getExpenses(userId) {
   const groups = getGroups(userId);
   const groupIds = groups.map((group) => group.id);
-  if (!groupIds.length) return [];
 
-  const placeholders = groupIds.map(() => '?').join(',');
+  let whereClause;
+  let params;
+  if (groupIds.length > 0) {
+    const placeholders = groupIds.map(() => '?').join(',');
+    whereClause = `(e.group_id IN (${placeholders}) AND (e.vote_id IS NULL OR v.status = 'approved')) OR (e.group_id = 'self' AND e.paid_by = ?)`;
+    params = [...groupIds, userId];
+  } else {
+    whereClause = `e.group_id = 'self' AND e.paid_by = ?`;
+    params = [userId];
+  }
+
   const expenses = db.prepare(`
     SELECT e.id, e.group_id as groupId, e.description, e.amount, e.category, e.paid_by as paidBy,
            e.split_method as splitMethod, e.expense_date as expenseDate, e.merchant, e.receipt_url as receiptUrl, e.created_at as createdAt,
-           u.name as paidByName, u.initials as paidByInitials, gt.name as groupName
+           u.name as paidByName, u.initials as paidByInitials, COALESCE(gt.name, 'Personal') as groupName
     FROM expenses e
     JOIN users u ON u.id = e.paid_by
-    JOIN groups_table gt ON gt.id = e.group_id
+    LEFT JOIN groups_table gt ON gt.id = e.group_id
     LEFT JOIN votes v ON v.id = e.vote_id
-    WHERE e.group_id IN (${placeholders})
-      AND (e.vote_id IS NULL OR v.status = 'approved')
+    WHERE ${whereClause}
     ORDER BY e.expense_date DESC, e.created_at DESC
-  `).all(...groupIds);
+  `).all(...params);
 
   const splitStmt = db.prepare('SELECT user_id as userId, amount FROM expense_splits WHERE expense_id = ?');
   return expenses.map((expense) => ({ ...expense, splits: splitStmt.all(expense.id) }));
@@ -127,6 +135,17 @@ export function createExpense(payload) {
   const id = `e-${Date.now()}`;
   const createdAt = new Date().toISOString();
   const expenseDate = payload.expenseDate ?? createdAt.slice(0, 10);
+
+  if (payload.groupId === 'self') {
+    db.prepare(`
+      INSERT INTO expenses (id, group_id, description, amount, category, paid_by, split_method, expense_date, merchant, receipt_url, reason, vote_id, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, 'self', payload.description, payload.amount, payload.category, payload.paidBy ?? 'u1', 'self', expenseDate, payload.merchant ?? null, payload.receiptUrl ?? null, null, null, createdAt);
+    db.prepare('INSERT INTO expense_splits (expense_id, user_id, amount) VALUES (?, ?, ?)').run(id, payload.paidBy ?? 'u1', payload.amount);
+    const savedExpense = getExpenses(payload.paidBy).find((e) => e.id === id);
+    return { expense: savedExpense, triggeredVote: null };
+  }
+
   const groupMembers = getMembersByGroup(payload.groupId);
   const memberIds = groupMembers.map((member) => member.id);
   const group = db.prepare('SELECT threshold, name FROM groups_table WHERE id = ?').get(payload.groupId);
