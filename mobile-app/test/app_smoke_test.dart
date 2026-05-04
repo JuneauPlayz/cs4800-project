@@ -10,6 +10,110 @@ import 'package:mobile_app/src/ui/home_shell.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 void main() {
+  test('extracts the total amount from receipt OCR text', () {
+    const receiptText = '''
+CASH RECEIPT
+Lorem 6.50
+Ipsum 7.50
+Dolor Sit 48.00
+Sub Total 76.80
+Sales Tax 8.00
+Total 84.80
+Balance 84.80
+THANK YOU
+''';
+
+    expect(debugReceiptAmountFromText(receiptText), 84.80);
+  });
+
+  test('extracts total amount when OCR misreads the total label', () {
+    const receiptText = '''
+CASH RECEIPT
+Sub-Total 76.80
+Sales Tax 8.00
+Tota1 84.80
+Balance 84.80
+''';
+
+    expect(debugReceiptAmountFromText(receiptText), 84.80);
+  });
+
+  test('extracts receipt total when OCR splits cents with a space', () {
+    const receiptText = '''
+RECEIPT
+TOTAL AMOUNT
+\$ 117 00
+CASH
+\$ 200 00
+CHANGE
+\$ 83 00
+''';
+
+    expect(debugReceiptAmountFromText(receiptText), 117.00);
+  });
+
+  test('does not autofill ambiguous integer totals', () {
+    const receiptText = '''
+RECEIPT
+TOTAL AMOUNT
+\$ 1700
+CASH
+\$ 2000
+''';
+
+    expect(debugReceiptAmountFromText(receiptText), isNull);
+  });
+
+  test('extracts comma-decimal total with currency code', () {
+    const receiptText = '''
+Berghotel
+1xSchweinschnitzel a 25.00 CHF 25.00
+1xChasplatzli 18.50 CHF 18.50
+Total : CHF 54,50
+Inkl. 7.6% MwSt 54.50 CHF: 3,85
+''';
+
+    expect(debugReceiptAmountFromText(receiptText), 54.50);
+  });
+
+  test('does not choose an item price when total label is unreadable', () {
+    const receiptText = '''
+Berghotel
+1xSchweinschnitzel a 25.00 CHF 25.00
+1xChasplatzli 18.50 CHF 18.50
+CHF 54,50
+Inkl. 7.6% MwSt 54.50 CHF: 3,85
+''';
+
+    expect(debugReceiptAmountFromText(receiptText), isNull);
+  });
+
+  test('extracts total when OCR splits total label and currency amount', () {
+    const receiptText = '''
+Berghotel
+Zikakite Macchiato a 4.50 CHF 9.00
+1xGipfeli 2.00 CHF 2.00
+Tota l : CHF
+54,50
+Inkl. 7.6% MwSt 54.50 CHF: 3,85
+''';
+
+    expect(debugReceiptAmountFromText(receiptText), 54.50);
+  });
+
+  test('extracts regular shopping receipt total from total amount row', () {
+    const receiptText = '''
+RECEIPT
+1x Lorem ipsum \$ 35.00
+2x Lorem ipsum \$ 15.00
+TOTAL AMOUNT \$ 117.00
+CASH \$ 200.00
+CHANGE \$ 83.00
+''';
+
+    expect(debugReceiptAmountFromText(receiptText), 117.00);
+  });
+
   testWidgets('shows auth screen when no session exists', (tester) async {
     FlutterSecureStorage.setMockInitialValues({});
 

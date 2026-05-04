@@ -1,12 +1,15 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 import 'package:flutter/material.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../core/app_theme.dart';
 import '../data/models.dart';
+import '../data/receipt_ocr_stub.dart'
+    if (dart.library.html) '../data/receipt_ocr_web.dart';
 import '../state/app_controller.dart';
 
 const _categoryOptions = [
@@ -807,7 +810,7 @@ class _AddExpenseTabState extends State<_AddExpenseTab> {
                   ),
                   const SizedBox(height: 6),
                   const Text(
-                    'This first pass supports equal, percent, and custom member splits.',
+                    'Split expenses equally, by percent, or with custom member amounts.',
                   ),
                   const SizedBox(height: 18),
                   DropdownButtonFormField<String>(
@@ -1095,6 +1098,9 @@ class _AddExpenseTabState extends State<_AddExpenseTab> {
 
   Future<void> _pickReceipt(ImageSource source) async {
     setState(() => _pickingReceipt = true);
+    var imagePath = '';
+    Uint8List? imageBytes;
+    var mimeType = 'image/jpeg';
     try {
       final picker = ImagePicker();
       final picked = await picker.pickImage(
@@ -1103,42 +1109,62 @@ class _AddExpenseTabState extends State<_AddExpenseTab> {
         maxWidth: 2400,
       );
       if (picked == null) return;
+      imagePath = picked.path;
       final bytes = await picked.readAsBytes();
+      imageBytes = bytes;
+      mimeType = picked.mimeType ?? 'image/jpeg';
       if (!mounted) return;
       setState(() {
         _receiptImageBytes = bytes;
         _receiptFileName = picked.name;
-        _receiptMimeType = picked.mimeType ?? 'image/jpeg';
+        _receiptMimeType = mimeType;
         _receiptSourceLabel = source == ImageSource.camera
             ? 'Camera capture'
             : 'Uploaded image';
       });
-      await _scanReceipt(picked.path);
     } catch (_) {
       if (mounted) {
         _showMessage('Unable to attach receipt image.');
       }
+      return;
     } finally {
       if (mounted) {
         setState(() => _pickingReceipt = false);
       }
     }
+
+    await _scanReceipt(
+      imagePath: imagePath,
+      imageBytes: imageBytes,
+      mimeType: mimeType,
+    );
   }
 
-  Future<void> _scanReceipt(String imagePath) async {
-    if (imagePath.isEmpty) return;
+  Future<void> _scanReceipt({
+    required String imagePath,
+    required Uint8List? imageBytes,
+    required String mimeType,
+  }) async {
+    if (!kIsWeb && imagePath.isEmpty) {
+      _showMessage('Receipt attached. Enter the date and amount to continue.');
+      return;
+    }
     setState(() => _scanningReceipt = true);
-    final recognizer = TextRecognizer(script: TextRecognitionScript.latin);
+    TextRecognizer? recognizer;
     try {
-      final result = await recognizer.processImage(
-        InputImage.fromFilePath(imagePath),
-      );
-      final details = _parseReceiptText(result.text);
+      final rawText = kIsWeb
+          ? await _scanReceiptTextOnWeb(
+              imageBytes: imageBytes,
+              mimeType: mimeType,
+            )
+          : await _scanReceiptTextOnDevice(
+              imagePath: imagePath,
+              onRecognizerReady: (next) => recognizer = next,
+            );
+      final details = _parseReceiptText(rawText ?? '');
       if (!mounted) return;
+      final filled = details.amount != null || details.date != null;
       setState(() {
-        if (details.description != null) {
-          _descriptionController.text = details.description!;
-        }
         if (details.amount != null) {
           _amountController.text = details.amount!.toStringAsFixed(2);
         }
@@ -1148,25 +1174,46 @@ class _AddExpenseTabState extends State<_AddExpenseTab> {
         _syncSplitControllers();
       });
       final found = [
-        if (details.description != null) 'description',
         if (details.amount != null) 'amount',
         if (details.date != null) 'date',
       ];
-      _showMessage(
-        found.isEmpty
-            ? 'Receipt attached. Review and enter any missing details.'
-            : 'Receipt scan filled ${found.join(', ')}. Review before submitting.',
-      );
+      if (!filled) {
+        _showMessage('Unable to read receipt. Enter the amount manually.');
+      } else {
+        _showMessage(
+          'Receipt scan filled ${found.join(' and ')}. Enter description and category.',
+        );
+      }
     } catch (_) {
       if (mounted) {
-        _showMessage('Receipt attached, but text scan was not readable.');
+        _showMessage('Unable to read receipt. Enter the amount manually.');
       }
     } finally {
-      await recognizer.close();
+      await recognizer?.close();
       if (mounted) {
         setState(() => _scanningReceipt = false);
       }
     }
+  }
+
+  Future<String?> _scanReceiptTextOnWeb({
+    required Uint8List? imageBytes,
+    required String mimeType,
+  }) {
+    if (imageBytes == null) return Future.value(null);
+    return recognizeReceiptTextFromBytes(bytes: imageBytes, mimeType: mimeType);
+  }
+
+  Future<String?> _scanReceiptTextOnDevice({
+    required String imagePath,
+    required void Function(TextRecognizer recognizer) onRecognizerReady,
+  }) async {
+    final recognizer = TextRecognizer(script: TextRecognitionScript.latin);
+    onRecognizerReady(recognizer);
+    final result = await recognizer.processImage(
+      InputImage.fromFilePath(imagePath),
+    );
+    return result.text;
   }
 
   void _clearReceipt({bool showUpdate = true}) {
@@ -1262,7 +1309,11 @@ class _ReceiptScannerPanel extends StatelessWidget {
               const SizedBox(height: 12),
               const LinearProgressIndicator(minHeight: 3),
               const SizedBox(height: 8),
-              Text(scanning ? 'Scanning receipt text...' : 'Opening picker...'),
+              Text(
+                scanning
+                    ? 'Scanning receipt date and amount...'
+                    : 'Opening picker...',
+              ),
             ],
             if (imageBytes != null) ...[
               const SizedBox(height: 14),
@@ -1299,9 +1350,8 @@ class _ReceiptScannerPanel extends StatelessWidget {
 }
 
 class _ReceiptDetails {
-  const _ReceiptDetails({this.description, this.amount, this.date});
+  const _ReceiptDetails({this.amount, this.date});
 
-  final String? description;
   final double? amount;
   final DateTime? date;
 }
@@ -1313,73 +1363,218 @@ _ReceiptDetails _parseReceiptText(String rawText) {
       .where((line) => line.isNotEmpty)
       .toList();
   return _ReceiptDetails(
-    description: _receiptDescription(lines),
     amount: _receiptAmount(lines),
     date: _receiptDate(rawText),
   );
 }
 
-String? _receiptDescription(List<String> lines) {
-  final ignored = RegExp(
-    r'(receipt|invoice|order|cashier|terminal|subtotal|total|tax|visa|mastercard|amex|debit|credit|change|balance)',
+double? _receiptAmount(List<String> lines) {
+  final moneyPattern = RegExp(
+    r'(?<!\d)\$?\s*(\d{1,5}(?:,\d{3})*(?:[.,]\d{1,2}|\s+\d{2}))(?!\d)',
+  );
+  final ignoreWords = RegExp(
+    r'(sub\s*total|tax|tip|gratuity|change|cash|tender|card|visa|mastercard|amex|refund|saved|payment|paid|auth|approval|account|acct)',
     caseSensitive: false,
   );
-  for (final line in lines.take(8)) {
-    final cleaned = line.replaceAll(RegExp(r"[^A-Za-z0-9 &.'-]"), '').trim();
-    if (cleaned.length >= 3 && !ignored.hasMatch(cleaned)) {
-      return cleaned;
+  final normalizedLines = lines.map(_normalizeReceiptAmountLine).toList();
+
+  for (var i = normalizedLines.length - 1; i >= 0; i--) {
+    final line = normalizedLines[i];
+    if (!_looksLikeTotalLine(line) || ignoreWords.hasMatch(line)) continue;
+
+    final afterTotal = _textAfterTotalLabel(line);
+    final afterTotalValue = _lastMoneyValue(afterTotal, moneyPattern);
+    if (afterTotalValue != null) return afterTotalValue;
+
+    final sameLineValue = _lastMoneyValue(line, moneyPattern);
+    if (sameLineValue != null) return sameLineValue;
+
+    for (
+      var offset = 1;
+      offset <= 4 && i + offset < normalizedLines.length;
+      offset++
+    ) {
+      final nextLine = normalizedLines[i + offset];
+      if (ignoreWords.hasMatch(nextLine)) continue;
+      final nextLineValue = _lastMoneyValue(nextLine, moneyPattern);
+      if (nextLineValue != null) return nextLineValue;
     }
+  }
+
+  return null;
+}
+
+double? _lastMoneyValue(String text, RegExp moneyPattern) {
+  final matches = moneyPattern.allMatches(text).toList();
+  for (final match in matches.reversed) {
+    final value = _moneyValue(match.group(1));
+    if (value != null && value > 0) return value;
   }
   return null;
 }
 
-double? _receiptAmount(List<String> lines) {
-  final moneyPattern = RegExp(
-    r'(?<!\d)(?:\$)?\s*(\d{1,4}(?:,\d{3})*(?:\.\d{2}))(?!\d)',
-  );
-  final totalWords = RegExp(
-    r'(grand\s+total|amount\s+due|balance\s+due|total)',
-    caseSensitive: false,
-  );
-  final ignoreWords = RegExp(
-    r'(subtotal|tax|tip|change|cash|card|visa|mastercard|amex)',
-    caseSensitive: false,
-  );
+@visibleForTesting
+double? debugReceiptAmountFromText(String rawText) {
+  final lines = rawText
+      .split(RegExp(r'\r?\n'))
+      .map((line) => line.trim())
+      .where((line) => line.isNotEmpty)
+      .toList();
+  return _receiptAmount(lines);
+}
 
-  for (var i = lines.length - 1; i >= 0; i--) {
-    final line = lines[i];
-    if (!totalWords.hasMatch(line) || ignoreWords.hasMatch(line)) continue;
-    final matches = moneyPattern.allMatches(line).toList();
-    if (matches.isNotEmpty) {
-      return _moneyValue(matches.last.group(1));
+String _normalizeReceiptAmountLine(String line) {
+  final normalizedLine = line.replaceAllMapped(
+    RegExp(r'(\d{1,5}(?:,\d{3})?)\s+(\d{2})(?!\d)'),
+    (match) => '${match.group(1)}.${match.group(2)}',
+  );
+  final chars = normalizedLine.split('');
+  for (var i = 0; i < chars.length; i++) {
+    final char = chars[i];
+    final previous = i == 0 ? '' : chars[i - 1];
+    final next = i + 1 < chars.length ? chars[i + 1] : '';
+    final nextNonSpace = chars
+        .skip(i + 1)
+        .firstWhere((item) => item.trim().isNotEmpty, orElse: () => '');
+
+    if ((char == 's' || char == 'S') &&
+        (i == 0 || previous.trim().isEmpty) &&
+        _isDigit(nextNonSpace)) {
+      chars[i] = r'$';
+    } else if ((char == 'o' || char == 'O') &&
+        _isDigit(previous) &&
+        _isDigit(next)) {
+      chars[i] = '0';
+    } else if ((char == 'l' || char == 'I') &&
+        _isDigit(previous) &&
+        _isDigit(next)) {
+      chars[i] = '1';
     }
-    if (i + 1 < lines.length) {
-      final nextMatches = moneyPattern.allMatches(lines[i + 1]).toList();
-      if (nextMatches.isNotEmpty) {
-        return _moneyValue(nextMatches.last.group(1));
+  }
+  return chars.join();
+}
+
+bool _looksLikeTotalLine(String line) {
+  final lower = line.toLowerCase();
+  if (RegExp(r'sub\s*[-:]?\s*total').hasMatch(lower)) return false;
+  if (lower.contains('amount due') ||
+      lower.contains('balance due') ||
+      lower.contains('total due') ||
+      lower.contains('total amount')) {
+    return true;
+  }
+
+  return _containsFuzzyTotal(lower);
+}
+
+String _textAfterTotalLabel(String line) {
+  final lower = line.toLowerCase();
+  final direct = RegExp(
+    r'(amount\s+due|balance\s+due|total\s+due|total\s+amount|grand\s+total|order\s+total|sale\s+total)',
+    caseSensitive: false,
+  ).firstMatch(line);
+  if (direct != null) return line.substring(direct.end);
+
+  final token = RegExp(r'[a-z0-9@!|]+', caseSensitive: false).allMatches(lower);
+  for (final match in token) {
+    if (_editDistance(_normalizeTotalToken(match.group(0)!), 'total') <= 1) {
+      return line.substring(match.end);
+    }
+  }
+  return line;
+}
+
+bool _containsFuzzyTotal(String text) {
+  final compact = _compactReceiptLabel(text);
+  if (compact.contains('subtotal')) return false;
+  if (compact.contains('total')) return true;
+  for (var start = 0; start < compact.length; start++) {
+    for (final width in const [4, 5, 6]) {
+      if (start + width > compact.length) continue;
+      if (_editDistance(compact.substring(start, start + width), 'total') <=
+          1) {
+        return true;
       }
     }
   }
+  return false;
+}
 
-  final allAmounts = <double>[];
-  for (final line in lines) {
-    if (ignoreWords.hasMatch(line)) continue;
-    for (final match in moneyPattern.allMatches(line)) {
-      final value = _moneyValue(match.group(1));
-      if (value != null && value > 0) allAmounts.add(value);
+String _compactReceiptLabel(String text) {
+  return text
+      .toLowerCase()
+      .replaceAll('0', 'o')
+      .replaceAll('@', 'a')
+      .replaceAll('4', 'a')
+      .replaceAll('1', 'l')
+      .replaceAll('i', 'l')
+      .replaceAll('!', 'l')
+      .replaceAll('|', 'l')
+      .replaceAll(RegExp(r'[^a-z]'), '');
+}
+
+String _normalizeTotalToken(String token) {
+  return token
+      .replaceAll('0', 'o')
+      .replaceAll('@', 'a')
+      .replaceAll('4', 'a')
+      .replaceAll('1', 'l')
+      .replaceAll('i', 'l')
+      .replaceAll('!', 'l')
+      .replaceAll('|', 'l');
+}
+
+int _editDistance(String left, String right) {
+  if ((left.length - right.length).abs() > 1) return 2;
+  final previous = List<int>.generate(right.length + 1, (index) => index);
+  for (var i = 0; i < left.length; i++) {
+    var lastDiagonal = previous[0];
+    previous[0] = i + 1;
+    for (var j = 0; j < right.length; j++) {
+      final oldDiagonal = previous[j + 1];
+      previous[j + 1] = [
+        previous[j + 1] + 1,
+        previous[j] + 1,
+        lastDiagonal + (left[i] == right[j] ? 0 : 1),
+      ].reduce((a, b) => a < b ? a : b);
+      lastDiagonal = oldDiagonal;
     }
   }
-  if (allAmounts.isEmpty) return null;
-  allAmounts.sort();
-  return allAmounts.last;
+  return previous.last;
+}
+
+bool _isDigit(String value) {
+  if (value.length != 1) return false;
+  final code = value.codeUnitAt(0);
+  return code >= 48 && code <= 57;
 }
 
 double? _moneyValue(String? raw) {
   if (raw == null) return null;
-  return double.tryParse(raw.replaceAll(',', '').trim());
+  final trimmed = raw.trim();
+  if (!RegExp(r'[.,]\d{1,2}$').hasMatch(trimmed)) return null;
+  final decimalNormalized = RegExp(r'^\d{1,4},\d{2}$').hasMatch(trimmed)
+      ? trimmed.replaceAll(',', '.')
+      : trimmed.replaceAll(',', '');
+  return double.tryParse(decimalNormalized);
 }
 
 DateTime? _receiptDate(String rawText) {
+  final iso = RegExp(
+    r'\b(\d{4})[\/.-](\d{1,2})[\/.-](\d{1,2})\b',
+  ).firstMatch(rawText);
+  if (iso != null) {
+    final year = int.tryParse(iso.group(1)!);
+    final month = int.tryParse(iso.group(2)!);
+    final day = int.tryParse(iso.group(3)!);
+    if (year != null && month != null && day != null) {
+      final parsed = DateTime.tryParse(
+        '${year.toString().padLeft(4, '0')}-${month.toString().padLeft(2, '0')}-${day.toString().padLeft(2, '0')}',
+      );
+      if (parsed != null) return parsed;
+    }
+  }
+
   final numeric = RegExp(
     r'\b(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})\b',
   ).firstMatch(rawText);

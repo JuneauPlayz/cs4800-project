@@ -25,7 +25,7 @@ npm --version
 Start the API first in one terminal:
 
 ```bash
-cd /Users/sarinakhara/Desktop/CS4800/cs4800-project/website/backend
+cd website/backend
 npm install
 npm run dev
 ```
@@ -47,7 +47,7 @@ curl http://localhost:3001/api/health
 Open a second terminal:
 
 ```bash
-cd /Users/sarinakhara/Desktop/CS4800/cs4800-project/mobile-app
+cd mobile-app
 flutter pub get
 flutter run
 ```
@@ -61,21 +61,6 @@ flutter run -d macos
 flutter run -d ios
 flutter run -d android
 ```
-
-## Real Demo Flow
-
-Do not use shared demo credentials for the final walkthrough. Each teammate can
-register an account with their own email and password from the mobile app.
-
-1. Person A registers and creates a group.
-2. Person A enters Person B's email in the invite field.
-3. Person B registers or logs in with that same email.
-4. Person B opens the Groups tab and accepts the pending invite.
-5. Either member adds expenses, submits large expenses for voting, votes, and
-   refreshes to see balances update from the backend.
-
-The app stores the session token locally with `shared_preferences`. The shared
-data is stored by the backend in `website/backend/splitstack.db`.
 
 ## API URL Rules
 
@@ -146,14 +131,3 @@ flutter test
 flutter clean
 flutter pub get
 ```
-
-## Optional Demo Seed Data
-
-Fresh databases start empty so the final demo can use real team accounts. If a
-developer wants old sample data for local testing, start the backend with:
-
-```bash
-SPLITSTACK_SEED_DEMO=true npm run dev
-```
-
-Only use this on a disposable local database.

@@ -614,7 +614,10 @@ export function createExpense(payload) {
   const receiptUrl = saveReceiptImage(payload);
   const groupMembers = getMembersByGroup(payload.groupId);
   const memberIds = groupMembers.map((member) => member.id);
-  // Determine if this expense needs a vote before being counted
+  const paidBy = payload.paidBy;
+  if (!paidBy || !memberIds.includes(paidBy)) {
+    throw new Error('Expense payer must be a member of the group.');
+  }
   const group = db.prepare('SELECT threshold, name FROM groups_table WHERE id = ?').get(payload.groupId);
   const needsVote = group && group.threshold > 0 && payload.amount > group.threshold;
 
@@ -633,7 +636,7 @@ export function createExpense(payload) {
     payload.description,
     payload.amount,
     payload.category,
-    payload.paidBy ?? 'u1',
+    paidBy,
     payload.splitMethod,
     expenseDate,
     payload.merchant ?? null,
@@ -666,17 +669,16 @@ export function createExpense(payload) {
     db.prepare(`
       INSERT INTO votes (id, group_id, requested_by, description, amount, category, reason, status, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(voteId, payload.groupId, payload.paidBy ?? 'u1', payload.description, payload.amount, payload.category, payload.reason ?? 'Auto-created from expense above threshold.', 'pending', createdAt);
+    `).run(voteId, payload.groupId, paidBy, payload.description, payload.amount, payload.category, payload.reason ?? 'Auto-created from expense above threshold.', 'pending', createdAt);
     db.prepare(`INSERT INTO vote_decisions (vote_id, user_id, decision, decided_at) VALUES (?, ?, ?, ?)`)
-      .run(voteId, payload.paidBy ?? 'u1', 'yes', createdAt);
+      .run(voteId, paidBy, 'yes', createdAt);
     triggeredVote = voteId;
-    groupMembers.filter((member) => member.id !== payload.paidBy).forEach((member) => {
+    groupMembers.filter((member) => member.id !== paidBy).forEach((member) => {
       createNotification(member.id, 'vote', 'New vote request', `${payload.description} for ${moneyLike(payload.amount)} in ${group.name} needs a decision.`);
     });
   }
 
-  // Return null for the expense if it's pending a vote (not yet visible in balances)
-  const savedExpense = needsVote ? null : getExpenses(payload.paidBy).find((expense) => expense.id === id);
+  const savedExpense = needsVote ? null : getExpenses(paidBy).find((expense) => expense.id === id);
   return { expense: savedExpense, triggeredVote };
 }
 
