@@ -76,6 +76,11 @@ class ApiClient {
     return _mapList(json['invites'], GroupInvite.fromJson);
   }
 
+  Future<List<AppNotification>> getNotifications(String token) async {
+    final json = await _request('GET', '/api/notifications', token: token);
+    return _mapList(json['notifications'], AppNotification.fromJson);
+  }
+
   Future<List<Expense>> getExpenses(String token) async {
     final json = await _request('GET', '/api/expenses', token: token);
     return _mapList(json['expenses'], Expense.fromJson);
@@ -123,6 +128,33 @@ class ApiClient {
         'inviteEmails': inviteEmails,
       },
     );
+  }
+
+  Future<void> updateGroup(
+    String token, {
+    required String groupId,
+    required String name,
+    required String type,
+    required double threshold,
+    required String description,
+    required List<String> inviteEmails,
+  }) async {
+    await _request(
+      'PUT',
+      '/api/groups/$groupId',
+      token: token,
+      body: {
+        'name': name,
+        'type': type,
+        'threshold': threshold,
+        'description': description,
+        'inviteEmails': inviteEmails,
+      },
+    );
+  }
+
+  Future<void> deleteGroup(String token, {required String groupId}) {
+    return _request('DELETE', '/api/groups/$groupId', token: token);
   }
 
   Future<void> leaveGroup(String token, {required String groupId}) {
@@ -211,6 +243,17 @@ class ApiClient {
       '/api/votes/$voteId/respond',
       token: token,
       body: {'decision': decision},
+    );
+  }
+
+  Future<void> markNotificationRead(
+    String token, {
+    required String notificationId,
+  }) {
+    return _request(
+      'POST',
+      '/api/notifications/$notificationId/read',
+      token: token,
     );
   }
 

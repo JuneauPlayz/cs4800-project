@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../data/api_client.dart';
@@ -16,12 +18,15 @@ class AppController extends ChangeNotifier {
   bool savingSettings = false;
   String? errorMessage;
 
+  Timer? _pollTimer;
+  bool _polling = false;
   String? _token;
   User? user;
   DashboardData? dashboard;
   AnalyticsData? analytics;
   List<Group> groups = const [];
   List<GroupInvite> invites = const [];
+  List<AppNotification> notifications = const [];
   List<Expense> expenses = const [];
   List<Vote> votes = const [];
   ChallengeData? challengeData;
@@ -36,12 +41,16 @@ class AppController extends ChangeNotifier {
 
   bool get isAuthenticated => _token != null && user != null;
   String get apiBaseUrl => apiClient.baseUrl;
+  int get unreadCount =>
+      notifications.where((notification) => notification.unread).length +
+      invites.length;
 
   Future<void> initialize() async {
     _token = await sessionStore.readToken();
     if (_token != null) {
       try {
         await refreshAll(showLoader: false);
+        _startPolling();
       } catch (_) {
         await logout(notify: false);
       }
@@ -88,6 +97,7 @@ class AppController extends ChangeNotifier {
         apiClient.getDashboard(token),
         apiClient.getGroups(token),
         apiClient.getInvites(token),
+        apiClient.getNotifications(token),
         apiClient.getExpenses(token),
         apiClient.getVotes(token),
         apiClient.getAnalytics(token),
@@ -99,11 +109,12 @@ class AppController extends ChangeNotifier {
       dashboard = results[1] as DashboardData;
       groups = results[2] as List<Group>;
       invites = results[3] as List<GroupInvite>;
-      expenses = results[4] as List<Expense>;
-      votes = results[5] as List<Vote>;
-      analytics = results[6] as AnalyticsData;
-      settings = results[7] as SettingsData;
-      challengeData = results[8] as ChallengeData;
+      notifications = results[4] as List<AppNotification>;
+      expenses = results[5] as List<Expense>;
+      votes = results[6] as List<Vote>;
+      analytics = results[7] as AnalyticsData;
+      settings = results[8] as SettingsData;
+      challengeData = results[9] as ChallengeData;
       errorMessage = null;
     } catch (error) {
       final message = error.toString();
@@ -139,6 +150,58 @@ class AppController extends ChangeNotifier {
         inviteEmails: inviteEmails,
       );
       await refreshAll(showLoader: false);
+    } catch (error) {
+      _setError(error);
+      rethrow;
+    } finally {
+      loading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> updateGroup({
+    required String groupId,
+    required String name,
+    required String type,
+    required double threshold,
+    required String description,
+    required List<String> inviteEmails,
+  }) async {
+    final token = _requireToken();
+    loading = true;
+    errorMessage = null;
+    notifyListeners();
+    try {
+      await apiClient.updateGroup(
+        token,
+        groupId: groupId,
+        name: name,
+        type: type,
+        threshold: threshold,
+        description: description,
+        inviteEmails: inviteEmails,
+      );
+      await refreshAll(showLoader: false);
+    } catch (error) {
+      _setError(error);
+      rethrow;
+    } finally {
+      loading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> deleteGroup(String groupId) async {
+    final token = _requireToken();
+    loading = true;
+    errorMessage = null;
+    notifyListeners();
+    try {
+      await apiClient.deleteGroup(token, groupId: groupId);
+      await refreshAll(showLoader: false);
+    } catch (error) {
+      _setError(error);
+      rethrow;
     } finally {
       loading = false;
       notifyListeners();
@@ -153,6 +216,9 @@ class AppController extends ChangeNotifier {
     try {
       await apiClient.leaveGroup(token, groupId: groupId);
       await refreshAll(showLoader: false);
+    } catch (error) {
+      _setError(error);
+      rethrow;
     } finally {
       loading = false;
       notifyListeners();
@@ -169,6 +235,9 @@ class AppController extends ChangeNotifier {
       await refreshAll(showLoader: false);
       final triggeredVote = json['triggeredVote'];
       return triggeredVote?.toString();
+    } catch (error) {
+      _setError(error);
+      rethrow;
     } finally {
       loading = false;
       notifyListeners();
@@ -192,6 +261,9 @@ class AppController extends ChangeNotifier {
         note: note,
       );
       await refreshAll(showLoader: false);
+    } catch (error) {
+      _setError(error);
+      rethrow;
     } finally {
       loading = false;
       notifyListeners();
@@ -219,6 +291,9 @@ class AppController extends ChangeNotifier {
         endDate: endDate,
       );
       await refreshAll(showLoader: false);
+    } catch (error) {
+      _setError(error);
+      rethrow;
     } finally {
       loading = false;
       notifyListeners();
@@ -230,6 +305,7 @@ class AppController extends ChangeNotifier {
     required double amount,
   }) async {
     final token = _requireToken();
+    final previousChallengeData = challengeData;
     errorMessage = null;
     _addLocalContribution(challengeId: challengeId, amount: amount);
     notifyListeners();
@@ -242,7 +318,8 @@ class AppController extends ChangeNotifier {
       _replaceChallenge(updatedChallenge);
       notifyListeners();
     } catch (error) {
-      errorMessage = error.toString();
+      challengeData = previousChallengeData;
+      _setError(error);
       notifyListeners();
       rethrow;
     }
@@ -307,6 +384,9 @@ class AppController extends ChangeNotifier {
         decision: accept ? 'accepted' : 'declined',
       );
       await refreshAll(showLoader: false);
+    } catch (error) {
+      _setError(error);
+      rethrow;
     } finally {
       loading = false;
       notifyListeners();
@@ -324,6 +404,9 @@ class AppController extends ChangeNotifier {
     try {
       await apiClient.respondToVote(token, voteId: voteId, decision: decision);
       await refreshAll(showLoader: false);
+    } catch (error) {
+      _setError(error);
+      rethrow;
     } finally {
       loading = false;
       notifyListeners();
@@ -337,9 +420,43 @@ class AppController extends ChangeNotifier {
     notifyListeners();
     try {
       settings = await apiClient.updateSettings(token, settings: next);
+    } catch (error) {
+      _setError(error);
+      rethrow;
     } finally {
       savingSettings = false;
       notifyListeners();
+    }
+  }
+
+  Future<void> markNotificationRead(String notificationId) async {
+    final token = _requireToken();
+    final previous = notifications;
+    notifications = notifications
+        .map(
+          (notification) => notification.id == notificationId
+              ? AppNotification(
+                  id: notification.id,
+                  type: notification.type,
+                  title: notification.title,
+                  body: notification.body,
+                  unread: false,
+                  createdAt: notification.createdAt,
+                )
+              : notification,
+        )
+        .toList();
+    notifyListeners();
+    try {
+      await apiClient.markNotificationRead(
+        token,
+        notificationId: notificationId,
+      );
+    } catch (error) {
+      notifications = previous;
+      _setError(error);
+      notifyListeners();
+      rethrow;
     }
   }
 
@@ -351,6 +468,9 @@ class AppController extends ChangeNotifier {
     try {
       user = await apiClient.updateMe(token, avatarEmoji: avatarEmoji);
       await refreshAll(showLoader: false);
+    } catch (error) {
+      _setError(error);
+      rethrow;
     } finally {
       savingSettings = false;
       notifyListeners();
@@ -372,6 +492,9 @@ class AppController extends ChangeNotifier {
         ...chatMessages,
         ChatMessage(role: 'assistant', text: reply),
       ];
+    } catch (error) {
+      _setError(error);
+      rethrow;
     } finally {
       sendingChat = false;
       notifyListeners();
@@ -379,6 +502,7 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> logout({bool notify = true}) async {
+    _stopPolling();
     await sessionStore.clear();
     _token = null;
     user = null;
@@ -386,6 +510,7 @@ class AppController extends ChangeNotifier {
     analytics = null;
     groups = const [];
     invites = const [];
+    notifications = const [];
     expenses = const [];
     votes = const [];
     challengeData = null;
@@ -413,6 +538,7 @@ class AppController extends ChangeNotifier {
       user = session.user;
       await sessionStore.writeToken(session.token);
       await refreshAll(showLoader: false);
+      _startPolling();
     } catch (error) {
       errorMessage = error.toString();
       rethrow;
@@ -420,6 +546,49 @@ class AppController extends ChangeNotifier {
       loading = false;
       notifyListeners();
     }
+  }
+
+  Future<void> refreshRealtime() async {
+    final token = _token;
+    if (token == null || _polling) return;
+    _polling = true;
+    try {
+      final results = await Future.wait([
+        apiClient.getNotifications(token),
+        apiClient.getInvites(token),
+        apiClient.getChallenges(token),
+        apiClient.getVotes(token),
+      ]);
+      notifications = results[0] as List<AppNotification>;
+      invites = results[1] as List<GroupInvite>;
+      challengeData = results[2] as ChallengeData;
+      votes = results[3] as List<Vote>;
+      notifyListeners();
+    } catch (_) {
+      // Realtime refresh is opportunistic; manual refresh surfaces errors.
+    } finally {
+      _polling = false;
+    }
+  }
+
+  void _startPolling() {
+    _stopPolling();
+    _pollTimer = Timer.periodic(
+      const Duration(seconds: 4),
+      (_) => unawaited(refreshRealtime()),
+    );
+  }
+
+  void _stopPolling() {
+    _pollTimer?.cancel();
+    _pollTimer = null;
+    _polling = false;
+  }
+
+  @override
+  void dispose() {
+    _stopPolling();
+    super.dispose();
   }
 
   void _replaceChallenge(Challenge updatedChallenge) {
@@ -459,6 +628,10 @@ class AppController extends ChangeNotifier {
     final token = _token;
     if (token == null) throw StateError('Not authenticated');
     return token;
+  }
+
+  void _setError(Object error) {
+    errorMessage = error.toString();
   }
 
   bool _isAuthError(String message) {

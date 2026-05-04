@@ -309,6 +309,7 @@ class Expense {
     required this.userPaid,
     required this.settlementStatus,
     required this.userPaymentStatus,
+    required this.receiptUrl,
     required this.splits,
   });
 
@@ -327,6 +328,7 @@ class Expense {
       userPaid: _double(json['userPaid']),
       settlementStatus: _string(json['settlementStatus']),
       userPaymentStatus: _string(json['userPaymentStatus']),
+      receiptUrl: _string(json['receiptUrl']),
       splits: _list(json['splits'], (item) => ExpenseSplit.fromJson(item)),
     );
   }
@@ -344,6 +346,7 @@ class Expense {
   final double userPaid;
   final String settlementStatus;
   final String userPaymentStatus;
+  final String receiptUrl;
   final List<ExpenseSplit> splits;
 }
 
@@ -364,12 +367,14 @@ class ExpenseSplit {
 class Vote {
   Vote({
     required this.id,
+    required this.groupId,
     required this.groupName,
     required this.description,
     required this.amount,
     required this.category,
     required this.reason,
     required this.status,
+    required this.createdAt,
     required this.requestedByName,
     required this.decisions,
   });
@@ -377,12 +382,14 @@ class Vote {
   factory Vote.fromJson(Map<String, dynamic> json) {
     return Vote(
       id: _string(json['id']),
+      groupId: _string(json['groupId']),
       groupName: _string(json['groupName']),
       description: _string(json['description']),
       amount: _double(json['amount']),
       category: _string(json['category']),
       reason: _string(json['reason']),
       status: _string(json['status']),
+      createdAt: _string(json['createdAt']),
       requestedByName: _string(json['requestedByName']),
       decisions: _list(
         json['decisions'],
@@ -392,12 +399,14 @@ class Vote {
   }
 
   final String id;
+  final String groupId;
   final String groupName;
   final String description;
   final double amount;
   final String category;
   final String reason;
   final String status;
+  final String createdAt;
   final String requestedByName;
   final List<VoteDecision> decisions;
 }
@@ -669,6 +678,35 @@ class SettingsData {
   final bool aiProactive;
   final String profileVisibility;
   final String activityVisibility;
+}
+
+class AppNotification {
+  AppNotification({
+    required this.id,
+    required this.type,
+    required this.title,
+    required this.body,
+    required this.unread,
+    required this.createdAt,
+  });
+
+  factory AppNotification.fromJson(Map<String, dynamic> json) {
+    return AppNotification(
+      id: _string(json['id']),
+      type: _string(json['type']),
+      title: _string(json['title']),
+      body: _string(json['body']),
+      unread: _bool(json['unread']),
+      createdAt: _string(json['createdAt']),
+    );
+  }
+
+  final String id;
+  final String type;
+  final String title;
+  final String body;
+  final bool unread;
+  final String createdAt;
 }
 
 class ChatMessage {

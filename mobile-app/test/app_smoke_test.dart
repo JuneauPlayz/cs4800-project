@@ -7,11 +7,11 @@ import 'package:mobile_app/src/data/models.dart';
 import 'package:mobile_app/src/data/session_store.dart';
 import 'package:mobile_app/src/state/app_controller.dart';
 import 'package:mobile_app/src/ui/home_shell.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 void main() {
   testWidgets('shows auth screen when no session exists', (tester) async {
-    SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
 
     await tester.pumpWidget(const SplitStackApp());
     await tester.pumpAndSettle();
@@ -23,7 +23,7 @@ void main() {
   testWidgets('renders challenges tab with contribution controls', (
     tester,
   ) async {
-    SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
     final controller =
         AppController(apiClient: ApiClient(), sessionStore: SessionStore())
           ..user = User(

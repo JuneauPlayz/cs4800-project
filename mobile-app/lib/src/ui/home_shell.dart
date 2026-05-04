@@ -91,10 +91,33 @@ class _HomeShellState extends State<HomeShell> {
     return AnimatedBuilder(
       animation: widget.controller,
       builder: (context, _) {
+        final unreadCount = widget.controller.unreadCount;
+        final settingsIcon = unreadCount == 0
+            ? const Icon(Icons.settings_outlined)
+            : Badge.count(
+                count: unreadCount,
+                child: const Icon(Icons.settings_outlined),
+              );
+        final selectedSettingsIcon = unreadCount == 0
+            ? const Icon(Icons.settings_rounded)
+            : Badge.count(
+                count: unreadCount,
+                child: const Icon(Icons.settings_rounded),
+              );
         return Scaffold(
           appBar: AppBar(
             title: Text(_titles[_currentIndex]),
             actions: [
+              IconButton(
+                tooltip: 'Notifications',
+                onPressed: () => setState(() => _currentIndex = 5),
+                icon: unreadCount == 0
+                    ? const Icon(Icons.notifications_none_rounded)
+                    : Badge.count(
+                        count: unreadCount,
+                        child: const Icon(Icons.notifications_rounded),
+                      ),
+              ),
               IconButton(
                 tooltip: 'Assistant',
                 onPressed: () => Navigator.of(context).push(
@@ -128,35 +151,35 @@ class _HomeShellState extends State<HomeShell> {
             onDestinationSelected: (index) {
               setState(() => _currentIndex = index);
             },
-            destinations: const [
-              NavigationDestination(
+            destinations: [
+              const NavigationDestination(
                 icon: Icon(Icons.home_outlined),
                 selectedIcon: Icon(Icons.home_rounded),
                 label: 'Home',
               ),
-              NavigationDestination(
+              const NavigationDestination(
                 icon: Icon(Icons.groups_outlined),
                 selectedIcon: Icon(Icons.groups_rounded),
                 label: 'Groups',
               ),
-              NavigationDestination(
+              const NavigationDestination(
                 icon: Icon(Icons.add_circle_outline_rounded),
                 selectedIcon: Icon(Icons.add_circle_rounded),
                 label: 'Add',
               ),
-              NavigationDestination(
+              const NavigationDestination(
                 icon: Icon(Icons.how_to_vote_outlined),
                 selectedIcon: Icon(Icons.how_to_vote_rounded),
                 label: 'Votes',
               ),
-              NavigationDestination(
+              const NavigationDestination(
                 icon: Icon(Icons.emoji_events_outlined),
                 selectedIcon: Icon(Icons.emoji_events_rounded),
                 label: 'Goals',
               ),
               NavigationDestination(
-                icon: Icon(Icons.settings_outlined),
-                selectedIcon: Icon(Icons.settings_rounded),
+                icon: settingsIcon,
+                selectedIcon: selectedSettingsIcon,
                 label: 'Settings',
               ),
             ],
@@ -203,6 +226,13 @@ class _DashboardTab extends StatelessWidget {
                   label: 'Owed to you',
                   value: money(dashboard.balance.totalOwedToYou),
                   tone: AppTheme.teal,
+                  onTap: () => _showBalanceSheet(
+                    context,
+                    title: 'People who owe you',
+                    emptyText: 'No one owes you right now.',
+                    balances: dashboard.balance.owedToYou,
+                    tone: AppTheme.teal,
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
@@ -211,6 +241,13 @@ class _DashboardTab extends StatelessWidget {
                   label: 'You owe',
                   value: money(dashboard.balance.totalYouOwe),
                   tone: AppTheme.red,
+                  onTap: () => _showBalanceSheet(
+                    context,
+                    title: 'People you owe',
+                    emptyText: 'You are settled up right now.',
+                    balances: dashboard.balance.youOwe,
+                    tone: AppTheme.red,
+                  ),
                 ),
               ),
             ],
@@ -279,8 +316,14 @@ class _DashboardTab extends StatelessWidget {
             subtitle: 'Which groups are driving the most spend',
             child: Column(
               children: analytics.byGroup.map((group) {
+                final fullGroup = controller.groups
+                    .where((item) => item.id == group.id)
+                    .firstOrNull;
                 return ListTile(
                   contentPadding: EdgeInsets.zero,
+                  onTap: fullGroup == null
+                      ? null
+                      : () => _showGroupDetailsSheet(context, fullGroup),
                   leading: CircleAvatar(
                     backgroundColor: AppTheme.teal.withValues(alpha: 0.12),
                     foregroundColor: AppTheme.teal,
@@ -372,6 +415,62 @@ class _DashboardTab extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+
+  void _showGroupDetailsSheet(BuildContext context, Group group) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => _GroupDetailsSheet(group: group, controller: controller),
+    );
+  }
+
+  Future<void> _showBalanceSheet(
+    BuildContext context, {
+    required String title,
+    required String emptyText,
+    required List<CounterpartyBalance> balances,
+    required Color tone,
+  }) {
+    return showModalBottomSheet<void>(
+      context: context,
+      useSafeArea: true,
+      builder: (sheetContext) {
+        return ListView(
+          padding: const EdgeInsets.all(20),
+          children: [
+            Text(title, style: Theme.of(sheetContext).textTheme.titleLarge),
+            const SizedBox(height: 14),
+            if (balances.isEmpty)
+              _EmptyCard(text: emptyText)
+            else
+              ...balances.map(
+                (balance) => ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: _ProfileAvatar(
+                    initials: balance.initials,
+                    avatarColor: balance.avatarColor,
+                    avatarEmoji: balance.avatarEmoji,
+                  ),
+                  title: Text(balance.name),
+                  subtitle: Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: balance.groups
+                        .map((group) => Chip(label: Text(group.name)))
+                        .toList(),
+                  ),
+                  trailing: Text(
+                    money(balance.amount),
+                    style: TextStyle(color: tone, fontWeight: FontWeight.w800),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 
@@ -644,7 +743,10 @@ class _AddExpenseTabState extends State<_AddExpenseTab> {
   @override
   void didUpdateWidget(covariant _AddExpenseTab oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (_groupId == null && widget.controller.groups.isNotEmpty) {
+    final groups = widget.controller.groups;
+    final missingGroup =
+        _groupId != null && !groups.any((group) => group.id == _groupId);
+    if ((_groupId == null || missingGroup) && groups.isNotEmpty) {
       _groupId = widget.controller.groups.first.id;
     }
     _syncSplitControllers();
@@ -673,7 +775,9 @@ class _AddExpenseTabState extends State<_AddExpenseTab> {
   Widget build(BuildContext context) {
     final group = _selectedGroup;
     final groups = widget.controller.groups;
-    if (_groupId == null && groups.isNotEmpty) {
+    final missingGroup =
+        _groupId != null && !groups.any((group) => group.id == _groupId);
+    if ((_groupId == null || missingGroup) && groups.isNotEmpty) {
       _groupId = groups.first.id;
       _syncSplitControllers();
     }
@@ -880,7 +984,15 @@ class _AddExpenseTabState extends State<_AddExpenseTab> {
   }
 
   double _currentSplitTotal() {
-    return _splitControllers.values.fold<double>(0, (sum, controller) {
+    final activeMemberIds = _selectedGroup?.members
+        .map((member) => member.id)
+        .toSet();
+    final activeControllers = activeMemberIds == null
+        ? _splitControllers.values
+        : activeMemberIds
+              .map((id) => _splitControllers[id])
+              .whereType<TextEditingController>();
+    return activeControllers.fold<double>(0, (sum, controller) {
       return sum + (double.tryParse(controller.text.trim()) ?? 0);
     });
   }
@@ -888,6 +1000,14 @@ class _AddExpenseTabState extends State<_AddExpenseTab> {
   void _syncSplitControllers() {
     final group = _selectedGroup;
     if (group == null) return;
+    final activeMemberIds = group.members.map((member) => member.id).toSet();
+    final staleMemberIds = _splitControllers.keys
+        .where((memberId) => !activeMemberIds.contains(memberId))
+        .toList();
+    for (final memberId in staleMemberIds) {
+      _splitControllers.remove(memberId)?.dispose();
+    }
+
     final amount = double.tryParse(_amountController.text.trim()) ?? 0;
     final count = group.members.isEmpty ? 1 : group.members.length;
     final defaultCustom = amount / count;
@@ -1670,7 +1790,7 @@ class _ChallengeCardState extends State<_ChallengeCard> {
     );
   }
 
-  void _submitContribution() {
+  Future<void> _submitContribution() async {
     final amount = double.tryParse(_amountController.text.trim());
     if (amount == null || amount <= 0) {
       setState(() => _errorText = 'Enter a positive amount');
@@ -1681,23 +1801,25 @@ class _ChallengeCardState extends State<_ChallengeCard> {
     _amountController.clear();
     setState(() => _errorText = null);
 
-    widget.controller
-        .contributeToChallenge(challengeId: widget.challenge.id, amount: amount)
-        .catchError((_) {
-          if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                widget.controller.errorMessage ??
-                    'Unable to save contribution.',
-              ),
-            ),
-          );
-        });
-
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Contribution added.')));
+    try {
+      await widget.controller.contributeToChallenge(
+        challengeId: widget.challenge.id,
+        amount: amount,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Contribution added.')));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            widget.controller.errorMessage ?? 'Unable to save contribution.',
+          ),
+        ),
+      );
+    }
   }
 }
 
@@ -1963,6 +2085,40 @@ class _SettingsTabState extends State<_SettingsTab> {
         ),
         const SizedBox(height: 16),
         Card(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      'Notifications',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const Spacer(),
+                    if (widget.controller.unreadCount > 0)
+                      Badge.count(count: widget.controller.unreadCount),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                if (widget.controller.notifications.isEmpty)
+                  const Text('No notifications yet.')
+                else
+                  ...widget.controller.notifications
+                      .take(12)
+                      .map(
+                        (notification) => _NotificationTile(
+                          notification: notification,
+                          controller: widget.controller,
+                        ),
+                      ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        Card(
           child: Column(
             children: [
               SwitchListTile(
@@ -2083,6 +2239,65 @@ class _SettingsTabState extends State<_SettingsTab> {
       );
     }
   }
+}
+
+class _NotificationTile extends StatelessWidget {
+  const _NotificationTile({
+    required this.notification,
+    required this.controller,
+  });
+
+  final AppNotification notification;
+  final AppController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: CircleAvatar(
+        backgroundColor: notification.unread
+            ? AppTheme.teal.withValues(alpha: 0.14)
+            : AppTheme.border,
+        foregroundColor: notification.unread
+            ? AppTheme.tealDark
+            : AppTheme.muted,
+        child: Icon(_notificationIcon(notification.type)),
+      ),
+      title: Text(notification.title),
+      subtitle: Text(notification.body),
+      trailing: notification.unread
+          ? TextButton(
+              onPressed: () async {
+                try {
+                  await controller.markNotificationRead(notification.id);
+                } catch (_) {
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        controller.errorMessage ??
+                            'Unable to update notification.',
+                      ),
+                    ),
+                  );
+                }
+              },
+              child: const Text('Mark read'),
+            )
+          : const Chip(label: Text('Seen')),
+    );
+  }
+}
+
+IconData _notificationIcon(String type) {
+  return switch (type) {
+    'invite' => Icons.mail_outline_rounded,
+    'vote' => Icons.how_to_vote_rounded,
+    'settlement' => Icons.payments_rounded,
+    'challenge' => Icons.emoji_events_rounded,
+    'group' => Icons.groups_rounded,
+    _ => Icons.notifications_none_rounded,
+  };
 }
 
 class AssistantScreen extends StatefulWidget {
@@ -2381,31 +2596,37 @@ class _StatCard extends StatelessWidget {
     required this.label,
     required this.value,
     required this.tone,
+    this.onTap,
   });
 
   final String label;
   final String value;
   final Color tone;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(label, style: Theme.of(context).textTheme.bodySmall),
-            const SizedBox(height: 8),
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.w800,
-                color: tone,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(22),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: Theme.of(context).textTheme.bodySmall),
+              const SizedBox(height: 8),
+              Text(
+                value,
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w800,
+                  color: tone,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -2745,9 +2966,10 @@ class _StatusChip extends StatelessWidget {
 }
 
 class _NewGroupSheet extends StatefulWidget {
-  const _NewGroupSheet({required this.controller});
+  const _NewGroupSheet({required this.controller, this.group});
 
   final AppController controller;
+  final Group? group;
 
   @override
   State<_NewGroupSheet> createState() => _NewGroupSheetState();
@@ -2760,6 +2982,23 @@ class _NewGroupSheetState extends State<_NewGroupSheet> {
   final _descriptionController = TextEditingController();
   final _invitesController = TextEditingController();
   String _type = 'roommates';
+
+  bool get _editing => widget.group != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final group = widget.group;
+    if (group != null) {
+      _nameController.text = group.name;
+      _thresholdController.text = group.threshold.toStringAsFixed(2);
+      _descriptionController.text = group.description;
+      _invitesController.text = group.pendingInvites
+          .map((invite) => invite.email)
+          .join('\n');
+      _type = group.type;
+    }
+  }
 
   @override
   void dispose() {
@@ -2784,9 +3023,9 @@ class _NewGroupSheetState extends State<_NewGroupSheet> {
         child: ListView(
           shrinkWrap: true,
           children: [
-            const Text(
-              'New group',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800),
+            Text(
+              _editing ? 'Edit group' : 'New group',
+              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 16),
             TextFormField(
@@ -2833,7 +3072,7 @@ class _NewGroupSheetState extends State<_NewGroupSheet> {
             const SizedBox(height: 18),
             FilledButton(
               onPressed: widget.controller.loading ? null : _submit,
-              child: const Text('Create group'),
+              child: Text(_editing ? 'Save changes' : 'Create group'),
             ),
           ],
         ),
@@ -2844,24 +3083,39 @@ class _NewGroupSheetState extends State<_NewGroupSheet> {
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     try {
-      await widget.controller.createGroup(
-        name: _nameController.text.trim(),
-        type: _type,
-        threshold: double.tryParse(_thresholdController.text.trim()) ?? 0,
-        description: _descriptionController.text.trim(),
-        inviteEmails: _parseInviteEmails(_invitesController.text),
-      );
+      final group = widget.group;
+      if (group == null) {
+        await widget.controller.createGroup(
+          name: _nameController.text.trim(),
+          type: _type,
+          threshold: double.tryParse(_thresholdController.text.trim()) ?? 0,
+          description: _descriptionController.text.trim(),
+          inviteEmails: _parseInviteEmails(_invitesController.text),
+        );
+      } else {
+        await widget.controller.updateGroup(
+          groupId: group.id,
+          name: _nameController.text.trim(),
+          type: _type,
+          threshold: double.tryParse(_thresholdController.text.trim()) ?? 0,
+          description: _descriptionController.text.trim(),
+          inviteEmails: _parseInviteEmails(_invitesController.text),
+        );
+      }
       if (!mounted) return;
       Navigator.of(context).pop();
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Group created.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_editing ? 'Group updated.' : 'Group created.')),
+      );
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            widget.controller.errorMessage ?? 'Unable to create group.',
+            widget.controller.errorMessage ??
+                (_editing
+                    ? 'Unable to update group.'
+                    : 'Unable to create group.'),
           ),
         ),
       );
@@ -2877,6 +3131,17 @@ class _GroupDetailsSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final group =
+        controller.groups
+            .where((item) => item.id == this.group.id)
+            .firstOrNull ??
+        this.group;
+    final groupExpenses = controller.expenses
+        .where((expense) => expense.groupId == group.id)
+        .toList();
+    final pendingVotes = controller.votes
+        .where((vote) => vote.groupId == group.id && vote.status == 'pending')
+        .toList();
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
@@ -2901,10 +3166,72 @@ class _GroupDetailsSheet extends StatelessWidget {
             ),
           ],
         ),
+        const SizedBox(height: 14),
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            if (group.isOwner) ...[
+              OutlinedButton.icon(
+                onPressed: controller.loading ? null : () => _showEdit(context),
+                icon: const Icon(Icons.edit_rounded),
+                label: const Text('Edit group'),
+              ),
+              OutlinedButton.icon(
+                onPressed: controller.loading
+                    ? null
+                    : () => _confirmDelete(context),
+                icon: const Icon(Icons.delete_outline_rounded),
+                label: const Text('Delete group'),
+              ),
+            ],
+          ],
+        ),
         if (group.description.isNotEmpty) ...[
           const SizedBox(height: 18),
           Text(group.description),
         ],
+        if (pendingVotes.isNotEmpty) ...[
+          const SizedBox(height: 18),
+          const Text(
+            'Pending approval',
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 10),
+          ...pendingVotes.map((vote) {
+            return ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: CircleAvatar(
+                backgroundColor: AppTheme.amber.withValues(alpha: 0.14),
+                foregroundColor: AppTheme.amber,
+                child: Text(vote.category.isEmpty ? '?' : vote.category[0]),
+              ),
+              title: Text(vote.description),
+              subtitle: Text(
+                '${vote.decisions.where((decision) => decision.decision == 'yes').length}/${group.members.length} approved • by ${vote.requestedByName}',
+              ),
+              trailing: Text(
+                money(vote.amount),
+                style: const TextStyle(fontWeight: FontWeight.w800),
+              ),
+            );
+          }),
+        ],
+        const SizedBox(height: 18),
+        const Text(
+          'Approved expenses',
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+        ),
+        const SizedBox(height: 10),
+        if (groupExpenses.isEmpty)
+          const _EmptyCard(text: 'No approved expenses in this group yet.')
+        else
+          ...groupExpenses.map(
+            (expense) => _ExpenseDetailTile(
+              expense: expense,
+              apiBaseUrl: controller.apiBaseUrl,
+            ),
+          ),
         const SizedBox(height: 18),
         const Text(
           'Members',
@@ -2954,6 +3281,53 @@ class _GroupDetailsSheet extends StatelessWidget {
     );
   }
 
+  Future<void> _showEdit(BuildContext context) {
+    return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => _NewGroupSheet(controller: controller, group: group),
+    );
+  }
+
+  Future<void> _confirmDelete(BuildContext context) async {
+    final shouldDelete = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Delete ${group.name}?'),
+        content: const Text(
+          'This permanently removes the group, its expenses, votes, challenges, invites, and member history.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (shouldDelete != true || !context.mounted) return;
+    try {
+      await controller.deleteGroup(group.id);
+      if (!context.mounted) return;
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Group deleted.')));
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(controller.errorMessage ?? 'Unable to delete group.'),
+        ),
+      );
+    }
+  }
+
   Future<void> _confirmLeave(BuildContext context) async {
     final shouldLeave = await showDialog<bool>(
       context: context,
@@ -2990,6 +3364,104 @@ class _GroupDetailsSheet extends StatelessWidget {
         ),
       );
     }
+  }
+}
+
+class _ExpenseDetailTile extends StatelessWidget {
+  const _ExpenseDetailTile({required this.expense, required this.apiBaseUrl});
+
+  final Expense expense;
+  final String apiBaseUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    final receiptUrl = _absoluteApiUrl(apiBaseUrl, expense.receiptUrl);
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: CircleAvatar(
+        backgroundColor: AppTheme.teal.withValues(alpha: 0.12),
+        foregroundColor: AppTheme.tealDark,
+        child: Text(expense.category.isEmpty ? '?' : expense.category[0]),
+      ),
+      title: Text(expense.description),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '${expense.category} • Paid by ${expense.paidByName} • ${formatDate(expense.expenseDate)}',
+          ),
+          if (receiptUrl != null) ...[
+            const SizedBox(height: 8),
+            InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: () => _showReceipt(context, receiptUrl),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: AspectRatio(
+                  aspectRatio: 16 / 9,
+                  child: Image.network(
+                    receiptUrl,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) => Container(
+                      color: AppTheme.teal.withValues(alpha: 0.08),
+                      alignment: Alignment.center,
+                      child: const Text('View receipt'),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+      trailing: Text(
+        money(expense.amount),
+        style: const TextStyle(fontWeight: FontWeight.w800),
+      ),
+    );
+  }
+
+  Future<void> _showReceipt(BuildContext context, String receiptUrl) {
+    return showDialog<void>(
+      context: context,
+      builder: (dialogContext) => Dialog(
+        insetPadding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Receipt',
+                      style: TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.of(dialogContext).pop(),
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                ],
+              ),
+            ),
+            Flexible(
+              child: InteractiveViewer(
+                child: Image.network(
+                  receiptUrl,
+                  fit: BoxFit.contain,
+                  errorBuilder: (context, error, stackTrace) => const Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Text('Unable to load receipt image.'),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -3271,6 +3743,14 @@ Color colorFromHex(String hex) {
 
 String _diceBearUrl(String seed) {
   return 'https://api.dicebear.com/9.x/avataaars/png?seed=${Uri.encodeComponent(seed)}&backgroundColor=b6e3f4,c0aede,d1d4f9,ffd5dc,ffdfbf';
+}
+
+String? _absoluteApiUrl(String baseUrl, String rawUrl) {
+  if (rawUrl.isEmpty) return null;
+  final parsed = Uri.tryParse(rawUrl);
+  if (parsed != null && parsed.hasScheme) return rawUrl;
+  final base = Uri.parse(baseUrl);
+  return base.resolve(rawUrl).toString();
 }
 
 List<String> _parseInviteEmails(String raw) {
