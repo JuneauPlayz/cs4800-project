@@ -5,6 +5,7 @@ Shared expense management app.
 ## Requirements
 
 - [Node.js](https://nodejs.org) (includes npm) — use **v22 LTS**
+- [Flutter](https://flutter.dev) for the mobile app
 
 To check if you have it:
 ```bash
@@ -34,6 +35,7 @@ cs4800-project/
 ├── website/
 │   ├── frontend/     ← React + Vite app
 │   └── backend/      ← Express + SQLite API
+├── mobile-app/       ← Flutter mobile client
 └── README.md
 ```
 
@@ -91,10 +93,12 @@ Then open **http://localhost:5173/** in your browser.
 
 ## Running the Mobile App
 
-The Flutter mobile app calls the same backend API as the website.
+The mobile app uses the same backend API and SQLite database as the website.
+Start the backend first, then open a second terminal:
 
 ```bash
 cd mobile-app
+flutter pub get
 flutter run
 ```
 
@@ -103,11 +107,30 @@ Defaults:
 - Android emulator: `http://10.0.2.2:3001/api`
 - iOS simulator: `http://127.0.0.1:3001/api`
 
-You can override the API URL when running:
+For the fastest local demo, you can also choose Chrome when Flutter asks for a device:
 
 ```bash
-flutter run --dart-define=API_BASE_URL=http://YOUR_COMPUTER_IP:3001/api
+flutter run -d chrome
 ```
+
+For iOS Simulator, install full Xcode from the App Store first. For Android
+Emulator, install Android Studio and the Android SDK.
+
+For a physical phone, put the phone and laptop on the same Wi-Fi, find the
+laptop IP, then pass it to Flutter:
+
+```bash
+ipconfig getifaddr en0
+flutter run -d <device-id> --dart-define=API_BASE_URL=http://YOUR_IP:3001/api
+```
+
+The final demo flow should use real registered accounts:
+
+1. Register a new user in the mobile app and choose an avatar.
+2. Create a group and invite another teammate by email.
+3. The invited teammate registers or logs in with that email.
+4. They accept the invite from the Groups tab.
+5. Add expenses, vote on large purchases, and refresh to see persisted balances.
 
 ---
 
@@ -118,6 +141,8 @@ flutter run --dart-define=API_BASE_URL=http://YOUR_COMPUTER_IP:3001/api
 | `npm run dev` | Start dev server (auto-restarts on file changes) |
 | `npm run build` | Build for production |
 | `npm run lint` | Check for code issues |
+| `flutter run` | Start the mobile app |
+| `flutter test` | Run mobile app tests |
 
 ---
 
@@ -137,16 +162,17 @@ PORT=3002 npm run dev       # backend
 
 ---
 
-## Demo Accounts
+## Demo Data
 
-You can sign in with one of the seeded accounts:
+Fresh databases start empty so the team can demo real registration, invites, and
+persisted group data. If you need disposable sample data for local development,
+start the backend with:
 
-- `jordan@splitstack.app` / `demo123`
-- `marcus@splitstack.app` / `demo123`
-- `priya@splitstack.app` / `demo123`
-- `sam@splitstack.app` / `demo123`
+```bash
+SPLITSTACK_SEED_DEMO=true npm run dev
+```
 
-You can also register a new account. If that email was invited to a group before registration, the invite will appear after sign in.
+Do not use seeded accounts for the final walkthrough.
 
 ---
 

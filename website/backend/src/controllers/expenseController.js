@@ -1,4 +1,4 @@
-import { createExpense, getExpenses, requireMembership } from '../services/index.js';
+import { createExpense, createSettlement, getExpenses, requireMembership } from '../services/index.js';
 import { getMembersByGroup } from '../services/sharedService.js';
 
 function validateSplits({ groupId, amount, splitMethod, splits }) {
@@ -55,5 +55,17 @@ export function create(req, res) {
     return res.status(400).json({ message: splitError });
   }
   const result = createExpense({ ...req.body, description: normalizedDescription, amount: amountValue, splitMethod, paidBy: req.user.id });
+  return res.status(201).json(result);
+}
+
+export function settle(req, res) {
+  const result = createSettlement({
+    userId: req.user.id,
+    expenseId: req.params.id,
+    method: req.body?.method,
+    note: req.body?.note,
+    amount: req.body?.amount
+  });
+  if (!result?.ok) return res.status(400).json({ message: result?.message || 'Unable to record payment.' });
   return res.status(201).json(result);
 }

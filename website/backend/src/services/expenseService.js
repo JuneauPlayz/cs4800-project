@@ -29,7 +29,36 @@ export function getExpenses(userId) {
   `).all(...params);
 
   const splitStmt = db.prepare('SELECT user_id as userId, amount FROM expense_splits WHERE expense_id = ?');
-  return expenses.map((expense) => ({ ...expense, splits: splitStmt.all(expense.id) }));
+  const userSettlementStmt = db.prepare(`
+    SELECT COALESCE(SUM(amount), 0) as total
+    FROM settlements
+    WHERE expense_id = ? AND from_user = ? AND status = 'completed'
+  `);
+  const expenseSettlementStmt = db.prepare(`
+    SELECT COALESCE(SUM(amount), 0) as total
+    FROM settlements
+    WHERE expense_id = ? AND status = 'completed'
+  `);
+
+  return expenses.map((expense) => {
+    const splitsForExpense = splitStmt.all(expense.id);
+    const userSplit = splitsForExpense.find((split) => split.userId === userId);
+    const userPaid = Number(userSettlementStmt.get(expense.id, userId).total || 0);
+    const totalSettled = Number(expenseSettlementStmt.get(expense.id).total || 0);
+    const totalDue = splitsForExpense
+      .filter((split) => split.userId !== expense.paidBy)
+      .reduce((sum, split) => sum + split.amount, 0);
+    const userOwes = expense.paidBy !== userId ? Number(userSplit?.amount || 0) : 0;
+
+    return {
+      ...expense,
+      splits: splitsForExpense,
+      userOwes,
+      userPaid,
+      settlementStatus: totalDue > 0 && totalSettled >= totalDue - 0.01 ? 'paid' : 'open',
+      userPaymentStatus: userOwes <= 0 ? 'payer' : userPaid >= userOwes - 0.01 ? 'paid' : 'open'
+    };
+  });
 }
 
 export function calculateBalances(userId) {
@@ -91,6 +120,11 @@ export function calculateBalances(userId) {
   const groupNames = Object.fromEntries(groups.map((group) => [group.id, group.name]));
   const owedToYouMap = {};
   const youOweMap = {};
+  const settlements = db.prepare(`
+    SELECT group_id as groupId, from_user as fromUser, to_user as toUser, amount
+    FROM settlements
+    WHERE status = 'completed' AND group_id IN (${placeholders})
+  `).all(...groupIds);
 
   expenses.forEach((expense) => {
     const expenseSplits = splits.filter((split) => split.expenseId === expense.id);
@@ -115,8 +149,23 @@ export function calculateBalances(userId) {
     });
   });
 
-  const owedToYou = Object.values(owedToYouMap).map((person) => ({ ...person, amount: Number(person.amount.toFixed(2)) })).sort((first, second) => second.amount - first.amount);
-  const youOwe = Object.values(youOweMap).map((person) => ({ ...person, amount: Number(person.amount.toFixed(2)) })).sort((first, second) => second.amount - first.amount);
+  settlements.forEach((settlement) => {
+    if (settlement.toUser === userId && owedToYouMap[settlement.fromUser]) {
+      owedToYouMap[settlement.fromUser].amount -= settlement.amount;
+    }
+    if (settlement.fromUser === userId && youOweMap[settlement.toUser]) {
+      youOweMap[settlement.toUser].amount -= settlement.amount;
+    }
+  });
+
+  const owedToYou = Object.values(owedToYouMap)
+    .map((person) => ({ ...person, amount: Number(Math.max(person.amount, 0).toFixed(2)) }))
+    .filter((person) => person.amount > 0)
+    .sort((first, second) => second.amount - first.amount);
+  const youOwe = Object.values(youOweMap)
+    .map((person) => ({ ...person, amount: Number(Math.max(person.amount, 0).toFixed(2)) }))
+    .filter((person) => person.amount > 0)
+    .sort((first, second) => second.amount - first.amount);
 
   return {
     byMember: summary,
@@ -129,6 +178,76 @@ export function calculateBalances(userId) {
     settleCount: people.filter((person) => person.net !== 0).length,
     people
   };
+}
+
+export function createSettlement({ userId, expenseId, method = 'Other', note = '', amount }) {
+  const expense = db.prepare(`
+    SELECT e.id, e.group_id as groupId, e.description, e.paid_by as paidBy, gt.name as groupName
+    FROM expenses e
+    JOIN groups_table gt ON gt.id = e.group_id
+    WHERE e.id = ?
+  `).get(expenseId);
+  if (!expense) return { ok: false, message: 'Expense not found.' };
+  if (!db.prepare('SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?').get(expense.groupId, userId)) {
+    return { ok: false, message: 'You are not a member of this group.' };
+  }
+  if (expense.paidBy === userId) return { ok: false, message: 'You paid for this expense already.' };
+
+  const split = db.prepare('SELECT amount FROM expense_splits WHERE expense_id = ? AND user_id = ?').get(expenseId, userId);
+  if (!split) return { ok: false, message: 'No amount is owed for this expense.' };
+  const paid = Number(db.prepare("SELECT COALESCE(SUM(amount), 0) as total FROM settlements WHERE expense_id = ? AND from_user = ? AND status = 'completed'").get(expenseId, userId).total || 0);
+  const remaining = Number(Math.max(Number(split.amount) - paid, 0).toFixed(2));
+  if (remaining <= 0) return { ok: false, message: 'This expense is already marked paid.' };
+
+  const paymentAmount = Number(Math.min(Number(amount || remaining), remaining).toFixed(2));
+  if (!paymentAmount || paymentAmount <= 0) return { ok: false, message: 'Payment amount must be greater than zero.' };
+
+  const id = `set-${Date.now()}`;
+  const normalizedMethod = String(method || 'Other').trim() || 'Other';
+  const createdAt = new Date().toISOString();
+  const settlementCols = db.pragma('table_info(settlements)').map((column) => column.name);
+  const settlementRow = {
+    id,
+    group_id: expense.groupId,
+    expense_id: expense.id,
+    from_user: userId,
+    to_user: expense.paidBy,
+    payer_id: userId,
+    payee_id: expense.paidBy,
+    amount: paymentAmount,
+    method: normalizedMethod,
+    note: String(note || '').trim() || null,
+    status: 'completed',
+    created_at: createdAt,
+    completed_by: userId,
+    completed_at: createdAt
+  };
+  const insertCols = [
+    'id',
+    'group_id',
+    'expense_id',
+    'from_user',
+    'to_user',
+    'payer_id',
+    'payee_id',
+    'amount',
+    'method',
+    'note',
+    'status',
+    'created_at',
+    'completed_by',
+    'completed_at'
+  ].filter((column) => settlementCols.includes(column));
+
+  db.prepare(`
+    INSERT INTO settlements (${insertCols.join(', ')})
+    VALUES (${insertCols.map(() => '?').join(', ')})
+  `).run(...insertCols.map((column) => settlementRow[column]));
+
+  const fromUser = getUserById(userId);
+  createNotification(userId, 'settlement', 'Payment recorded', `${moneyLike(paymentAmount)} marked paid for ${expense.description} via ${normalizedMethod}.`);
+  createNotification(expense.paidBy, 'settlement', 'Payment received', `${fromUser?.name || 'A group member'} marked ${moneyLike(paymentAmount)} paid for ${expense.description} via ${normalizedMethod}.`);
+  return { ok: true, settlement: { id, expenseId: expense.id, amount: paymentAmount, method: normalizedMethod, status: 'completed', createdAt } };
 }
 
 export function createExpense(payload) {

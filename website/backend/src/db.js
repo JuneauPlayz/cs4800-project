@@ -83,6 +83,32 @@ function bootstrap() {
       PRIMARY KEY (expense_id, user_id)
     );
 
+    CREATE TABLE IF NOT EXISTS settlements (
+      id TEXT PRIMARY KEY,
+      group_id TEXT NOT NULL,
+      expense_id TEXT,
+      from_user TEXT NOT NULL,
+      to_user TEXT NOT NULL,
+      payer_id TEXT,
+      payee_id TEXT,
+      amount REAL NOT NULL,
+      method TEXT NOT NULL,
+      note TEXT,
+      status TEXT NOT NULL DEFAULT 'completed',
+      completed_by TEXT,
+      completed_at TEXT,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS user_payout_profiles (
+      user_id TEXT PRIMARY KEY,
+      zelle_handle TEXT,
+      venmo_handle TEXT,
+      cash_note TEXT,
+      preferred_method TEXT NOT NULL DEFAULT 'cash',
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
     CREATE TABLE IF NOT EXISTS votes (
       id TEXT PRIMARY KEY,
       group_id TEXT NOT NULL,
@@ -185,6 +211,38 @@ function bootstrap() {
   ensureColumn('user_settings', 'profile_visibility', "profile_visibility TEXT NOT NULL DEFAULT 'group_members'");
   ensureColumn('user_settings', 'activity_visibility', "activity_visibility TEXT NOT NULL DEFAULT 'group_members'");
   ensureColumn('votes', 'resolved_at', 'resolved_at TEXT');
+  ensureColumn('settlements', 'group_id', 'group_id TEXT');
+  ensureColumn('settlements', 'expense_id', 'expense_id TEXT');
+  ensureColumn('settlements', 'from_user', 'from_user TEXT');
+  ensureColumn('settlements', 'to_user', 'to_user TEXT');
+  ensureColumn('settlements', 'payer_id', 'payer_id TEXT');
+  ensureColumn('settlements', 'payee_id', 'payee_id TEXT');
+  ensureColumn('settlements', 'status', "status TEXT NOT NULL DEFAULT 'completed'");
+  ensureColumn('settlements', 'completed_by', 'completed_by TEXT');
+  ensureColumn('settlements', 'completed_at', 'completed_at TEXT');
+  ensureColumn('user_payout_profiles', 'cash_note', 'cash_note TEXT');
+  ensureColumn('user_payout_profiles', 'preferred_method', "preferred_method TEXT NOT NULL DEFAULT 'cash'");
+  ensureColumn('user_payout_profiles', 'updated_at', "updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
+
+  const settlementCols = db.pragma('table_info(settlements)').map((c) => c.name);
+  if (settlementCols.includes('payer_id') && settlementCols.includes('payee_id')) {
+    db.exec(`
+      UPDATE settlements
+      SET from_user = COALESCE(from_user, payer_id),
+          to_user = COALESCE(to_user, payee_id)
+      WHERE from_user IS NULL OR to_user IS NULL
+    `);
+  }
+  if (settlementCols.includes('from_user') && settlementCols.includes('to_user')) {
+    db.exec(`
+      UPDATE settlements
+      SET payer_id = COALESCE(payer_id, from_user),
+          payee_id = COALESCE(payee_id, to_user),
+          completed_by = COALESCE(completed_by, from_user),
+          completed_at = COALESCE(completed_at, created_at)
+      WHERE payer_id IS NULL OR payee_id IS NULL OR completed_by IS NULL OR completed_at IS NULL
+    `);
+  }
 
   const hasUsers = db.prepare('SELECT COUNT(*) as count FROM users').get().count;
   if (hasUsers > 0) return;

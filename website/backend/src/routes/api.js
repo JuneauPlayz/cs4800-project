@@ -30,6 +30,7 @@ router.post('/invites/:id/respond', groupController.respondInvite);
 
 router.get('/expenses', expenseController.list);
 router.post('/expenses', expenseController.create);
+router.post('/expenses/:id/settlements', expenseController.settle);
 
 router.get('/votes', voteController.list);
 router.post('/votes/:id/respond', voteController.respond);
