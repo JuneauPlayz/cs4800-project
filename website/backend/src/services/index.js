@@ -7,4 +7,6 @@ export { getAnalytics } from './analyticsService.js';
 export { getChallenges, createChallenge, contributeToChallenge } from './challengeService.js';
 export { getNotifications, markNotificationRead, getSettings, upsertSettings, getUserByEmail, getUserById, requireMembership } from './sharedService.js';
 export { generateAiReply } from './assistantService.js';
+export { buildAssistantActionProposal, executeAssistantAction } from './assistantActionService.js';
+export { reserveAiChatSlot } from './chatLimitService.js';
 export { getPendingInvitesForUser } from './sharedService.js';

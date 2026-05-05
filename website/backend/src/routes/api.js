@@ -47,6 +47,7 @@ router.get('/settings', workspaceController.settings);
 router.put('/settings', workspaceController.updateSettings);
 
 router.post('/ai/chat', workspaceController.chat);
+router.post('/ai/actions/confirm', workspaceController.confirmAssistantAction);
 
 router.get('/budget', budgetController.getBudget);
 router.post('/budget', budgetController.saveBudget);

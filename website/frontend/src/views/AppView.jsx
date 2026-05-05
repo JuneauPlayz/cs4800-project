@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { DICEBEAR_SEEDS, categoryOptions, getDiceBearUrl, initials, money, navMeta, workspacePages } from '../models/appModel';
+import { DICEBEAR_SEEDS, categoryOptions, getDiceBearUrl, money, navMeta, workspacePages } from '../models/appModel';
 
 function StackLogo({ size = 18 }) {
   return (
@@ -76,6 +76,9 @@ export function AppView({ controller }) {
     selectedGroup,
     setSelectedGroup,
     chatMessages,
+    chatSending,
+    pendingAiAction,
+    aiActionSaving,
     chatMessagesRef,
     memberShares,
     percentTotal,
@@ -107,9 +110,12 @@ export function AppView({ controller }) {
     applyEvenCustomSplit,
     handleVoteResponse,
     saveSettings,
+    markNotificationRead,
     createChallengeSubmit,
     addContribution,
-    sendChat
+    sendChat,
+    confirmAiAction,
+    cancelAiAction
   } = controller;
 
   if (!session) {
@@ -216,7 +222,6 @@ export function AppView({ controller }) {
                 setPage={setPage}
                 setSelectedGroup={setSelectedGroup}
                 analytics={analytics}
-                userId={session.user.id}
                 budgetGoal={budgetGoal}
                 saveBudget={saveBudget}
               />
@@ -283,11 +288,16 @@ export function AppView({ controller }) {
             {page === 'chat' && (
               <ChatPage
                 chatMessages={chatMessages}
+                chatSending={chatSending}
                 chatMessagesRef={chatMessagesRef}
                 chatInput={chatInput}
                 setChatInput={setChatInput}
                 sendChat={sendChat}
                 sessionUser={session.user}
+                pendingAiAction={pendingAiAction}
+                aiActionSaving={aiActionSaving}
+                confirmAiAction={confirmAiAction}
+                cancelAiAction={cancelAiAction}
               />
             )}
 
@@ -310,6 +320,7 @@ export function AppView({ controller }) {
                 session={session}
                 notifications={notifications}
                 saveSettings={saveSettings}
+                markNotificationRead={markNotificationRead}
               />
             )}
           </div>
@@ -319,7 +330,7 @@ export function AppView({ controller }) {
   );
 }
 
-function BudgetGoalCard({ budgetGoal, onSave, analytics, expenses, userId, setPage }) {
+function BudgetGoalCard({ budgetGoal, onSave, analytics, setPage }) {
   const [editing, setEditing] = useState(false);
   const [formTotal, setFormTotal] = useState('');
   const [formBreakdown, setFormBreakdown] = useState({});
@@ -423,7 +434,7 @@ function BudgetGoalCard({ budgetGoal, onSave, analytics, expenses, userId, setPa
   );
 }
 
-function HomePage({ dashboard, groups, expenses, groupMonthlyTotals, balanceModal, setBalanceModal, setPage, setSelectedGroup, analytics, userId, budgetGoal, saveBudget }) {
+function HomePage({ dashboard, groups, expenses, groupMonthlyTotals, balanceModal, setBalanceModal, setPage, setSelectedGroup, analytics, budgetGoal, saveBudget }) {
   return (
     <div className="page show" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
       <div className="balance-card">
@@ -462,8 +473,6 @@ function HomePage({ dashboard, groups, expenses, groupMonthlyTotals, balanceModa
           budgetGoal={budgetGoal}
           onSave={saveBudget}
           analytics={analytics}
-          expenses={expenses}
-          userId={userId}
           setPage={setPage}
         />
       </div>
@@ -733,8 +742,8 @@ function GroupsPage({
             addInviteEmail={addInviteEmail}
             removeInviteEmail={removeInviteEmail}
             onSubmit={async (event) => {
-              await saveGroup(event);
-              setShowGroupModal(false);
+              const saved = await saveGroup(event);
+              if (saved) setShowGroupModal(false);
             }}
             secondaryAction={{ label: 'Cancel', onClick: () => setShowGroupModal(false) }}
           />
@@ -958,12 +967,153 @@ function VotePage({ votes, onRespond, userId }) {
   );
 }
 
-function ChatPage({ chatMessages, chatMessagesRef, chatInput, setChatInput, sendChat, sessionUser }) {
+function ChatPage({
+  chatMessages,
+  chatSending,
+  chatMessagesRef,
+  chatInput,
+  setChatInput,
+  sendChat,
+  sessionUser,
+  pendingAiAction,
+  aiActionSaving,
+  confirmAiAction,
+  cancelAiAction
+}) {
+  const quickPrompts = ['Where am I overspending?', 'What should I improve this week?', 'How can our group reduce costs?', 'What is my biggest money risk?'];
+  const latestMessageIndex = chatMessages.length - 1;
+
   return (
     <div className="page show" style={{ padding: 0 }}>
-      <div className="chat-wrap"><div className="chat-quick">{['Who owes the most?', 'How much did we spend on groceries?', 'Any pending votes?', 'How are our challenges doing?'].map((prompt) => <button className="cq-btn" key={prompt} onClick={() => sendChat(prompt)}>{prompt}</button>)}</div><div id="chat-msgs" ref={chatMessagesRef}>{chatMessages.map((message, index) => <div key={`${message.role}-${index}`} className={`msg-wrap ${message.role === 'user' ? 'user' : ''}`}><div className={`msg-ava ${message.role}`}>{message.role === 'user' ? (sessionUser?.avatarEmoji || sessionUser?.initials) : 'AI'}</div><div><div className={`msg-bub ${message.role}`}>{message.text}</div></div></div>)}</div><div className="chat-input-bar"><textarea id="chat-inp" value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); } }} placeholder="Ask about balances, group spending, savings, or votes…" rows="1" /><button className="chat-send-btn" onClick={() => sendChat()}><Icon name="send" /></button></div></div>
+      <div className="chat-wrap">
+        <div className="chat-quick">
+          {quickPrompts.map((prompt) => <button className="cq-btn" key={prompt} disabled={chatSending} onClick={() => sendChat(prompt)}>{prompt}</button>)}
+        </div>
+        <div id="chat-msgs" ref={chatMessagesRef}>
+          {chatMessages.map((message, index) => {
+            const replyOptions = !chatSending && message.role === 'ai' && index === latestMessageIndex ? getQuickReplyOptions(message.text) : [];
+            return (
+              <div key={`${message.role}-${index}`} className={`msg-wrap ${message.role === 'user' ? 'user' : ''}`}>
+                <div className={`msg-ava ${message.role}`}>{message.role === 'user' ? (sessionUser?.avatarEmoji || sessionUser?.initials) : 'AI'}</div>
+                <div>
+                  <div className={`msg-bub ${message.role}`}>{message.text}</div>
+                  {replyOptions.length ? (
+                    <div className="chat-reply-actions" aria-label="Quick replies">
+                      {replyOptions.map((option) => (
+                        <button type="button" key={option.value} onClick={() => sendChat(option.value)}>{option.label}</button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            );
+          })}
+          {chatSending ? (
+            <div className="msg-wrap">
+              <div className="msg-ava ai">AI</div>
+              <div><div className="msg-bub ai typing">Thinking...</div></div>
+            </div>
+          ) : null}
+        </div>
+        <div className="chat-input-bar">
+          <textarea
+            id="chat-inp"
+            value={chatInput}
+            onChange={(e) => setChatInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); } }}
+            placeholder="Ask about balances, group spending, savings, or votes..."
+            rows="1"
+            disabled={chatSending}
+          />
+          <button className="chat-send-btn" disabled={chatSending || !chatInput.trim()} onClick={() => sendChat()}><Icon name="send" /></button>
+        </div>
+      </div>
+      {pendingAiAction ? (
+        <AiActionConfirmModal
+          action={pendingAiAction}
+          saving={aiActionSaving}
+          onConfirm={confirmAiAction}
+          onCancel={cancelAiAction}
+        />
+      ) : null}
     </div>
   );
+}
+
+function AiActionConfirmModal({ action, saving, onConfirm, onCancel }) {
+  return (
+    <div className="modal-overlay ai-action-overlay" role="dialog" aria-modal="true" aria-labelledby="ai-action-title">
+      <div className="modal-box ai-action-box">
+        <div className="modal-head">
+          <span id="ai-action-title">Confirm AI action</span>
+          <button className="modal-close" type="button" onClick={onCancel} disabled={saving}>×</button>
+        </div>
+        <div className="ai-action-body">
+          <div className="ai-action-kicker">This will change account data</div>
+          <div className="ai-action-summary">{action.summary}</div>
+          {action.details?.length ? (
+            <div className="ai-action-details">
+              {action.details.map((detail) => (
+                <div className="ai-action-detail" key={detail.label}>
+                  <span>{detail.label}</span>
+                  <strong>{detail.value}</strong>
+                </div>
+              ))}
+            </div>
+          ) : null}
+          <div className="ai-action-actions">
+            <button className="btn btn-secondary" type="button" onClick={onCancel} disabled={saving}>Cancel</button>
+            <button className="btn btn-primary" type="button" onClick={onConfirm} disabled={saving}>
+              {saving ? 'Saving...' : 'Confirm change'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function getQuickReplyOptions(text = '') {
+  const lines = String(text).trim().split(/\n+/).map((line) => line.trim()).filter(Boolean);
+  const lastLine = lines.at(-1) || '';
+  if (!/[?]\s*$/.test(lastLine)) return [];
+
+  if (/^(question:\s*)?(do|does|did|should|would|could|can|are|is|am|have|has|will)\b/i.test(lastLine)) {
+    const topic = getQuestionTopic(lastLine);
+    return [
+      { label: 'yes', value: topic ? `Yes, ${topic}.` : 'Yes' },
+      { label: 'no', value: topic ? `No, not ${topic}.` : 'No' }
+    ];
+  }
+
+  const cleaned = lastLine
+    .replace(/^question:\s*/i, '')
+    .replace(/[?]\s*$/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const afterColon = cleaned.includes(':') ? cleaned.split(':').at(-1).trim() : cleaned;
+  const optionText = afterColon.replace(/^(?:do you want|would you like|should i|should we|shall we|do we|which would you prefer|which should we review|what should we focus on)\s+/i, '');
+  const parts = optionText
+    .split(/\s*,\s*|\s+or\s+/i)
+    .map((part) => part.replace(/^(?:the|a|an)\s+/i, '').trim())
+    .filter((part) => part && part.length <= 38 && part.split(/\s+/).length <= 5);
+
+  const unique = [...new Map(parts.map((part) => [part.toLowerCase(), part])).values()];
+  if (unique.length < 2 || unique.length > 4) return [];
+  return unique.map((option) => ({ label: option, value: `Let's focus on ${option}.` }));
+}
+
+function getQuestionTopic(question = '') {
+  const cleaned = question
+    .replace(/^question:\s*/i, '')
+    .replace(/[?]\s*$/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const match = cleaned.match(/^(?:do you want|would you like|should i|should we|shall we|do we|can i|can we|could i|could we)\s+(.+)$/i);
+  if (!match) return '';
+  return match[1]
+    .replace(/^help\s+([a-z]+ing)\b/i, 'help $1 with')
+    .replace(/\b(your|you)\b/gi, (word) => (word.toLowerCase() === 'your' ? 'my' : 'me'));
 }
 
 function ProgressPage({
@@ -1007,7 +1157,7 @@ function ProgressPage({
   );
 }
 
-function SettingsPage({ settings, session, notifications, saveSettings }) {
+function SettingsPage({ settings, session, notifications, saveSettings, markNotificationRead }) {
   return (
     <div className="page show">
       <div className="g2">
@@ -1015,7 +1165,7 @@ function SettingsPage({ settings, session, notifications, saveSettings }) {
           <div className="card-head">Account</div>
           <div className="settings-user"><UserAvatar user={session.user} className="settings-ava" /><div><div className="page-title" style={{ fontSize: 20 }}>{session.user.name}</div><div className="page-desc">{session.user.email}</div></div></div>
           <div className="card-sub mt-4">Notifications</div>
-          <div className="notification-list">{notifications.map((item) => <div className="notification-row" key={item.id}><div><div className="p-name">{item.title}</div><div className="p-group">{item.body}</div></div>{item.unread ? <span className="tag tag-teal">New</span> : <span className="tag tag-muted">Seen</span>}</div>)}</div>
+          <div className="notification-list">{notifications.map((item) => <div className="notification-row" key={item.id}><div><div className="p-name">{item.title}</div><div className="p-group">{item.body}</div></div>{item.unread ? <button className="tag tag-teal tag-button" type="button" onClick={() => markNotificationRead(item.id)}>Mark read</button> : <span className="tag tag-muted">Seen</span>}</div>)}</div>
         </div>
         <div className="card">
           <div className="card-head">Preferences</div>

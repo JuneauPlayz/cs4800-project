@@ -54,6 +54,23 @@ SplitStack API running at http://localhost:3001
 
 > Verify it works: open http://localhost:3001/api/health in your browser.
 
+### Gemini AI Assistant
+
+The Gemini API key is read by the backend only, so it is not exposed in the website bundle or mobile app.
+
+Add your key here:
+
+```bash
+website/backend/.env
+```
+
+```env
+GEMINI_API_KEY=your-gemini-api-key
+GEMINI_MODEL=gemini-2.5-flash
+```
+
+Restart the backend after editing `.env`. If the key is blank or Gemini is unreachable, the assistant falls back to local SplitStack summaries.
+
 ---
 
 ## Running the Frontend
@@ -69,6 +86,28 @@ npm run dev
 Then open **http://localhost:5173/** in your browser.
 
 > Both servers must be running at the same time for the app to work.
+
+---
+
+## Running the Mobile App
+
+The Flutter mobile app calls the same backend API as the website.
+
+```bash
+cd mobile-app
+flutter run
+```
+
+Defaults:
+
+- Android emulator: `http://10.0.2.2:3001/api`
+- iOS simulator: `http://127.0.0.1:3001/api`
+
+You can override the API URL when running:
+
+```bash
+flutter run --dart-define=API_BASE_URL=http://YOUR_COMPUTER_IP:3001/api
+```
 
 ---
 
@@ -120,4 +159,4 @@ You can also register a new account. If that email was invited to a group before
 - Auto-created votes when an expense exceeds the group voting threshold
 - Group-specific challenges with contributions from accepted members
 - User-specific notifications and settings
-- AI assistant responses based on live app data
+- Gemini-backed AI assistant responses based on live app data

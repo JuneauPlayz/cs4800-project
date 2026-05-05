@@ -3,7 +3,6 @@ import {
   buildEvenCustomMap,
   buildEvenPercentMap,
   initialAuthForm,
-  initialBudgetForm,
   initialChallengeForm,
   initialChallengesState,
   initialChatMessages,
@@ -41,6 +40,9 @@ export function useAppController() {
   const [savingGroup, setSavingGroup] = useState(false);
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [chatMessages, setChatMessages] = useState(initialChatMessages);
+  const [chatSending, setChatSending] = useState(false);
+  const [pendingAiAction, setPendingAiAction] = useState(null);
+  const [aiActionSaving, setAiActionSaving] = useState(false);
   const [balanceModal, setBalanceModal] = useState(null);
   const [budgetGoal, setBudgetGoal] = useState(null);
 
@@ -69,6 +71,8 @@ export function useAppController() {
     setSelectedGroup(null);
     setBalanceModal(null);
     setShowGroupModal(false);
+    setPendingAiAction(null);
+    setAiActionSaving(false);
     setBudgetGoal(null);
   }
 
@@ -78,6 +82,7 @@ export function useAppController() {
     resetWorkspaceState();
     resetGroupForm();
     setChatMessages(initialChatMessages);
+    setPendingAiAction(null);
     setPage('home');
   }
 
@@ -259,10 +264,10 @@ export function useAppController() {
 
   async function saveGroup(event) {
     event.preventDefault();
-    if (savingGroupRef.current || savingGroup) return;
+    if (savingGroupRef.current || savingGroup) return false;
     if (!String(groupForm.name || '').trim()) {
       setError('Please enter a group name before saving.');
-      return;
+      return false;
     }
 
     try {
@@ -287,8 +292,10 @@ export function useAppController() {
 
       resetGroupForm();
       await loadAll();
+      return true;
     } catch (nextError) {
       setError(nextError.message);
+      return false;
     } finally {
       savingGroupRef.current = false;
       setSavingGroup(false);
@@ -400,6 +407,16 @@ export function useAppController() {
     }
   }
 
+  async function markNotificationRead(notificationId) {
+    setNotifications((current) => current.map((item) => (item.id === notificationId ? { ...item, unread: false } : item)));
+    try {
+      await splitStackApi.markNotificationRead(notificationId, token);
+    } catch (nextError) {
+      setError(nextError.message);
+      setNotifications((current) => current.map((item) => (item.id === notificationId ? { ...item, unread: true } : item)));
+    }
+  }
+
   async function createChallengeSubmit(event) {
     event.preventDefault();
     try {
@@ -434,16 +451,44 @@ export function useAppController() {
 
   async function sendChat(overrideMessage) {
     const question = (overrideMessage ?? chatInput).trim();
-    if (!question) return;
+    if (!question || chatSending) return;
+    const history = chatMessages.slice(-8);
+    setPendingAiAction(null);
     setChatMessages((messages) => [...messages, { role: 'user', text: question }]);
     setChatInput('');
+    setChatSending(true);
     try {
-      const data = await splitStackApi.sendChat(question, token);
+      const data = await splitStackApi.sendChat(question, token, history);
       setChatMessages((messages) => [...messages, { role: 'ai', text: data.reply }]);
+      setPendingAiAction(data.proposedAction ?? null);
     } catch (nextError) {
       setError(nextError.message);
-      setChatMessages((messages) => [...messages, { role: 'ai', text: 'I hit a snag reaching the assistant.' }]);
+      setChatMessages((messages) => [...messages, { role: 'ai', text: nextError.message || 'I hit a snag reaching the assistant.' }]);
+    } finally {
+      setChatSending(false);
     }
+  }
+
+  async function confirmAiAction() {
+    if (!pendingAiAction || aiActionSaving) return;
+    setAiActionSaving(true);
+    setError('');
+    try {
+      const result = await splitStackApi.confirmAssistantAction(pendingAiAction, token);
+      setPendingAiAction(null);
+      setChatMessages((messages) => [...messages, { role: 'ai', text: result.message || 'Saved that account change.' }]);
+      await loadAll({ silent: true });
+    } catch (nextError) {
+      setError(nextError.message);
+      setChatMessages((messages) => [...messages, { role: 'ai', text: nextError.message || 'I could not save that account change.' }]);
+    } finally {
+      setAiActionSaving(false);
+    }
+  }
+
+  function cancelAiAction() {
+    setPendingAiAction(null);
+    setChatMessages((messages) => [...messages, { role: 'ai', text: 'No problem, I did not change your account data.' }]);
   }
 
   return {
@@ -483,6 +528,9 @@ export function useAppController() {
     selectedGroup,
     setSelectedGroup,
     chatMessages,
+    chatSending,
+    pendingAiAction,
+    aiActionSaving,
     chatMessagesRef,
     currentGroup,
     memberShares,
@@ -516,8 +564,11 @@ export function useAppController() {
     applyEvenCustomSplit,
     handleVoteResponse,
     saveSettings,
+    markNotificationRead,
     createChallengeSubmit,
     addContribution,
-    sendChat
+    sendChat,
+    confirmAiAction,
+    cancelAiAction
   };
 }

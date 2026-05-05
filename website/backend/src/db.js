@@ -166,6 +166,15 @@ function bootstrap() {
       updated_at TEXT NOT NULL,
       UNIQUE(user_id, month)
     );
+
+    CREATE TABLE IF NOT EXISTS ai_chat_usage (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_ai_chat_usage_user_created
+      ON ai_chat_usage (user_id, created_at);
   `);
 
   ensureColumn('groups_table', 'owner_id', 'owner_id TEXT');

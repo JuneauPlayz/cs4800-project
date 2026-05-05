@@ -7,12 +7,24 @@ export function list(req, res) {
 export function create(req, res) {
   const { name, type = 'custom', threshold = 0, inviteEntries = [], inviteEmails = [], description = '' } = req.body ?? {};
   if (!name?.trim()) return res.status(400).json({ message: 'Group name is required.' });
-  const group = createGroup({ userId: req.user.id, name, type, threshold, inviteEntries, inviteEmails, description });
+  const thresholdValue = Number(threshold || 0);
+  if (!Number.isFinite(thresholdValue) || thresholdValue < 0) {
+    return res.status(400).json({ message: 'Voting threshold must be zero or greater.' });
+  }
+  const group = createGroup({ userId: req.user.id, name, type, threshold: thresholdValue, inviteEntries, inviteEmails, description });
   return res.status(201).json({ group });
 }
 
 export function update(req, res) {
-  const group = updateGroup(req.params.id, req.user.id, req.body ?? {});
+  const payload = req.body ?? {};
+  if (payload.threshold !== '' && payload.threshold != null) {
+    const thresholdValue = Number(payload.threshold);
+    if (!Number.isFinite(thresholdValue) || thresholdValue < 0) {
+      return res.status(400).json({ message: 'Voting threshold must be zero or greater.' });
+    }
+    payload.threshold = thresholdValue;
+  }
+  const group = updateGroup(req.params.id, req.user.id, payload);
   if (!group) return res.status(404).json({ message: 'Group not found or you do not have permission to edit it.' });
   return res.json({ group });
 }

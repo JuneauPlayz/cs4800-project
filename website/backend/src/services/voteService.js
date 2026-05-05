@@ -1,5 +1,5 @@
 import db from '../db.js';
-import { createNotification, moneyLike } from './sharedService.js';
+import { createNotification, moneyLike, requireMembership } from './sharedService.js';
 
 function buildVoteRows(groupIds) {
   const placeholders = groupIds.map(() => '?').join(',');
@@ -33,15 +33,15 @@ export function getVotes(userId) {
 }
 
 export function respondToVote(voteId, decision, userId) {
+  const vote = db.prepare('SELECT * FROM votes WHERE id = ?').get(voteId);
+  if (!vote || !requireMembership(vote.group_id, userId)) return null;
+
   const now = new Date().toISOString();
   db.prepare(`
     INSERT INTO vote_decisions (vote_id, user_id, decision, decided_at)
     VALUES (?, ?, ?, ?)
     ON CONFLICT(vote_id, user_id) DO UPDATE SET decision = excluded.decision, decided_at = excluded.decided_at
   `).run(voteId, userId, decision, now);
-
-  const vote = db.prepare('SELECT * FROM votes WHERE id = ?').get(voteId);
-  if (!vote) return null;
 
   const totals = db.prepare('SELECT decision, COUNT(*) as count FROM vote_decisions WHERE vote_id = ? GROUP BY decision').all(voteId);
   const yes = totals.find((item) => item.decision === 'yes')?.count ?? 0;

@@ -1,6 +1,7 @@
 import cors from 'cors';
 import express from 'express';
 import morgan from 'morgan';
+import './config/env.js';
 import apiRouter from './routes/api.js';
 
 export function createApp() {

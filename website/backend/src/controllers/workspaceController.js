@@ -1,4 +1,6 @@
 import {
+  buildAssistantActionProposal,
+  executeAssistantAction,
   generateAiReply,
   getAnalytics,
   getDashboard,
@@ -6,6 +8,7 @@ import {
   getPendingInvitesForUser,
   getSettings,
   markNotificationRead,
+  reserveAiChatSlot,
   upsertSettings
 } from '../services/index.js';
 
@@ -52,7 +55,33 @@ export function updateSettings(req, res) {
   res.json({ settings: nextSettings });
 }
 
-export function chat(req, res) {
-  const { message = '' } = req.body ?? {};
-  res.json({ reply: generateAiReply(req.user.id, message) });
+export async function chat(req, res) {
+  const { message = '', history = [] } = req.body ?? {};
+  const cleanMessage = String(message).trim();
+  if (!cleanMessage) {
+    res.status(400).json({ message: 'Message is required.' });
+    return;
+  }
+
+  const chatLimit = reserveAiChatSlot(req.user.id);
+  if (!chatLimit.allowed) {
+    res.status(429).json({
+      message: `You have reached the AI chat limit of ${chatLimit.limit} messages per hour. Try again after ${new Date(chatLimit.resetAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}.`,
+      chatLimit
+    });
+    return;
+  }
+
+  const reply = await generateAiReply(req.user.id, cleanMessage, history);
+  const proposedAction = buildAssistantActionProposal(req.user.id, cleanMessage, history);
+  res.json({ reply, chatLimit, proposedAction });
+}
+
+export function confirmAssistantAction(req, res) {
+  try {
+    const result = executeAssistantAction(req.user.id, req.body?.action);
+    res.json(result);
+  } catch (error) {
+    res.status(400).json({ message: error.message || 'Unable to confirm assistant action.' });
+  }
 }

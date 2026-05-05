@@ -89,8 +89,14 @@ export const splitStackApi = {
   getNotifications(token) {
     return api('/api/notifications', {}, token);
   },
-  sendChat(message, token) {
-    return api('/api/ai/chat', { method: 'POST', body: JSON.stringify({ message }) }, token);
+  markNotificationRead(notificationId, token) {
+    return api(`/api/notifications/${notificationId}/read`, { method: 'POST' }, token);
+  },
+  sendChat(message, token, history = []) {
+    return api('/api/ai/chat', { method: 'POST', body: JSON.stringify({ message, history }) }, token);
+  },
+  confirmAssistantAction(action, token) {
+    return api('/api/ai/actions/confirm', { method: 'POST', body: JSON.stringify({ action }) }, token);
   },
   getBudgetGoal(token) {
     return api('/api/budget', {}, token);

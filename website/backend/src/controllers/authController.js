@@ -12,9 +12,18 @@ export function register(req, res) {
   if (!name || !email || !password) {
     return res.status(400).json({ message: 'name, email, and password are required.' });
   }
-  if (getUserByEmail(email)) {
+  const normalizedPassword = String(password);
+  const normalizedEmail = String(email).trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+    return res.status(400).json({ message: 'A valid email address is required.' });
+  }
+  const normalizedName = String(name).trim();
+  if (!normalizedName) {
+    return res.status(400).json({ message: 'Name is required.' });
+  }
+  if (getUserByEmail(normalizedEmail)) {
     return res.status(409).json({ message: 'Email already exists.' });
   }
-  const result = registerUser({ name, email, password, avatarEmoji });
+  const result = registerUser({ name: normalizedName, email: normalizedEmail, password: normalizedPassword, avatarEmoji });
   return res.status(201).json(result);
 }
