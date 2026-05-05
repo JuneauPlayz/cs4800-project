@@ -178,6 +178,16 @@ TOTAL \$41.68
     expect(ymd(debugReceiptDateFromText(receiptText)!), '2026-05-04');
   });
 
+  test('extracts older receipt dates that remain editable in the picker', () {
+    const receiptText = '''
+STORE RECEIPT
+DATE 12/31/2019 18:42
+TOTAL \$41.68
+''';
+
+    expect(ymd(debugReceiptDateFromText(receiptText)!), '2019-12-31');
+  });
+
   test('extracts date when OCR puts amount and date on one line', () {
     const receiptText = '''
 STORE RECEIPT
@@ -236,6 +246,59 @@ TOTAL \$84.80
 
     expect(find.text('Sign in to SplitStack'), findsOneWidget);
     expect(find.text('SplitStack'), findsWidgets);
+  });
+
+  testWidgets('keeps the add expense date picker editable', (tester) async {
+    FlutterSecureStorage.setMockInitialValues({});
+    final controller =
+        AppController(apiClient: ApiClient(), sessionStore: SessionStore())
+          ..user = User(
+            id: 'u1',
+            name: 'Jordan Lee',
+            email: 'jordan@example.com',
+            initials: 'JL',
+            avatarColor: '#0D9488',
+            avatarEmoji: '',
+          )
+          ..groups = [
+            Group(
+              id: 'g1',
+              name: 'Wicker Park Apt',
+              type: 'roommates',
+              emoji: '',
+              threshold: 500,
+              description: '',
+              isOwner: true,
+              members: [
+                GroupMember(
+                  id: 'u1',
+                  name: 'Jordan Lee',
+                  email: 'jordan@example.com',
+                  initials: 'JL',
+                  avatarColor: '#0D9488',
+                  avatarEmoji: '',
+                  role: 'owner',
+                ),
+              ],
+              pendingInvites: const [],
+            ),
+          ];
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: HomeShell(controller: controller),
+      ),
+    );
+    await tester.tap(find.text('Add'));
+    await tester.pumpAndSettle();
+
+    expect(find.byTooltip('Change expense date'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Change expense date'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(DatePickerDialog), findsOneWidget);
   });
 
   testWidgets('renders challenges tab with contribution controls', (

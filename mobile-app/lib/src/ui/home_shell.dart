@@ -877,9 +877,13 @@ class _AddExpenseTabState extends State<_AddExpenseTab> {
                     borderRadius: BorderRadius.circular(12),
                     onTap: _pickExpenseDate,
                     child: InputDecorator(
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         labelText: 'Expense date',
-                        suffixIcon: Icon(Icons.calendar_today_rounded),
+                        suffixIcon: IconButton(
+                          tooltip: 'Change expense date',
+                          onPressed: _pickExpenseDate,
+                          icon: const Icon(Icons.edit_calendar_rounded),
+                        ),
                       ),
                       child: Text(formatDate(_datePayload(_expenseDate))),
                     ),
@@ -1238,15 +1242,38 @@ class _AddExpenseTabState extends State<_AddExpenseTab> {
   }
 
   Future<void> _pickExpenseDate() async {
+    final firstDate = DateTime(2000);
+    final lastDate = DateTime.now().add(const Duration(days: 365));
     final picked = await showDatePicker(
       context: context,
-      initialDate: _expenseDate,
-      firstDate: DateTime(2020),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
+      initialDate: _clampedPickerDate(
+        _expenseDate,
+        firstDate: firstDate,
+        lastDate: lastDate,
+      ),
+      firstDate: firstDate,
+      lastDate: lastDate,
     );
     if (picked == null || !mounted) return;
     setState(() => _expenseDate = picked);
   }
+}
+
+DateTime _clampedPickerDate(
+  DateTime date, {
+  required DateTime firstDate,
+  required DateTime lastDate,
+}) {
+  final normalizedDate = DateTime(date.year, date.month, date.day);
+  final normalizedFirst = DateTime(
+    firstDate.year,
+    firstDate.month,
+    firstDate.day,
+  );
+  final normalizedLast = DateTime(lastDate.year, lastDate.month, lastDate.day);
+  if (normalizedDate.isBefore(normalizedFirst)) return normalizedFirst;
+  if (normalizedDate.isAfter(normalizedLast)) return normalizedLast;
+  return normalizedDate;
 }
 
 class _ReceiptScannerPanel extends StatelessWidget {
