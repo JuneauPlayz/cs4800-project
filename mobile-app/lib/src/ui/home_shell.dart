@@ -477,74 +477,92 @@ class _DashboardTab extends StatelessWidget {
   }
 
   Future<void> _showPaymentSheet(BuildContext context, Expense expense) async {
+    final remaining = expense.userOwes - expense.userPaid;
+    if (remaining <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('This expense is already settled.')),
+      );
+      return;
+    }
+
+    final messenger = ScaffoldMessenger.of(context);
     final noteController = TextEditingController();
     String method = _payoutMethods.first;
-    final payment = await showModalBottomSheet<Map<String, String>>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      builder: (sheetContext) {
-        return StatefulBuilder(
-          builder: (context, setSheetState) {
-            return Padding(
-              padding: EdgeInsets.fromLTRB(
-                20,
-                20,
-                20,
-                MediaQuery.of(context).viewInsets.bottom + 20,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Pay expense',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    '${expense.description} • ${money(expense.userOwes - expense.userPaid)}',
-                  ),
-                  const SizedBox(height: 16),
-                  DropdownButtonFormField<String>(
-                    initialValue: method,
-                    decoration: const InputDecoration(
-                      labelText: 'Payout method',
+    Map<String, String>? payment;
+
+    try {
+      payment = await showModalBottomSheet<Map<String, String>>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        builder: (sheetContext) {
+          return StatefulBuilder(
+            builder: (context, setSheetState) {
+              return SingleChildScrollView(
+                padding: EdgeInsets.fromLTRB(
+                  20,
+                  20,
+                  20,
+                  MediaQuery.of(context).viewInsets.bottom + 20,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Pay expense',
+                      style: Theme.of(context).textTheme.titleLarge,
                     ),
-                    items: _payoutMethods
-                        .map(
-                          (item) =>
-                              DropdownMenuItem(value: item, child: Text(item)),
-                        )
-                        .toList(),
-                    onChanged: (value) {
-                      if (value != null) setSheetState(() => method = value);
-                    },
-                  ),
-                  const SizedBox(height: 14),
-                  TextField(
-                    controller: noteController,
-                    decoration: const InputDecoration(
-                      labelText: 'Note or confirmation optional',
+                    const SizedBox(height: 8),
+                    Text('${expense.description} • ${money(remaining)}'),
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<String>(
+                      initialValue: method,
+                      decoration: const InputDecoration(
+                        labelText: 'Payout method',
+                      ),
+                      items: _payoutMethods
+                          .map(
+                            (item) => DropdownMenuItem(
+                              value: item,
+                              child: Text(item),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (value) {
+                        if (value != null) setSheetState(() => method = value);
+                      },
                     ),
-                  ),
-                  const SizedBox(height: 18),
-                  FilledButton.icon(
-                    onPressed: () => Navigator.of(context).pop({
-                      'method': method,
-                      'note': noteController.text.trim(),
-                    }),
-                    icon: const Icon(Icons.payments_rounded),
-                    label: const Text('Pay'),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
-    noteController.dispose();
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: noteController,
+                      decoration: const InputDecoration(
+                        labelText: 'Note or confirmation optional',
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: () => Navigator.of(sheetContext).pop({
+                          'method': method,
+                          'note': noteController.text.trim(),
+                        }),
+                        icon: const Icon(Icons.payments_rounded),
+                        label: const Text('Pay'),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          );
+        },
+      );
+    } finally {
+      noteController.dispose();
+    }
+
     if (payment == null || !context.mounted) return;
     try {
       await controller.recordExpensePayment(
@@ -554,7 +572,7 @@ class _DashboardTab extends StatelessWidget {
       );
     } catch (_) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(
           content: Text(controller.errorMessage ?? 'Unable to record payment.'),
         ),
@@ -562,9 +580,9 @@ class _DashboardTab extends StatelessWidget {
       return;
     }
     if (context.mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Expense marked paid.')));
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Expense marked paid.')),
+      );
     }
   }
 }
@@ -1198,9 +1216,7 @@ class _AddExpenseTabState extends State<_AddExpenseTab> {
     return recognizeReceiptTextFromBytes(bytes: imageBytes, mimeType: mimeType);
   }
 
-  Future<String?> _scanReceiptTextOnDevice({
-    required String imagePath,
-  }) async =>
+  Future<String?> _scanReceiptTextOnDevice({required String imagePath}) async =>
       null;
 
   void _clearReceipt({bool showUpdate = true}) {

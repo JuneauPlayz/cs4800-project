@@ -1,13 +1,16 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:splitstack_mobile/main.dart';
+import 'package:mobile_app/src/app.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 void main() {
   testWidgets('shows the SplitStack mobile login screen', (tester) async {
-    await tester.pumpWidget(const SplitStackMobileApp());
+    FlutterSecureStorage.setMockInitialValues({});
 
-    expect(find.text('SplitStack AI'), findsOneWidget);
-    expect(find.text('Ask about your real shared spending.'), findsOneWidget);
-    expect(find.text('Sign in'), findsOneWidget);
+    await tester.pumpWidget(const SplitStackApp());
+    await tester.pumpAndSettle();
+
+    expect(find.text('Sign in to SplitStack'), findsOneWidget);
+    expect(find.text('SplitStack'), findsWidgets);
   });
 }
