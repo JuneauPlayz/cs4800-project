@@ -36,11 +36,35 @@ Future<String?> recognizeReceiptTextFromBytes({
       .toDart;
 
   try {
-    final textDetectorText = await _recognizeWithTextDetector(url);
-    final tesseractText = await _recognizeWithTesseract(url);
+    String? textDetectorText;
+    String? receiptPipelineText;
+    String? tesseractText;
+
+    try {
+      textDetectorText = await _recognizeWithTextDetector(url);
+    } on Object {
+      textDetectorText = null;
+    }
+
+    try {
+      receiptPipelineText = await _recognizeWithReceiptPipeline(url);
+    } on Object {
+      receiptPipelineText = null;
+    }
+
+    if (receiptPipelineText == null) {
+      try {
+        tesseractText = await _recognizeWithTesseract(url);
+      } on Object {
+        tesseractText = null;
+      }
+    }
+
     final parts = [
       if (textDetectorText != null && textDetectorText.trim().isNotEmpty)
         textDetectorText.trim(),
+      if (receiptPipelineText != null && receiptPipelineText.trim().isNotEmpty)
+        receiptPipelineText.trim(),
       if (tesseractText != null && tesseractText.trim().isNotEmpty)
         tesseractText.trim(),
     ];
@@ -48,11 +72,15 @@ Future<String?> recognizeReceiptTextFromBytes({
       return parts.join('\n');
     }
     return null;
-  } on Object {
-    return null;
   } finally {
     urlConstructor.callMethod<JSAny?>('revokeObjectURL'.toJS, url.toJS);
   }
+}
+
+Future<String?> recognizeReceiptTextFromPath({
+  required String imagePath,
+}) async {
+  return null;
 }
 
 Future<String?> _recognizeWithTextDetector(String imageUrl) async {
@@ -106,4 +134,18 @@ Future<_ImageElement> _loadImage(String url) {
   return completer.future
       .timeout(const Duration(seconds: 8))
       .then((_) => image);
+}
+
+Future<String?> _recognizeWithReceiptPipeline(String imageUrl) async {
+  if (!globalContext.has('splitStackRecognizeReceipt')) return null;
+
+  final recognizer = globalContext.getProperty<JSFunction>(
+    'splitStackRecognizeReceipt'.toJS,
+  );
+  final promise =
+      recognizer.callAsFunction(globalContext, imageUrl.toJS)
+          as JSPromise<JSString>;
+  final result = await promise.toDart;
+  final text = result.toDart.trim();
+  return text.isEmpty ? null : text;
 }

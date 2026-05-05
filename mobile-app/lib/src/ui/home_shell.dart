@@ -1217,7 +1217,7 @@ class _AddExpenseTabState extends State<_AddExpenseTab> {
   }
 
   Future<String?> _scanReceiptTextOnDevice({required String imagePath}) async =>
-      null;
+      recognizeReceiptTextFromPath(imagePath: imagePath);
 
   void _clearReceipt({bool showUpdate = true}) {
     if (showUpdate) {
@@ -1375,15 +1375,14 @@ double? _receiptAmount(List<String> lines) {
   final moneyPattern = RegExp(
     r'(?<!\d)\$?\s*(\d{1,5}(?:,\d{3})*(?:[.,]\d{1,2}|\s+\d{2}))(?!\d)',
   );
-  final ignoreWords = RegExp(
-    r'(sub\s*total|tax|tip|gratuity|change|cash|tender|card|visa|mastercard|amex|refund|saved|payment|paid|auth|approval|account|acct)',
-    caseSensitive: false,
-  );
   final normalizedLines = lines.map(_normalizeReceiptAmountLine).toList();
 
   for (var i = normalizedLines.length - 1; i >= 0; i--) {
     final line = normalizedLines[i];
-    if (!_looksLikeTotalLine(line) || ignoreWords.hasMatch(line)) continue;
+    if (!_looksLikeTotalLine(line) ||
+        _shouldIgnoreAmountLine(line, isTotalLine: true)) {
+      continue;
+    }
 
     final afterTotal = _textAfterTotalLabel(line);
     final afterTotalValue = _lastMoneyValue(afterTotal, moneyPattern);
@@ -1398,11 +1397,23 @@ double? _receiptAmount(List<String> lines) {
       offset++
     ) {
       final nextLine = normalizedLines[i + offset];
-      if (ignoreWords.hasMatch(nextLine)) continue;
+      if (_shouldIgnoreAmountLine(nextLine, isTotalLine: false)) continue;
       final nextLineValue = _lastMoneyValue(nextLine, moneyPattern);
       if (nextLineValue != null) return nextLineValue;
     }
   }
+
+  final mathBackedTotal = _receiptAmountFromSummaryMath(
+    normalizedLines,
+    moneyPattern,
+  );
+  if (mathBackedTotal != null) return mathBackedTotal;
+
+  final unlabeledTotal = _receiptAmountFromBottomSummary(
+    normalizedLines,
+    moneyPattern,
+  );
+  if (unlabeledTotal != null) return unlabeledTotal;
 
   return null;
 }
@@ -1415,6 +1426,102 @@ double? _lastMoneyValue(String text, RegExp moneyPattern) {
   }
   return null;
 }
+
+class _ReceiptAmountCandidate {
+  const _ReceiptAmountCandidate({
+    required this.amount,
+    required this.line,
+    required this.lineIndex,
+  });
+
+  final double amount;
+  final String line;
+  final int lineIndex;
+}
+
+double? _receiptAmountFromSummaryMath(List<String> lines, RegExp moneyPattern) {
+  double? subtotal;
+  var tax = 0.0;
+  var tip = 0.0;
+  final candidates = <_ReceiptAmountCandidate>[];
+
+  for (var i = 0; i < lines.length; i++) {
+    final line = lines[i];
+    final value = _lastMoneyValue(line, moneyPattern);
+    if (value == null) continue;
+
+    final lower = line.toLowerCase();
+    if (RegExp(r'sub\s*[-:]?\s*total').hasMatch(lower)) {
+      subtotal = value;
+      continue;
+    }
+    if (RegExp(r'\b(tax|vat|mwst|gst|hst|pst)\b').hasMatch(lower)) {
+      tax += value;
+      continue;
+    }
+    if (RegExp(r'\b(tip|gratuity|service\s+charge)\b').hasMatch(lower)) {
+      tip += value;
+      continue;
+    }
+
+    if (!_shouldIgnoreAmountLine(line, isTotalLine: false) &&
+        !_looksLikeItemAmountLine(line)) {
+      candidates.add(
+        _ReceiptAmountCandidate(amount: value, line: line, lineIndex: i),
+      );
+    }
+  }
+
+  if (subtotal == null || subtotal <= 0) return null;
+  final expected = _roundMoney(subtotal + tax + tip);
+  if (expected <= 0) return null;
+
+  candidates.sort((first, second) {
+    final firstDelta = (first.amount - expected).abs();
+    final secondDelta = (second.amount - expected).abs();
+    final delta = firstDelta.compareTo(secondDelta);
+    if (delta != 0) return delta;
+    return second.lineIndex.compareTo(first.lineIndex);
+  });
+
+  if (candidates.isEmpty) return null;
+  final best = candidates.first;
+  return (best.amount - expected).abs() <= 0.05 ? best.amount : null;
+}
+
+double? _receiptAmountFromBottomSummary(
+  List<String> lines,
+  RegExp moneyPattern,
+) {
+  final hasSummarySignal = lines.any(
+    (line) => RegExp(
+      r'(sub\s*[-:]?\s*total|tax|vat|mwst|gst|hst|pst|change|cash|tender|card|visa|mastercard|amex|discover|debit|credit|payment|paid)',
+      caseSensitive: false,
+    ).hasMatch(line),
+  );
+  if (!hasSummarySignal) return null;
+
+  final firstSummaryLine = lines.indexWhere(
+    (line) => RegExp(
+      r'(sub\s*[-:]?\s*total|tax|vat|mwst|gst|hst|pst)',
+      caseSensitive: false,
+    ).hasMatch(line),
+  );
+  final floor = firstSummaryLine == -1
+      ? (lines.length * 0.45).floor()
+      : firstSummaryLine;
+
+  for (var i = lines.length - 1; i >= floor; i--) {
+    final line = lines[i];
+    if (_shouldIgnoreAmountLine(line, isTotalLine: false)) continue;
+    if (_looksLikeItemAmountLine(line)) continue;
+    final value = _lastMoneyValue(line, moneyPattern);
+    if (value != null) return value;
+  }
+  return null;
+}
+
+double _roundMoney(double value) => (value * 100).round() / 100;
 
 @visibleForTesting
 double? debugReceiptAmountFromText(String rawText) {
@@ -1463,17 +1570,47 @@ bool _looksLikeTotalLine(String line) {
   if (lower.contains('amount due') ||
       lower.contains('balance due') ||
       lower.contains('total due') ||
-      lower.contains('total amount')) {
+      lower.contains('total amount') ||
+      lower.contains('total paid') ||
+      lower.contains('amount paid') ||
+      lower.contains('grand total') ||
+      lower.contains('order total') ||
+      lower.contains('sale total') ||
+      lower.contains('card total') ||
+      RegExp(r'\bbalance\b').hasMatch(lower)) {
     return true;
   }
 
   return _containsFuzzyTotal(lower);
 }
 
+bool _shouldIgnoreAmountLine(String line, {required bool isTotalLine}) {
+  final lower = line.toLowerCase();
+  final hardIgnores = RegExp(
+    r'(sub\s*[-:]?\s*total|tax|tip|gratuity|change|refund|saved|savings|discount|coupon|cash\s*back|auth|approval|account|acct|points|reward|rounding|gift\s*card|card\s+balance|remaining\s+balance|previous\s+balance|available\s+balance|balance\s+forward)',
+    caseSensitive: false,
+  );
+  if (hardIgnores.hasMatch(lower)) return true;
+
+  final paymentOnlyIgnores = RegExp(
+    r'(cash|tender|card|visa|mastercard|amex|discover|debit|credit|payment|paid)',
+    caseSensitive: false,
+  );
+  return !isTotalLine && paymentOnlyIgnores.hasMatch(lower);
+}
+
+bool _looksLikeItemAmountLine(String line) {
+  final lower = line.toLowerCase();
+  if (_looksLikeTotalLine(line)) return false;
+  if (RegExp(r'^\s*\d+\s*(x|@)\b').hasMatch(lower)) return true;
+  if (RegExp(r'\b(qty|item|sku|unit)\b').hasMatch(lower)) return true;
+  return RegExp(r'[a-z]{2,}.*\$?\s*\d{1,4}[.,]\d{2}\s*$').hasMatch(lower);
+}
+
 String _textAfterTotalLabel(String line) {
   final lower = line.toLowerCase();
   final direct = RegExp(
-    r'(amount\s+due|balance\s+due|total\s+due|total\s+amount|grand\s+total|order\s+total|sale\s+total)',
+    r'(amount\s+due|balance\s+due|total\s+due|total\s+amount|total\s+paid|amount\s+paid|grand\s+total|order\s+total|sale\s+total|card\s+total|balance)',
     caseSensitive: false,
   ).firstMatch(line);
   if (direct != null) return line.substring(direct.end);
@@ -1562,45 +1699,234 @@ double? _moneyValue(String? raw) {
   return double.tryParse(decimalNormalized);
 }
 
+@visibleForTesting
+DateTime? debugReceiptDateFromText(String rawText) => _receiptDate(rawText);
+
+class _ReceiptDateCandidate {
+  const _ReceiptDateCandidate({
+    required this.date,
+    required this.score,
+    required this.lineIndex,
+    required this.matchStart,
+  });
+
+  final DateTime date;
+  final int score;
+  final int lineIndex;
+  final int matchStart;
+}
+
 DateTime? _receiptDate(String rawText) {
-  final iso = RegExp(
-    r'\b(\d{4})[\/.-](\d{1,2})[\/.-](\d{1,2})\b',
-  ).firstMatch(rawText);
-  if (iso != null) {
-    final year = int.tryParse(iso.group(1)!);
-    final month = int.tryParse(iso.group(2)!);
-    final day = int.tryParse(iso.group(3)!);
-    if (year != null && month != null && day != null) {
-      final parsed = DateTime.tryParse(
-        '${year.toString().padLeft(4, '0')}-${month.toString().padLeft(2, '0')}-${day.toString().padLeft(2, '0')}',
-      );
-      if (parsed != null) return parsed;
-    }
+  final lines = rawText
+      .split(RegExp(r'\r?\n'))
+      .map((line) => line.trim())
+      .where((line) => line.isNotEmpty)
+      .toList();
+  final candidates = <_ReceiptDateCandidate>[];
+  for (var i = 0; i < lines.length; i++) {
+    candidates.addAll(_receiptDateCandidatesFromLine(lines[i], i));
+  }
+  if (candidates.isEmpty) return null;
+
+  candidates.sort((first, second) {
+    final score = second.score.compareTo(first.score);
+    if (score != 0) return score;
+    final line = first.lineIndex.compareTo(second.lineIndex);
+    if (line != 0) return line;
+    return first.matchStart.compareTo(second.matchStart);
+  });
+  return candidates.first.date;
+}
+
+List<_ReceiptDateCandidate> _receiptDateCandidatesFromLine(
+  String rawLine,
+  int lineIndex,
+) {
+  final line = _normalizeReceiptDateLine(rawLine);
+  final candidates = <_ReceiptDateCandidate>[];
+  final isoPattern = RegExp(
+    r'\b(\d{4})\s*[\/.-]\s*(\d{1,2})\s*[\/.-]\s*(\d{1,2})\b',
+  );
+  final numericPattern = RegExp(
+    r'\b(\d{1,2})\s*[\/.-]\s*(\d{1,2})\s*[\/.-]\s*(\d{2,4})\b',
+  );
+  final spacedNumericPattern = RegExp(r'\b(\d{1,2})\s+(\d{1,2})\s+(\d{2,4})\b');
+  final monthFirstPattern = RegExp(
+    r'\b(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{2,4})\b',
+    caseSensitive: false,
+  );
+  final dayFirstPattern = RegExp(
+    r'\b(\d{1,2})(?:st|nd|rd|th)?\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?,?\s+(\d{2,4})\b',
+    caseSensitive: false,
+  );
+
+  for (final match in isoPattern.allMatches(line)) {
+    final year = int.tryParse(match.group(1)!);
+    final month = int.tryParse(match.group(2)!);
+    final day = int.tryParse(match.group(3)!);
+    final candidate = _buildReceiptDateCandidate(
+      year: year,
+      month: month,
+      day: day,
+      line: line,
+      lineIndex: lineIndex,
+      matchStart: match.start,
+      baseScore: 80,
+    );
+    if (candidate != null) candidates.add(candidate);
   }
 
-  final numeric = RegExp(
-    r'\b(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})\b',
-  ).firstMatch(rawText);
-  if (numeric != null) {
-    final first = int.tryParse(numeric.group(1)!);
-    final second = int.tryParse(numeric.group(2)!);
-    var year = int.tryParse(numeric.group(3)!);
-    if (first != null && second != null && year != null) {
-      if (year < 100) year += 2000;
+  for (final match in numericPattern.allMatches(line)) {
+    final first = int.tryParse(match.group(1)!);
+    final second = int.tryParse(match.group(2)!);
+    final year = _normalizeReceiptYear(int.tryParse(match.group(3)!));
+    if (first == null || second == null) continue;
+    final month = first > 12 ? second : first;
+    final day = first > 12 ? first : second;
+    final candidate = _buildReceiptDateCandidate(
+      year: year,
+      month: month,
+      day: day,
+      line: line,
+      lineIndex: lineIndex,
+      matchStart: match.start,
+      baseScore: 75,
+    );
+    if (candidate != null) candidates.add(candidate);
+  }
+
+  if (_hasReceiptDateContext(line)) {
+    for (final match in spacedNumericPattern.allMatches(line)) {
+      final first = int.tryParse(match.group(1)!);
+      final second = int.tryParse(match.group(2)!);
+      final year = _normalizeReceiptYear(int.tryParse(match.group(3)!));
+      if (first == null || second == null) continue;
       final month = first > 12 ? second : first;
       final day = first > 12 ? first : second;
-      final parsed = DateTime.tryParse(
-        '${year.toString().padLeft(4, '0')}-${month.toString().padLeft(2, '0')}-${day.toString().padLeft(2, '0')}',
+      final candidate = _buildReceiptDateCandidate(
+        year: year,
+        month: month,
+        day: day,
+        line: line,
+        lineIndex: lineIndex,
+        matchStart: match.start,
+        baseScore: 65,
       );
-      if (parsed != null) return parsed;
+      if (candidate != null) candidates.add(candidate);
     }
   }
 
-  final wordDate = RegExp(
-    r'\b(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+(\d{1,2}),?\s+(\d{2,4})\b',
-    caseSensitive: false,
-  ).firstMatch(rawText);
-  if (wordDate == null) return null;
+  for (final match in monthFirstPattern.allMatches(line)) {
+    final month = _receiptMonthValue(match.group(1)!);
+    final day = int.tryParse(match.group(2)!);
+    final year = _normalizeReceiptYear(int.tryParse(match.group(3)!));
+    final candidate = _buildReceiptDateCandidate(
+      year: year,
+      month: month,
+      day: day,
+      line: line,
+      lineIndex: lineIndex,
+      matchStart: match.start,
+      baseScore: 78,
+    );
+    if (candidate != null) candidates.add(candidate);
+  }
+
+  for (final match in dayFirstPattern.allMatches(line)) {
+    final day = int.tryParse(match.group(1)!);
+    final month = _receiptMonthValue(match.group(2)!);
+    final year = _normalizeReceiptYear(int.tryParse(match.group(3)!));
+    final candidate = _buildReceiptDateCandidate(
+      year: year,
+      month: month,
+      day: day,
+      line: line,
+      lineIndex: lineIndex,
+      matchStart: match.start,
+      baseScore: 78,
+    );
+    if (candidate != null) candidates.add(candidate);
+  }
+
+  if (candidates.isEmpty && _hasReceiptDateContext(line)) {
+    final yearlessPattern = RegExp(
+      r'\b(\d{1,2})\s*[\/.-]\s*(\d{1,2})(?!\s*[\/.-]\s*\d)\b',
+    );
+    for (final match in yearlessPattern.allMatches(line)) {
+      final first = int.tryParse(match.group(1)!);
+      final second = int.tryParse(match.group(2)!);
+      if (first == null || second == null) continue;
+      final now = DateTime.now();
+      final month = first > 12 ? second : first;
+      final day = first > 12 ? first : second;
+      var year = now.year;
+      var date = _validReceiptDate(year, month, day);
+      if (date != null && date.isAfter(now.add(const Duration(days: 1)))) {
+        year -= 1;
+        date = _validReceiptDate(year, month, day);
+      }
+      final candidate = _buildReceiptDateCandidate(
+        year: year,
+        month: month,
+        day: day,
+        line: line,
+        lineIndex: lineIndex,
+        matchStart: match.start,
+        baseScore: 55,
+        inferredYear: true,
+      );
+      if (candidate != null) candidates.add(candidate);
+    }
+  }
+
+  return candidates;
+}
+
+_ReceiptDateCandidate? _buildReceiptDateCandidate({
+  required int? year,
+  required int? month,
+  required int? day,
+  required String line,
+  required int lineIndex,
+  required int matchStart,
+  required int baseScore,
+  bool inferredYear = false,
+}) {
+  if (year == null || month == null || day == null) return null;
+  final date = _validReceiptDate(year, month, day);
+  if (date == null) return null;
+
+  final now = DateTime.now();
+  if (date.isAfter(now.add(const Duration(days: 1)))) return null;
+  if (_hasBadReceiptDateContext(line)) return null;
+
+  var score = baseScore;
+  if (_hasReceiptDateContext(line)) score += 25;
+  if (inferredYear) score -= 10;
+  return _ReceiptDateCandidate(
+    date: date,
+    score: score,
+    lineIndex: lineIndex,
+    matchStart: matchStart,
+  );
+}
+
+DateTime? _validReceiptDate(int year, int month, int day) {
+  final now = DateTime.now();
+  if (year < 2000 || year > now.year + 1) return null;
+  if (month < 1 || month > 12 || day < 1) return null;
+  final maxDay = DateTime(year, month + 1, 0).day;
+  if (day > maxDay) return null;
+  return DateTime(year, month, day);
+}
+
+int? _normalizeReceiptYear(int? year) {
+  if (year == null) return null;
+  if (year < 100) return year + 2000;
+  return year;
+}
+
+int? _receiptMonthValue(String raw) {
   const months = {
     'jan': 1,
     'feb': 2,
@@ -1616,14 +1942,42 @@ DateTime? _receiptDate(String rawText) {
     'nov': 11,
     'dec': 12,
   };
-  final month = months[wordDate.group(1)!.toLowerCase()];
-  final day = int.tryParse(wordDate.group(2)!);
-  var year = int.tryParse(wordDate.group(3)!);
-  if (month == null || day == null || year == null) return null;
-  if (year < 100) year += 2000;
-  return DateTime.tryParse(
-    '${year.toString().padLeft(4, '0')}-${month.toString().padLeft(2, '0')}-${day.toString().padLeft(2, '0')}',
-  );
+  return months[raw.toLowerCase()];
+}
+
+String _normalizeReceiptDateLine(String line) {
+  final chars = line.split('');
+  for (var i = 0; i < chars.length; i++) {
+    final char = chars[i];
+    final previous = i == 0 ? '' : chars[i - 1];
+    final next = i + 1 < chars.length ? chars[i + 1] : '';
+    if ((char == 'o' || char == 'O') &&
+        (_isDateTokenNeighbor(previous) || _isDateTokenNeighbor(next))) {
+      chars[i] = '0';
+    } else if ((char == 'l' || char == 'I' || char == '|') &&
+        (_isDateTokenNeighbor(previous) || _isDateTokenNeighbor(next))) {
+      chars[i] = '1';
+    }
+  }
+  return chars.join();
+}
+
+bool _isDateTokenNeighbor(String value) {
+  return _isDigit(value) || value == '/' || value == '.' || value == '-';
+}
+
+bool _hasReceiptDateContext(String line) {
+  return RegExp(
+    r'\b(date|dated|order|ordered|purchase|purchased|sale|sold|trans|transaction|invoice|check|opened|closed|posted|created)\b',
+    caseSensitive: false,
+  ).hasMatch(line);
+}
+
+bool _hasBadReceiptDateContext(String line) {
+  return RegExp(
+    r'\b(exp|expires|expiration|valid|coupon|reward|points|return|exchange|auth|approval|card|visa|mastercard|amex|discover|debit|credit|due)\b',
+    caseSensitive: false,
+  ).hasMatch(line);
 }
 
 class _VotesTab extends StatelessWidget {

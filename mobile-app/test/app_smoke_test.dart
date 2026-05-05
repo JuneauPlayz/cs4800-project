@@ -10,6 +10,12 @@ import 'package:mobile_app/src/ui/home_shell.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 void main() {
+  String ymd(DateTime date) {
+    final month = date.month.toString().padLeft(2, '0');
+    final day = date.day.toString().padLeft(2, '0');
+    return '${date.year}-$month-$day';
+  }
+
   test('extracts the total amount from receipt OCR text', () {
     const receiptText = '''
 CASH RECEIPT
@@ -112,6 +118,114 @@ CHANGE \$ 83.00
 ''';
 
     expect(debugReceiptAmountFromText(receiptText), 117.00);
+  });
+
+  test('skips total savings and keeps the receipt total', () {
+    const receiptText = '''
+STORE RECEIPT
+SUBTOTAL 76.80
+TAX 8.00
+TOTAL \$84.80
+TOTAL SAVINGS \$5.20
+''';
+
+    expect(debugReceiptAmountFromText(receiptText), 84.80);
+  });
+
+  test('extracts total paid rows as the receipt amount', () {
+    const receiptText = '''
+RESTAURANT
+Food 38.50
+Tax 3.18
+VISA \$41.68
+TOTAL PAID \$41.68
+''';
+
+    expect(debugReceiptAmountFromText(receiptText), 41.68);
+  });
+
+  test('does not confuse stored-value balances with receipt total', () {
+    const receiptText = '''
+COFFEE SHOP
+Latte 5.50
+TOTAL \$5.50
+GIFT CARD BALANCE \$24.50
+''';
+
+    expect(debugReceiptAmountFromText(receiptText), 5.50);
+  });
+
+  test('recovers unlabeled total from subtotal and tax math', () {
+    const receiptText = '''
+STORE RECEIPT
+SUBTOTAL \$76.80
+SALES TAX \$8.00
+\$84.80
+CASH \$100.00
+CHANGE \$15.20
+''';
+
+    expect(debugReceiptAmountFromText(receiptText), 84.80);
+  });
+
+  test('extracts numeric receipt date', () {
+    const receiptText = '''
+STORE RECEIPT
+DATE 05/04/2026 18:42
+TOTAL \$41.68
+''';
+
+    expect(ymd(debugReceiptDateFromText(receiptText)!), '2026-05-04');
+  });
+
+  test('extracts date when OCR puts amount and date on one line', () {
+    const receiptText = '''
+STORE RECEIPT
+DATE 05/04/2026 TOTAL \$41.68
+''';
+
+    expect(ymd(debugReceiptDateFromText(receiptText)!), '2026-05-04');
+  });
+
+  test('extracts date when OCR drops date separators', () {
+    const receiptText = '''
+STORE RECEIPT
+DATE 05 04 2026 18:42
+TOTAL \$41.68
+''';
+
+    expect(ymd(debugReceiptDateFromText(receiptText)!), '2026-05-04');
+  });
+
+  test('extracts receipt date when OCR confuses zeroes and ones', () {
+    const receiptText = '''
+STORE RECEIPT
+DATE O5/O4/2O26
+TOTAL \$41.68
+''';
+
+    expect(ymd(debugReceiptDateFromText(receiptText)!), '2026-05-04');
+  });
+
+  test('extracts word-form receipt date', () {
+    const receiptText = '''
+LOCAL MARKET
+Purchased May 4, 2026
+TOTAL \$84.80
+''';
+
+    expect(ymd(debugReceiptDateFromText(receiptText)!), '2026-05-04');
+  });
+
+  test('ignores return-by dates when choosing receipt date', () {
+    const receiptText = '''
+LOCAL MARKET
+RETURN BY 06/04/2026
+TRANSACTION DATE 05/04/2026
+TOTAL \$84.80
+''';
+
+    expect(ymd(debugReceiptDateFromText(receiptText)!), '2026-05-04');
   });
 
   testWidgets('shows auth screen when no session exists', (tester) async {

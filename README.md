@@ -110,6 +110,7 @@ Defaults:
 For the fastest local demo, you can also choose Chrome when Flutter asks for a device:
 
 ```bash
+cd mobile-app
 flutter run -d chrome
 ```
 
