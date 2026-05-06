@@ -34,6 +34,7 @@ router.post('/expenses/:id/settlements', expenseController.settle);
 
 router.get('/votes', voteController.list);
 router.post('/votes/:id/respond', voteController.respond);
+router.delete('/votes/:id/respond', voteController.undo);
 
 router.get('/analytics', workspaceController.analytics);
 

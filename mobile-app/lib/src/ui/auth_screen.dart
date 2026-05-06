@@ -34,23 +34,26 @@ class _AuthScreenState extends State<AuthScreen> {
   final _passwordController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   bool _register = false;
+  bool _passwordVisible = false;
   String _avatarSeed = _avatarSeeds.first;
 
   @override
   void initState() {
     super.initState();
     _nameController.addListener(_refreshInitialAvatar);
+    _passwordController.addListener(_rebuild);
   }
 
   void _refreshInitialAvatar() {
-    if (_register && _avatarSeed.isEmpty) {
-      setState(() {});
-    }
+    if (_register && _avatarSeed.isEmpty) setState(() {});
   }
+
+  void _rebuild() => setState(() {});
 
   @override
   void dispose() {
     _nameController.removeListener(_refreshInitialAvatar);
+    _passwordController.removeListener(_rebuild);
     _nameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
@@ -176,16 +179,40 @@ class _AuthScreenState extends State<AuthScreen> {
                               const SizedBox(height: 14),
                               TextFormField(
                                 controller: _passwordController,
-                                obscureText: true,
-                                decoration: const InputDecoration(
+                                obscureText: !_passwordVisible,
+                                decoration: InputDecoration(
                                   labelText: 'Password',
+                                  suffixIcon: IconButton(
+                                    icon: Icon(
+                                      _passwordVisible
+                                          ? Icons.visibility_off_rounded
+                                          : Icons.visibility_rounded,
+                                    ),
+                                    onPressed: () => setState(
+                                      () => _passwordVisible = !_passwordVisible,
+                                    ),
+                                  ),
                                 ),
                                 validator: (value) {
-                                  if ((value ?? '').length < 6) {
-                                    return 'Use at least 6 characters';
+                                  final p = value ?? '';
+                                  if (p.length < 8) {
+                                    return 'Password must be at least 8 characters';
+                                  }
+                                  if (!p.contains(RegExp(r'[A-Z]'))) {
+                                    return 'Include at least one uppercase letter';
+                                  }
+                                  if (!p.contains(RegExp(r'[0-9]'))) {
+                                    return 'Include at least one number';
+                                  }
+                                  if (!p.contains(RegExp(r"[!@#$%^&*(),.?':{}|<>\-+=\[\]\\;`~/]"))) {
+                                    return 'Include at least one special character';
                                   }
                                   return null;
                                 },
+                              ),
+                              const SizedBox(height: 10),
+                              _PasswordRequirements(
+                                password: _passwordController.text,
                               ),
                               const SizedBox(height: 18),
                               if (widget.controller.errorMessage != null) ...[
@@ -421,6 +448,66 @@ class _AuthBrand extends StatelessWidget {
           ],
         ),
       ],
+    );
+  }
+}
+
+class _PasswordRequirements extends StatelessWidget {
+  const _PasswordRequirements({required this.password});
+
+  final String password;
+
+  @override
+  Widget build(BuildContext context) {
+    if (password.isEmpty) return const SizedBox.shrink();
+
+    final hasLength = password.length >= 8;
+    final hasUpper = password.contains(RegExp(r'[A-Z]'));
+    final hasNumber = password.contains(RegExp(r'[0-9]'));
+    final hasSpecial = password.contains(
+      RegExp(r"[!@#$%^&*(),.?':{}|<>\-+=\[\]\\;`~/]"),
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _Req(met: hasLength, label: 'At least 8 characters'),
+        _Req(met: hasUpper, label: 'At least 1 uppercase letter'),
+        _Req(met: hasNumber, label: 'At least 1 number'),
+        _Req(met: hasSpecial, label: 'At least 1 special character'),
+      ],
+    );
+  }
+}
+
+class _Req extends StatelessWidget {
+  const _Req({required this.met, required this.label});
+
+  final bool met;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        children: [
+          Icon(
+            met ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+            size: 15,
+            color: met ? AppTheme.teal : AppTheme.muted,
+          ),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12.5,
+              color: met ? AppTheme.teal : AppTheme.muted,
+              fontWeight: met ? FontWeight.w600 : FontWeight.normal,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

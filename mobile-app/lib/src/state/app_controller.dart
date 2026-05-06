@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart' show ThemeMode;
 
 import '../data/api_client.dart';
 import '../data/models.dart';
@@ -14,6 +15,7 @@ class AppController extends ChangeNotifier {
 
   bool initializing = true;
   bool loading = false;
+  ThemeMode themeMode = ThemeMode.light;
   bool sendingChat = false;
   bool savingSettings = false;
   String? errorMessage;
@@ -31,6 +33,7 @@ class AppController extends ChangeNotifier {
   List<Vote> votes = const [];
   ChallengeData? challengeData;
   SettingsData? settings;
+  BudgetGoal? budgetGoal;
   List<ChatMessage> chatMessages = [
     ChatMessage(
       role: 'assistant',
@@ -47,6 +50,8 @@ class AppController extends ChangeNotifier {
 
   Future<void> initialize() async {
     _token = await sessionStore.readToken();
+    final darkMode = await sessionStore.readDarkMode();
+    themeMode = darkMode ? ThemeMode.dark : ThemeMode.light;
     if (_token != null) {
       try {
         await refreshAll(showLoader: false);
@@ -56,6 +61,12 @@ class AppController extends ChangeNotifier {
       }
     }
     initializing = false;
+    notifyListeners();
+  }
+
+  Future<void> setDarkMode(bool value) async {
+    themeMode = value ? ThemeMode.dark : ThemeMode.light;
+    await sessionStore.writeDarkMode(value);
     notifyListeners();
   }
 
@@ -103,6 +114,7 @@ class AppController extends ChangeNotifier {
         apiClient.getAnalytics(token),
         apiClient.getSettings(token),
         apiClient.getChallenges(token),
+        apiClient.getBudgetGoal(token),
       ]);
 
       user = results[0] as User;
@@ -115,6 +127,7 @@ class AppController extends ChangeNotifier {
       analytics = results[7] as AnalyticsData;
       settings = results[8] as SettingsData;
       challengeData = results[9] as ChallengeData;
+      budgetGoal = results[10] as BudgetGoal;
       errorMessage = null;
     } catch (error) {
       final message = error.toString();
@@ -404,6 +417,46 @@ class AppController extends ChangeNotifier {
     try {
       await apiClient.respondToVote(token, voteId: voteId, decision: decision);
       await refreshAll(showLoader: false);
+    } catch (error) {
+      _setError(error);
+      rethrow;
+    } finally {
+      loading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> undoVote({required String voteId}) async {
+    final token = _requireToken();
+    loading = true;
+    errorMessage = null;
+    notifyListeners();
+    try {
+      await apiClient.undoVote(token, voteId: voteId);
+      await refreshAll(showLoader: false);
+    } catch (error) {
+      _setError(error);
+      rethrow;
+    } finally {
+      loading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> saveBudget({
+    required double total,
+    required Map<String, double> breakdown,
+  }) async {
+    final token = _requireToken();
+    loading = true;
+    errorMessage = null;
+    notifyListeners();
+    try {
+      budgetGoal = await apiClient.saveBudgetGoal(
+        token,
+        total: total,
+        breakdown: breakdown,
+      );
     } catch (error) {
       _setError(error);
       rethrow;

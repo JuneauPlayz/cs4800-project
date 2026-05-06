@@ -246,6 +246,17 @@ class ApiClient {
     );
   }
 
+  Future<void> undoVote(
+    String token, {
+    required String voteId,
+  }) {
+    return _request(
+      'DELETE',
+      '/api/votes/$voteId/respond',
+      token: token,
+    );
+  }
+
   Future<void> markNotificationRead(
     String token, {
     required String notificationId,
@@ -270,6 +281,25 @@ class ApiClient {
     return SettingsData.fromJson(
       json['settings'] as Map<String, dynamic>? ?? const {},
     );
+  }
+
+  Future<BudgetGoal> getBudgetGoal(String token) async {
+    final json = await _request('GET', '/api/budget', token: token);
+    return BudgetGoal.fromJson(json['goal'] as Map<String, dynamic>);
+  }
+
+  Future<BudgetGoal> saveBudgetGoal(
+    String token, {
+    required double total,
+    required Map<String, double> breakdown,
+  }) async {
+    final json = await _request(
+      'POST',
+      '/api/budget',
+      token: token,
+      body: {'total': total, 'breakdown': breakdown},
+    );
+    return BudgetGoal.fromJson(json['goal'] as Map<String, dynamic>);
   }
 
   Future<String> sendChat(String token, {required String message}) async {

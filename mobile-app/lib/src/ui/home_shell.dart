@@ -1,8 +1,8 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../core/app_theme.dart';
@@ -69,6 +69,64 @@ class HomeShell extends StatefulWidget {
 
 class _HomeShellState extends State<HomeShell> {
   int _currentIndex = 0;
+  int _unseenGroups = 0;
+  int _unseenVotes = 0;
+  int _lastKnownGroupCount = 0;
+  int _lastKnownPendingVoteCount = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_onControllerUpdate);
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_onControllerUpdate);
+    super.dispose();
+  }
+
+  void _onControllerUpdate() {
+    final newGroupCount = widget.controller.groups.length;
+    final newPendingVotes = widget.controller.votes
+        .where((v) => v.status == 'pending')
+        .length;
+    var changed = false;
+
+    if (_currentIndex != 1 && newGroupCount > _lastKnownGroupCount) {
+      _unseenGroups += newGroupCount - _lastKnownGroupCount;
+      _lastKnownGroupCount = newGroupCount;
+      changed = true;
+    } else if (_currentIndex == 1) {
+      _lastKnownGroupCount = newGroupCount;
+    }
+
+    if (_currentIndex != 3 && newPendingVotes > _lastKnownPendingVoteCount) {
+      _unseenVotes += newPendingVotes - _lastKnownPendingVoteCount;
+      _lastKnownPendingVoteCount = newPendingVotes;
+      changed = true;
+    } else if (_currentIndex == 3) {
+      _lastKnownPendingVoteCount = newPendingVotes;
+    }
+
+    if (changed) setState(() {});
+  }
+
+  void _onTabTapped(int index) {
+    setState(() {
+      _currentIndex = index;
+      if (index == 1) {
+        _unseenGroups = 0;
+        _lastKnownGroupCount = widget.controller.groups.length;
+      }
+      if (index == 3) {
+        _unseenVotes = 0;
+        _lastKnownPendingVoteCount = widget.controller.votes
+            .where((v) => v.status == 'pending')
+            .length;
+      }
+    });
+  }
 
   static const _titles = [
     'Overview',
@@ -150,18 +208,26 @@ class _HomeShellState extends State<HomeShell> {
           ),
           bottomNavigationBar: NavigationBar(
             selectedIndex: _currentIndex,
-            onDestinationSelected: (index) {
-              setState(() => _currentIndex = index);
-            },
+            onDestinationSelected: _onTabTapped,
             destinations: [
               const NavigationDestination(
                 icon: Icon(Icons.home_outlined),
                 selectedIcon: Icon(Icons.home_rounded),
                 label: 'Home',
               ),
-              const NavigationDestination(
-                icon: Icon(Icons.groups_outlined),
-                selectedIcon: Icon(Icons.groups_rounded),
+              NavigationDestination(
+                icon: _unseenGroups > 0
+                    ? Badge.count(
+                        count: _unseenGroups,
+                        child: const Icon(Icons.groups_outlined),
+                      )
+                    : const Icon(Icons.groups_outlined),
+                selectedIcon: _unseenGroups > 0
+                    ? Badge.count(
+                        count: _unseenGroups,
+                        child: const Icon(Icons.groups_rounded),
+                      )
+                    : const Icon(Icons.groups_rounded),
                 label: 'Groups',
               ),
               const NavigationDestination(
@@ -169,9 +235,19 @@ class _HomeShellState extends State<HomeShell> {
                 selectedIcon: Icon(Icons.add_circle_rounded),
                 label: 'Add',
               ),
-              const NavigationDestination(
-                icon: Icon(Icons.how_to_vote_outlined),
-                selectedIcon: Icon(Icons.how_to_vote_rounded),
+              NavigationDestination(
+                icon: _unseenVotes > 0
+                    ? Badge.count(
+                        count: _unseenVotes,
+                        child: const Icon(Icons.how_to_vote_outlined),
+                      )
+                    : const Icon(Icons.how_to_vote_outlined),
+                selectedIcon: _unseenVotes > 0
+                    ? Badge.count(
+                        count: _unseenVotes,
+                        child: const Icon(Icons.how_to_vote_rounded),
+                      )
+                    : const Icon(Icons.how_to_vote_rounded),
                 label: 'Votes',
               ),
               const NavigationDestination(
@@ -192,17 +268,24 @@ class _HomeShellState extends State<HomeShell> {
   }
 }
 
-class _DashboardTab extends StatelessWidget {
+class _DashboardTab extends StatefulWidget {
   const _DashboardTab({required this.controller});
 
   final AppController controller;
 
   @override
-  Widget build(BuildContext context) {
-    final dashboard = controller.dashboard;
-    final analytics = controller.analytics;
+  State<_DashboardTab> createState() => _DashboardTabState();
+}
 
-    if (dashboard == null || analytics == null || controller.user == null) {
+class _DashboardTabState extends State<_DashboardTab> {
+  bool _showBudgetForm = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final dashboard = widget.controller.dashboard;
+    final analytics = widget.controller.analytics;
+
+    if (dashboard == null || analytics == null || widget.controller.user == null) {
       return const _CenteredState(
         icon: Icons.hourglass_bottom_rounded,
         title: 'Loading your dashboard',
@@ -210,222 +293,259 @@ class _DashboardTab extends StatelessWidget {
       );
     }
 
-    return RefreshIndicator(
-      onRefresh: () => controller.refreshAll(showLoader: false),
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+    return Stack(
+      children: [
+        RefreshIndicator(
+          onRefresh: () => widget.controller.refreshAll(showLoader: false),
+          child: ListView(
+        padding: const EdgeInsets.only(top: 8, bottom: 24),
         children: [
-          _BalanceHero(
-            user: controller.user!,
-            dashboard: dashboard,
-            analytics: analytics,
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: _StatCard(
-                  label: 'Owed to you',
-                  value: money(dashboard.balance.totalOwedToYou),
-                  tone: AppTheme.teal,
-                  onTap: () => _showBalanceSheet(
-                    context,
-                    title: 'People who owe you',
-                    emptyText: 'No one owes you right now.',
-                    balances: dashboard.balance.owedToYou,
-                    tone: AppTheme.teal,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _StatCard(
-                  label: 'You owe',
-                  value: money(dashboard.balance.totalYouOwe),
-                  tone: AppTheme.red,
-                  onTap: () => _showBalanceSheet(
-                    context,
-                    title: 'People you owe',
-                    emptyText: 'You are settled up right now.',
-                    balances: dashboard.balance.youOwe,
-                    tone: AppTheme.red,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _StatCard(
-                  label: 'Monthly spend',
-                  value: money(analytics.monthTotal),
-                  tone: AppTheme.slate,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _StatCard(
-                  label: 'Pending votes',
-                  value: '${dashboard.pendingVotes}',
-                  tone: AppTheme.amber,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          _SectionCard(
-            title: 'Top categories',
-            subtitle: 'Live totals from your approved expenses',
-            child: Column(
-              children: analytics.byCategory.take(4).map((item) {
-                final ratio = analytics.monthTotal == 0
-                    ? 0.0
-                    : (item.total / analytics.monthTotal).clamp(0.0, 1.0);
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 14),
-                  child: Column(
-                    children: [
-                      Row(
-                        children: [
-                          Text(
-                            item.category,
-                            style: Theme.of(context).textTheme.titleMedium,
-                          ),
-                          const Spacer(),
-                          Text(money(item.total)),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(999),
-                        child: LinearProgressIndicator(
-                          minHeight: 8,
-                          value: ratio,
-                          backgroundColor: const Color(0xFFE2E8F0),
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }).toList(),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: _BalanceHero(
+              user: widget.controller.user!,
+              dashboard: dashboard,
+              analytics: analytics,
             ),
           ),
           const SizedBox(height: 16),
-          _SectionCard(
-            title: 'Group spending',
-            subtitle: 'Which groups are driving the most spend',
-            child: Column(
-              children: analytics.byGroup.map((group) {
-                final fullGroup = controller.groups
-                    .where((item) => item.id == group.id)
-                    .firstOrNull;
-                return ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  onTap: fullGroup == null
-                      ? null
-                      : () => _showGroupDetailsSheet(context, fullGroup),
-                  leading: CircleAvatar(
-                    backgroundColor: AppTheme.teal.withValues(alpha: 0.12),
-                    foregroundColor: AppTheme.teal,
-                    child: Text(
-                      group.name.isEmpty ? '?' : group.name[0].toUpperCase(),
-                      style: const TextStyle(fontWeight: FontWeight.w700),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _StatCard(
+                    label: 'Owed to you',
+                    value: money(dashboard.balance.totalOwedToYou),
+                    tone: AppTheme.teal,
+                    onTap: () => _showBalanceSheet(
+                      context,
+                      title: 'People who owe you',
+                      emptyText: 'No one owes you right now.',
+                      balances: dashboard.balance.owedToYou,
+                      tone: AppTheme.teal,
                     ),
                   ),
-                  title: Text(group.name),
-                  trailing: Text(
-                    money(group.total),
-                    style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _StatCard(
+                    label: 'You owe',
+                    value: money(dashboard.balance.totalYouOwe),
+                    tone: AppTheme.red,
+                    onTap: () => _showBalanceSheet(
+                      context,
+                      title: 'People you owe',
+                      emptyText: 'You are settled up right now.',
+                      balances: dashboard.balance.youOwe,
+                      tone: AppTheme.red,
+                    ),
                   ),
-                );
-              }).toList(),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _StatCard(
+                    label: 'Monthly spend',
+                    value: money(analytics.monthTotal),
+                    tone: AppTheme.muted,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _StatCard(
+                    label: 'Pending votes',
+                    value: '${dashboard.pendingVotes}',
+                    tone: AppTheme.amber,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            child: _BudgetCard(
+              controller: widget.controller,
+              analytics: analytics,
+              onEdit: () => setState(() => _showBudgetForm = true),
             ),
           ),
           const SizedBox(height: 16),
-          _SectionCard(
-            title: 'Recent expenses',
-            subtitle: 'Latest activity across your groups',
-            child: Column(
-              children: controller.expenses.take(6).map((expense) {
-                final canMarkPaid = expense.userPaymentStatus == 'open';
-                return ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: CircleAvatar(
-                    backgroundColor: const Color(0xFFF0FDFA),
-                    foregroundColor: AppTheme.tealDark,
-                    child: const Icon(Icons.receipt_long_rounded),
-                  ),
-                  title: Text(expense.description),
-                  subtitle: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '${expense.groupName} • ${expense.category} • ${formatDate(expense.expenseDate)}',
-                      ),
-                      const SizedBox(height: 6),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 6,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          Chip(
-                            visualDensity: VisualDensity.compact,
-                            label: Text(
-                              expense.settlementStatus == 'paid'
-                                  ? 'Finished'
-                                  : 'Open',
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: _SectionCard(
+              title: 'Top categories',
+              subtitle: 'Live totals from your approved expenses',
+              child: Column(
+                children: analytics.byCategory.take(4).map((item) {
+                  final ratio = analytics.monthTotal == 0
+                      ? 0.0
+                      : (item.total / analytics.monthTotal).clamp(0.0, 1.0);
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 14),
+                    child: Column(
+                      children: [
+                        Row(
+                          children: [
+                            Text(
+                              item.category,
+                              style: Theme.of(context).textTheme.titleMedium,
                             ),
+                            const Spacer(),
+                            Text(money(item.total)),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(999),
+                          child: LinearProgressIndicator(
+                            minHeight: 8,
+                            value: ratio,
+                            backgroundColor: const Color(0xFFE2E8F0),
                           ),
-                          if (expense.userPaymentStatus == 'paid')
-                            const Chip(
-                              visualDensity: VisualDensity.compact,
-                              label: Text('You paid'),
-                            ),
-                          if (canMarkPaid)
-                            TextButton.icon(
-                              onPressed: controller.loading
-                                  ? null
-                                  : () => _showPaymentSheet(context, expense),
-                              icon: const Icon(Icons.payments_rounded),
-                              label: Text(
-                                'Pay ${money(expense.userOwes - expense.userPaid)}',
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: _GroupSpendingSection(controller: widget.controller),
+          ),
+          const SizedBox(height: 16),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: _SectionCard(
+              title: 'Recent expenses',
+              subtitle: 'Latest activity across your groups',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  ...widget.controller.expenses.take(3).map((expense) {
+                    final canMarkPaid = expense.userPaymentStatus == 'open';
+                    return ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: CircleAvatar(
+                        backgroundColor: const Color(0xFFF0FDFA),
+                        foregroundColor: AppTheme.tealDark,
+                        child: const Icon(Icons.receipt_long_rounded),
+                      ),
+                      title: Text(expense.description),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${expense.groupName} • ${expense.category} • ${formatDate(expense.expenseDate)}',
+                          ),
+                          const SizedBox(height: 6),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 6,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              Chip(
+                                visualDensity: VisualDensity.compact,
+                                label: Text(
+                                  expense.settlementStatus == 'paid'
+                                      ? 'Finished'
+                                      : 'Open',
+                                ),
                               ),
-                            ),
+                              if (expense.userPaymentStatus == 'paid')
+                                const Chip(
+                                  visualDensity: VisualDensity.compact,
+                                  label: Text('You paid'),
+                                ),
+                              if (canMarkPaid)
+                                TextButton.icon(
+                                  onPressed: widget.controller.loading
+                                      ? null
+                                      : () => _showPaymentSheet(context, expense),
+                                  icon: const Icon(Icons.payments_rounded),
+                                  label: Text(
+                                    'Pay ${money(expense.userOwes - expense.userPaid)}',
+                                  ),
+                                ),
+                            ],
+                          ),
                         ],
                       ),
-                    ],
-                  ),
-                  trailing: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        money(expense.amount),
-                        style: const TextStyle(fontWeight: FontWeight.w800),
+                      trailing: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            money(expense.amount),
+                            style: const TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                          Text(
+                            formatDate(expense.expenseDate),
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
                       ),
-                      Text(
-                        formatDate(expense.expenseDate),
-                        style: Theme.of(context).textTheme.bodySmall,
+                    );
+                  }),
+                  if (widget.controller.expenses.length > 3) ...[
+                    const Divider(height: 16),
+                    InkWell(
+                      borderRadius: BorderRadius.circular(8),
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute<void>(
+                          builder: (_) => _AllExpensesPage(
+                            controller: widget.controller,
+                            onPaymentSheet: _showPaymentSheet,
+                          ),
+                        ),
                       ),
-                    ],
-                  ),
-                );
-              }).toList(),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              'See more',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Icon(
+                              Icons.arrow_forward_rounded,
+                              size: 16,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
             ),
           ),
         ],
       ),
-    );
-  }
-
-  void _showGroupDetailsSheet(BuildContext context, Group group) {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      builder: (_) => _GroupDetailsSheet(group: group, controller: controller),
+        ),
+        if (_showBudgetForm)
+          _BudgetFormOverlay(
+            controller: widget.controller,
+            onClose: () => setState(() => _showBudgetForm = false),
+          ),
+      ],
     );
   }
 
@@ -565,7 +685,7 @@ class _DashboardTab extends StatelessWidget {
 
     if (payment == null || !context.mounted) return;
     try {
-      await controller.recordExpensePayment(
+      await widget.controller.recordExpensePayment(
         expenseId: expense.id,
         method: payment['method'] ?? _payoutMethods.first,
         note: payment['note'] ?? '',
@@ -574,7 +694,9 @@ class _DashboardTab extends StatelessWidget {
       if (!context.mounted) return;
       messenger.showSnackBar(
         SnackBar(
-          content: Text(controller.errorMessage ?? 'Unable to record payment.'),
+          content: Text(
+            widget.controller.errorMessage ?? 'Unable to record payment.',
+          ),
         ),
       );
       return;
@@ -761,15 +883,22 @@ class _AddExpenseTabState extends State<_AddExpenseTab> {
   final Map<String, TextEditingController> _splitControllers = {};
 
   @override
+  void initState() {
+    super.initState();
+    _groupId = 'self';
+  }
+
+  @override
   void didUpdateWidget(covariant _AddExpenseTab oldWidget) {
     super.didUpdateWidget(oldWidget);
     final groups = widget.controller.groups;
-    final missingGroup =
-        _groupId != null && !groups.any((group) => group.id == _groupId);
-    if ((_groupId == null || missingGroup) && groups.isNotEmpty) {
-      _groupId = widget.controller.groups.first.id;
+    final missingGroup = _groupId != null &&
+        _groupId != 'self' &&
+        !groups.any((group) => group.id == _groupId);
+    if (missingGroup) {
+      _groupId = groups.isEmpty ? 'self' : groups.first.id;
     }
-    _syncSplitControllers();
+    if (_groupId != 'self') _syncSplitControllers();
   }
 
   @override
@@ -783,8 +912,10 @@ class _AddExpenseTabState extends State<_AddExpenseTab> {
     super.dispose();
   }
 
+  bool get _isSelfExpense => _groupId == 'self';
+
   Group? get _selectedGroup {
-    if (widget.controller.groups.isEmpty) return null;
+    if (_isSelfExpense || widget.controller.groups.isEmpty) return null;
     return widget.controller.groups.firstWhere(
       (group) => group.id == _groupId,
       orElse: () => widget.controller.groups.first,
@@ -795,19 +926,12 @@ class _AddExpenseTabState extends State<_AddExpenseTab> {
   Widget build(BuildContext context) {
     final group = _selectedGroup;
     final groups = widget.controller.groups;
-    final missingGroup =
-        _groupId != null && !groups.any((group) => group.id == _groupId);
-    if ((_groupId == null || missingGroup) && groups.isNotEmpty) {
-      _groupId = groups.first.id;
-      _syncSplitControllers();
-    }
-
-    if (groups.isEmpty) {
-      return const _CenteredState(
-        icon: Icons.add_circle_outline_rounded,
-        title: 'No groups available',
-        subtitle: 'Create or join a group before adding a mobile expense.',
-      );
+    final missingGroup = _groupId != null &&
+        _groupId != 'self' &&
+        !groups.any((g) => g.id == _groupId);
+    if (missingGroup) {
+      _groupId = groups.isEmpty ? 'self' : groups.first.id;
+      if (!_isSelfExpense) _syncSplitControllers();
     }
 
     return ListView(
@@ -822,29 +946,35 @@ class _AddExpenseTabState extends State<_AddExpenseTab> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'Add shared expense',
+                    'Add expense',
                     style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
                   ),
                   const SizedBox(height: 6),
-                  const Text(
-                    'Split expenses equally, by percent, or with custom member amounts.',
+                  Text(
+                    _isSelfExpense
+                        ? 'Personal expenses are tracked in your monthly budget.'
+                        : 'Split expenses equally, by percent, or with custom member amounts.',
                   ),
                   const SizedBox(height: 18),
                   DropdownButtonFormField<String>(
                     initialValue: _groupId,
-                    decoration: const InputDecoration(labelText: 'Group'),
-                    items: groups
-                        .map(
-                          (item) => DropdownMenuItem(
-                            value: item.id,
-                            child: Text('${item.emoji} ${item.name}'),
-                          ),
-                        )
-                        .toList(),
+                    decoration: const InputDecoration(labelText: 'For'),
+                    items: [
+                      const DropdownMenuItem(
+                        value: 'self',
+                        child: Text('👤 Personal (Self)'),
+                      ),
+                      ...groups.map(
+                        (item) => DropdownMenuItem(
+                          value: item.id,
+                          child: Text('${item.emoji} ${item.name}'),
+                        ),
+                      ),
+                    ],
                     onChanged: (value) {
                       setState(() {
                         _groupId = value;
-                        _syncSplitControllers();
+                        if (!_isSelfExpense) _syncSplitControllers();
                       });
                     },
                   ),
@@ -913,69 +1043,78 @@ class _AddExpenseTabState extends State<_AddExpenseTab> {
                     onCamera: () => _pickReceipt(ImageSource.camera),
                     onRemove: _clearReceipt,
                   ),
-                  const SizedBox(height: 14),
-                  DropdownButtonFormField<String>(
-                    initialValue: _splitMethod,
-                    decoration: const InputDecoration(
-                      labelText: 'Split method',
-                    ),
-                    items: const [
-                      DropdownMenuItem(value: 'equal', child: Text('Equal')),
-                      DropdownMenuItem(
-                        value: 'percent',
-                        child: Text('Percent'),
+                  if (!_isSelfExpense) ...[
+                    const SizedBox(height: 14),
+                    DropdownButtonFormField<String>(
+                      initialValue: _splitMethod,
+                      decoration: const InputDecoration(
+                        labelText: 'Split method',
                       ),
-                      DropdownMenuItem(value: 'custom', child: Text('Custom')),
-                    ],
-                    onChanged: (value) {
-                      setState(() {
-                        _splitMethod = value ?? 'equal';
-                        _syncSplitControllers();
-                      });
-                    },
-                  ),
-                  if (group != null && _splitMethod != 'equal') ...[
-                    const SizedBox(height: 16),
-                    Text(
-                      _splitMethod == 'percent'
-                          ? 'Per-member percentages'
-                          : 'Per-member dollar amounts',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: 8),
-                    ...group.members.map((member) {
-                      final field = _splitControllers[member.id]!;
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: TextFormField(
-                          controller: field,
-                          keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true,
-                          ),
-                          decoration: InputDecoration(
-                            labelText: member.name,
-                            suffixText: _splitMethod == 'percent' ? '%' : '\$',
-                          ),
-                          validator: (_) => _validateSplitRow(member.id),
+                      items: const [
+                        DropdownMenuItem(
+                          value: 'equal',
+                          child: Text('Equal'),
                         ),
-                      );
-                    }),
-                    _SplitSummary(
-                      splitMethod: _splitMethod,
-                      total: _currentSplitTotal(),
-                      amount:
-                          double.tryParse(_amountController.text.trim()) ?? 0,
+                        DropdownMenuItem(
+                          value: 'percent',
+                          child: Text('Percent'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'custom',
+                          child: Text('Custom'),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        setState(() {
+                          _splitMethod = value ?? 'equal';
+                          _syncSplitControllers();
+                        });
+                      },
+                    ),
+                    if (group != null && _splitMethod != 'equal') ...[
+                      const SizedBox(height: 16),
+                      Text(
+                        _splitMethod == 'percent'
+                            ? 'Per-member percentages'
+                            : 'Per-member dollar amounts',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 8),
+                      ...group.members.map((member) {
+                        final field = _splitControllers[member.id]!;
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: TextFormField(
+                            controller: field,
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            decoration: InputDecoration(
+                              labelText: member.name,
+                              suffixText:
+                                  _splitMethod == 'percent' ? '%' : '\$',
+                            ),
+                            validator: (_) => _validateSplitRow(member.id),
+                          ),
+                        );
+                      }),
+                      _SplitSummary(
+                        splitMethod: _splitMethod,
+                        total: _currentSplitTotal(),
+                        amount:
+                            double.tryParse(_amountController.text.trim()) ?? 0,
+                      ),
+                    ],
+                    const SizedBox(height: 14),
+                    TextFormField(
+                      controller: _reasonController,
+                      minLines: 2,
+                      maxLines: 4,
+                      decoration: const InputDecoration(
+                        labelText: 'Reason for vote if threshold is exceeded',
+                      ),
                     ),
                   ],
-                  const SizedBox(height: 14),
-                  TextFormField(
-                    controller: _reasonController,
-                    minLines: 2,
-                    maxLines: 4,
-                    decoration: const InputDecoration(
-                      labelText: 'Reason for vote if threshold is exceeded',
-                    ),
-                  ),
                   const SizedBox(height: 18),
                   FilledButton(
                     onPressed: widget.controller.loading ? null : _submit,
@@ -1051,6 +1190,36 @@ class _AddExpenseTabState extends State<_AddExpenseTab> {
     if (!_formKey.currentState!.validate()) return;
 
     final amount = double.parse(_amountController.text.trim());
+
+    if (_isSelfExpense) {
+      try {
+        await widget.controller.createExpense({
+          'groupId': 'self',
+          'description': _descriptionController.text.trim(),
+          'amount': amount,
+          'category': _category,
+          'expenseDate': _datePayload(_expenseDate),
+          if (_receiptImageBytes != null) ...{
+            'receiptImageBase64': base64Encode(_receiptImageBytes!),
+            'receiptFileName': _receiptFileName ?? 'receipt.jpg',
+            'receiptMimeType': _receiptMimeType ?? 'image/jpeg',
+          },
+        });
+        if (!mounted) return;
+        _descriptionController.clear();
+        _amountController.clear();
+        _clearReceipt(showUpdate: false);
+        _showMessage('Personal expense added and tracked in your budget.');
+      } catch (_) {
+        if (mounted) {
+          _showMessage(
+            widget.controller.errorMessage ?? 'Unable to save expense.',
+          );
+        }
+      }
+      return;
+    }
+
     if (_splitMethod == 'percent') {
       final total = _currentSplitTotal();
       if ((total - 100).abs() > 0.25) {
@@ -2681,19 +2850,92 @@ class _SettingsTabState extends State<_SettingsTab> {
                   ],
                 ),
                 const SizedBox(height: 12),
-                if (widget.controller.notifications.isEmpty)
-                  const Text('No notifications yet.')
-                else
-                  ...widget.controller.notifications
-                      .take(12)
-                      .map(
-                        (notification) => _NotificationTile(
-                          notification: notification,
-                          controller: widget.controller,
-                        ),
-                      ),
+                Builder(
+                  builder: (context) {
+                    final unread = widget.controller.notifications
+                        .where((n) => n.unread)
+                        .toList();
+                    if (unread.isEmpty) {
+                      return const Text('No new notifications.');
+                    }
+                    return Column(
+                      children: unread
+                          .take(12)
+                          .map(
+                            (n) => _NotificationTile(
+                              notification: n,
+                              controller: widget.controller,
+                            ),
+                          )
+                          .toList(),
+                    );
+                  },
+                ),
               ],
             ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Builder(
+          builder: (context) {
+            final readNotifications = widget.controller.notifications
+                .where((n) => !n.unread)
+                .toList();
+            return Card(
+              child: InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => _ReadNotificationsPage(
+                      controller: widget.controller,
+                    ),
+                  ),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        backgroundColor: AppTheme.border,
+                        foregroundColor: AppTheme.muted,
+                        child: const Icon(Icons.done_all_rounded),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Read notifications',
+                              style: TextStyle(fontWeight: FontWeight.w700),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              readNotifications.isEmpty
+                                  ? 'No read notifications yet'
+                                  : '${readNotifications.length} notification${readNotifications.length == 1 ? '' : 's'} marked as read',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Icon(Icons.chevron_right_rounded, color: AppTheme.muted),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+        const SizedBox(height: 16),
+        Card(
+          child: SwitchListTile(
+            value: widget.controller.themeMode == ThemeMode.dark,
+            onChanged: (value) => widget.controller.setDarkMode(value),
+            secondary: const Icon(Icons.dark_mode_outlined),
+            title: const Text('Dark mode'),
+            subtitle: const Text('Switch between light and dark theme'),
           ),
         ),
         const SizedBox(height: 16),
@@ -2877,6 +3119,61 @@ IconData _notificationIcon(String type) {
     'group' => Icons.groups_rounded,
     _ => Icons.notifications_none_rounded,
   };
+}
+
+class _ReadNotificationsPage extends StatelessWidget {
+  const _ReadNotificationsPage({required this.controller});
+
+  final AppController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final read = controller.notifications.where((n) => !n.unread).toList();
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Read notifications'),
+        backgroundColor: AppTheme.slate,
+        foregroundColor: Colors.white,
+        iconTheme: const IconThemeData(color: Colors.white),
+        systemOverlayStyle: SystemUiOverlayStyle.light,
+      ),
+      body: read.isEmpty
+          ? const Center(
+              child: Padding(
+                padding: EdgeInsets.all(32),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.done_all_rounded, size: 48, color: AppTheme.muted),
+                    SizedBox(height: 12),
+                    Text(
+                      'No read notifications yet',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 16,
+                      ),
+                    ),
+                    SizedBox(height: 6),
+                    Text(
+                      'Notifications you mark as read will appear here.',
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+            )
+          : ListView.separated(
+              padding: const EdgeInsets.all(16),
+              itemCount: read.length,
+              separatorBuilder: (context, index) => const Divider(height: 1),
+              itemBuilder: (context, index) => _NotificationTile(
+                notification: read[index],
+                controller: controller,
+              ),
+            ),
+    );
+  }
 }
 
 class AssistantScreen extends StatefulWidget {
@@ -3170,6 +3467,37 @@ class _HeroMetric extends StatelessWidget {
   }
 }
 
+class _UnbudgetedNotice extends StatelessWidget {
+  const _UnbudgetedNotice({required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFEF3C7),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppTheme.amber.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.warning_amber_rounded, size: 16, color: AppTheme.amber),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: children,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _StatCard extends StatelessWidget {
   const _StatCard({
     required this.label,
@@ -3207,6 +3535,980 @@ class _StatCard extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _BudgetCard extends StatefulWidget {
+  const _BudgetCard({
+    required this.controller,
+    required this.analytics,
+    required this.onEdit,
+  });
+
+  final AppController controller;
+  final AnalyticsData analytics;
+  final VoidCallback onEdit;
+
+  @override
+  State<_BudgetCard> createState() => _BudgetCardState();
+}
+
+class _BudgetCardState extends State<_BudgetCard> {
+  bool _breakdownOpen = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final goal = widget.controller.budgetGoal;
+    final g = (goal != null && goal.total > 0) ? goal : null;
+    final breakdown = goal?.breakdown ?? const {};
+    final actuals = goal?.actuals ?? const {};
+    final spent = actuals.values.fold(0.0, (sum, v) => sum + v);
+    // Categories with actual spend but no budget allocation
+    final unbudgeted = actuals.entries
+        .where((e) => (breakdown[e.key] ?? 0) == 0 && e.value > 0)
+        .toList();
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Monthly Budget',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        g != null
+                            ? 'Goal: ${money(g.total)}'
+                            : 'No budget set for this month',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: widget.onEdit,
+                  icon: const Icon(Icons.edit_outlined, size: 16),
+                  label: Text(g != null ? 'Edit' : 'Set Budget'),
+                ),
+              ],
+            ),
+            if (g != null) ...[
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    '${money(spent)} spent',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  Text(
+                    '${money((g.total - spent).clamp(0, double.infinity))} left',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: spent > g.total ? AppTheme.red : AppTheme.teal,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(999),
+                child: LinearProgressIndicator(
+                  minHeight: 10,
+                  value: (spent / g.total).clamp(0.0, 1.0),
+                  backgroundColor: const Color(0xFFE2E8F0),
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    spent > g.total ? AppTheme.red : AppTheme.teal,
+                  ),
+                ),
+              ),
+            ],
+            if (g == null && spent > 0) ...[
+              const SizedBox(height: 10),
+              _UnbudgetedNotice(
+                children: [
+                  Text(
+                    'You\'ve spent ${money(spent)} this month across '
+                    '${actuals.length} categor${actuals.length == 1 ? 'y' : 'ies'}, '
+                    'but no monthly budget is set.',
+                    style: const TextStyle(fontSize: 13),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Tap Set Budget to start tracking your spending.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ] else if (unbudgeted.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              _UnbudgetedNotice(
+                children: [
+                  const Text(
+                    'Spending outside your budget:',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: Colors.black),
+                  ),
+                  const SizedBox(height: 6),
+                  ...unbudgeted.map(
+                    (e) => Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Text(
+                        'You spent ${money(e.value)} on ${e.key}, but no budget is set for this category.',
+                        style: const TextStyle(fontSize: 13, color: Colors.black),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Tap Edit to add these categories to your breakdown.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ],
+            if (breakdown.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: () => setState(() => _breakdownOpen = !_breakdownOpen),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    children: [
+                      Text(
+                        'Category breakdown',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Theme.of(context).colorScheme.primary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Icon(
+                        _breakdownOpen
+                            ? Icons.keyboard_arrow_up_rounded
+                            : Icons.keyboard_arrow_down_rounded,
+                        size: 18,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              if (_breakdownOpen) ...[
+                const SizedBox(height: 8),
+                ...breakdown.entries.map((e) {
+                  final budgeted = e.value;
+                  final catSpent = actuals[e.key] ?? 0.0;
+                  final ratio = budgeted > 0
+                      ? (catSpent / budgeted).clamp(0.0, 1.0)
+                      : 0.0;
+                  final over = catSpent > budgeted;
+                  final barColor = over ? AppTheme.red : AppTheme.teal;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              e.key,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodyMedium
+                                  ?.copyWith(fontWeight: FontWeight.w600),
+                            ),
+                            Text(
+                              '${money(catSpent)} / ${money(budgeted)}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: over ? AppTheme.red : null,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(999),
+                          child: LinearProgressIndicator(
+                            minHeight: 7,
+                            value: ratio,
+                            backgroundColor: const Color(0xFFE2E8F0),
+                            valueColor:
+                                AlwaysStoppedAnimation<Color>(barColor),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+              ],
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+}
+
+class _BudgetFormOverlay extends StatefulWidget {
+  const _BudgetFormOverlay({required this.controller, required this.onClose});
+
+  final AppController controller;
+  final VoidCallback onClose;
+
+  @override
+  State<_BudgetFormOverlay> createState() => _BudgetFormOverlayState();
+}
+
+class _BudgetFormOverlayState extends State<_BudgetFormOverlay> {
+  late final TextEditingController _totalCtrl;
+  final Map<String, TextEditingController> _catCtrls = {};
+  bool _saving = false;
+  String? _error;
+
+  void _rebuild() => setState(() {});
+
+  @override
+  void initState() {
+    super.initState();
+    final existing = widget.controller.budgetGoal;
+    final currentTotal = (existing?.total ?? 0) > 0 ? existing!.total : null;
+    _totalCtrl = TextEditingController(
+      text: currentTotal != null ? currentTotal.toStringAsFixed(2) : '',
+    );
+    _totalCtrl.addListener(_rebuild);
+    for (final cat in _categoryOptions) {
+      final val = existing?.breakdown[cat];
+      _catCtrls[cat] = TextEditingController(
+        text: val != null && val > 0 ? val.toStringAsFixed(2) : '',
+      );
+      _catCtrls[cat]!.addListener(_rebuild);
+    }
+  }
+
+  @override
+  void dispose() {
+    _totalCtrl.removeListener(_rebuild);
+    _totalCtrl.dispose();
+    for (final c in _catCtrls.values) {
+      c.removeListener(_rebuild);
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final total = double.tryParse(_totalCtrl.text.trim());
+    if (total == null || total <= 0) {
+      setState(() => _error = 'Enter a valid total budget amount.');
+      return;
+    }
+    final breakdown = <String, double>{};
+    for (final cat in _categoryOptions) {
+      final val = double.tryParse(_catCtrls[cat]!.text.trim());
+      if (val != null && val > 0) breakdown[cat] = val;
+    }
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      await widget.controller.saveBudget(total: total, breakdown: breakdown);
+      if (mounted) widget.onClose();
+    } catch (e) {
+      if (mounted) setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final total = double.tryParse(_totalCtrl.text.trim()) ?? 0;
+    final catSum = _catCtrls.values.fold(
+      0.0,
+      (sum, c) => sum + (double.tryParse(c.text.trim()) ?? 0),
+    );
+    final overBudget = total > 0 && catSum > total;
+
+    return Stack(
+      children: [
+        // Scrim — tapping outside the card dismisses the form
+        Positioned.fill(
+          child: GestureDetector(
+            onTap: _saving ? null : widget.onClose,
+            child: const ColoredBox(color: Color(0x80000000)),
+          ),
+        ),
+        // Form card — centered within the page body
+        Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+            child: Material(
+              borderRadius: BorderRadius.circular(12),
+              child: GestureDetector(
+                onTap: () {}, // absorb taps so they don't reach the scrim
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Set Monthly Budget',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 18),
+                        TextField(
+                          controller: _totalCtrl,
+                          autofocus: true,
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          decoration: const InputDecoration(
+                            labelText: 'Total monthly goal (\$)',
+                            border: OutlineInputBorder(),
+                            prefixText: '\$ ',
+                          ),
+                        ),
+                        const SizedBox(height: 18),
+                        const Text(
+                          'Category breakdown (optional)',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Allocate your budget across spending categories.',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                        const SizedBox(height: 12),
+                        ..._categoryOptions.map(
+                          (cat) => Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: TextField(
+                              controller: _catCtrls[cat],
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                    decimal: true,
+                                  ),
+                              decoration: InputDecoration(
+                                labelText: cat,
+                                border: const OutlineInputBorder(),
+                                prefixText: '\$ ',
+                              ),
+                            ),
+                          ),
+                        ),
+                        if (overBudget)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 10),
+                            child: Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFEF3C7),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: AppTheme.amber.withValues(alpha: 0.4),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.warning_amber_rounded,
+                                    size: 16,
+                                    color: AppTheme.amber,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      'Category total \$${catSum.toStringAsFixed(2)} exceeds your budget of \$${total.toStringAsFixed(2)}.',
+                                      style: const TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        if (_error != null) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            _error!,
+                            style: const TextStyle(color: AppTheme.red),
+                          ),
+                        ],
+                        const SizedBox(height: 20),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed:
+                                    _saving ? null : widget.onClose,
+                                child: const Text('Cancel'),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: FilledButton(
+                                onPressed: _saving || overBudget ? null : _save,
+                                child: _saving
+                                    ? const SizedBox(
+                                        width: 18,
+                                        height: 18,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : const Text('Save'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ── Group spending section ─────────────────────────────────────────────────
+
+class _GroupSpendingSection extends StatelessWidget {
+  const _GroupSpendingSection({required this.controller});
+
+  final AppController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    // Compute totals from live expenses, grouped by groupId (exclude 'self')
+    final totals = <String, double>{};
+    final names = <String, String>{};
+    for (final expense in controller.expenses) {
+      if (expense.groupId == 'self') continue;
+      totals[expense.groupId] = (totals[expense.groupId] ?? 0) + expense.amount;
+      names[expense.groupId] = expense.groupName;
+    }
+
+    if (totals.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final sorted = totals.keys.toList()
+      ..sort((a, b) => totals[b]!.compareTo(totals[a]!));
+
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Group spending',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 14),
+            ...sorted.asMap().entries.map((entry) {
+              final groupId = entry.value;
+              final name = names[groupId]!;
+              final total = totals[groupId]!;
+              return Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 18,
+                          backgroundColor:
+                              AppTheme.teal.withValues(alpha: 0.12),
+                          foregroundColor: AppTheme.teal,
+                          child: Text(
+                            name.isEmpty ? '?' : name[0].toUpperCase(),
+                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            name,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 15,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          money(total),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 15,
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.chevron_right_rounded),
+                          color: AppTheme.muted,
+                          visualDensity: VisualDensity.compact,
+                          onPressed: () => Navigator.push(
+                            context,
+                            MaterialPageRoute<void>(
+                              builder: (_) => _GroupExpensesPage(
+                                groupId: groupId,
+                                groupName: name,
+                                totalSpend: total,
+                                controller: controller,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              );
+            }),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _GroupExpensesPage extends StatelessWidget {
+  const _GroupExpensesPage({
+    required this.groupId,
+    required this.groupName,
+    required this.totalSpend,
+    required this.controller,
+  });
+
+  final String groupId;
+  final String groupName;
+  final double totalSpend;
+  final AppController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final expenses = controller.expenses
+        .where((e) => e.groupId == groupId)
+        .toList();
+
+    return Scaffold(
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.white,
+        iconTheme: const IconThemeData(color: AppTheme.slate),
+        systemOverlayStyle: SystemUiOverlayStyle.light,
+      ),
+      body: ListView(
+        padding: EdgeInsets.fromLTRB(
+          16,
+          16,
+          16,
+          16 + MediaQuery.of(context).padding.bottom,
+        ),
+        children: [
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 26,
+                    backgroundColor: AppTheme.teal.withValues(alpha: 0.12),
+                    foregroundColor: AppTheme.teal,
+                    child: Text(
+                      groupName.isEmpty ? '?' : groupName[0].toUpperCase(),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 20,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        groupName,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 18,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        money(totalSpend),
+                        style: const TextStyle(
+                          fontSize: 26,
+                          fontWeight: FontWeight.w800,
+                          color: AppTheme.teal,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      const Text(
+                        'Total group spending',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          if (expenses.isEmpty)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 40),
+                child: Text('No expenses yet for this group.'),
+              ),
+            )
+          else ...[
+            Text(
+              '${expenses.length} expense${expenses.length == 1 ? '' : 's'}',
+              style: const TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 16,
+              ),
+            ),
+            const SizedBox(height: 10),
+            ...expenses.map((expense) {
+              return Card(
+                margin: const EdgeInsets.only(bottom: 10),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              expense.description,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 15,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            money(expense.amount),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 16,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        '${expense.category} • Paid by ${expense.paidByName} • ${formatDate(expense.expenseDate)}',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        children: [
+                          Chip(
+                            visualDensity: VisualDensity.compact,
+                            label: Text(
+                              expense.settlementStatus == 'paid'
+                                  ? 'Settled'
+                                  : 'Open',
+                            ),
+                          ),
+                          if (expense.userPaymentStatus == 'paid')
+                            const Chip(
+                              visualDensity: VisualDensity.compact,
+                              label: Text('You paid'),
+                            ),
+                          if (expense.userOwes > 0)
+                            Chip(
+                              visualDensity: VisualDensity.compact,
+                              label: Text('Your share: ${money(expense.userOwes)}'),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _AllExpensesPage extends StatelessWidget {
+  const _AllExpensesPage({
+    required this.controller,
+    required this.onPaymentSheet,
+  });
+
+  final AppController controller;
+  final Future<void> Function(BuildContext, Expense) onPaymentSheet;
+
+  @override
+  Widget build(BuildContext context) {
+    final unpaid = controller.expenses
+        .where((e) => e.userPaymentStatus == 'open')
+        .toList();
+
+    // Group remaining expenses by month
+    final paid = controller.expenses
+        .where((e) => e.userPaymentStatus != 'open')
+        .toList();
+    final byMonth = <String, List<Expense>>{};
+    for (final expense in paid) {
+      final month = expense.expenseDate.length >= 7
+          ? expense.expenseDate.substring(0, 7)
+          : 'Unknown';
+      byMonth.putIfAbsent(month, () => []).add(expense);
+    }
+    final sortedMonths = byMonth.keys.toList()
+      ..sort((a, b) => b.compareTo(a));
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('All expenses'),
+        backgroundColor: AppTheme.slate,
+        foregroundColor: AppTheme.surfaceAlt,
+        iconTheme: const IconThemeData(color: AppTheme.surfaceAlt),
+        systemOverlayStyle: SystemUiOverlayStyle.light,
+        titleTextStyle: const TextStyle(
+          color: AppTheme.surfaceAlt,
+          fontSize: 22,
+          fontWeight: FontWeight.w800,
+          letterSpacing: -0.4,
+        ),
+      ),
+      body: ListView(
+        padding: EdgeInsets.fromLTRB(
+          16,
+          16,
+          16,
+          16 + MediaQuery.of(context).padding.bottom,
+        ),
+        children: [
+          if (unpaid.isNotEmpty) ...[
+            Card(
+              margin: EdgeInsets.zero,
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.pending_actions_rounded,
+                          color: AppTheme.amber,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Needs payment',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const Spacer(),
+                        Text(
+                          '${unpaid.length} pending',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    ...unpaid.map((expense) => _ExpenseTile(
+                          expense: expense,
+                          onPaymentSheet: onPaymentSheet,
+                          controller: controller,
+                        )),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+          if (sortedMonths.isNotEmpty)
+            Card(
+              margin: EdgeInsets.zero,
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'All expenses',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    ...sortedMonths.map((month) {
+                      final items = byMonth[month]!;
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8, bottom: 6),
+                            child: Text(
+                              _formatMonth(month),
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                            ),
+                          ),
+                          const Divider(height: 1),
+                          ...items.map((expense) => _ExpenseTile(
+                                expense: expense,
+                                onPaymentSheet: onPaymentSheet,
+                                controller: controller,
+                              )),
+                        ],
+                      );
+                    }),
+                  ],
+                ),
+              ),
+            ),
+          if (unpaid.isEmpty && sortedMonths.isEmpty)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 40),
+                child: Text('No expenses yet.'),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  String _formatMonth(String ym) {
+    if (ym.length < 7) return ym;
+    final parts = ym.split('-');
+    const months = [
+      '', 'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December',
+    ];
+    final m = int.tryParse(parts[1]) ?? 0;
+    return '${months[m]} ${parts[0]}';
+  }
+}
+
+class _ExpenseTile extends StatelessWidget {
+  const _ExpenseTile({
+    required this.expense,
+    required this.onPaymentSheet,
+    required this.controller,
+  });
+
+  final Expense expense;
+  final Future<void> Function(BuildContext, Expense) onPaymentSheet;
+  final AppController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final canMarkPaid = expense.userPaymentStatus == 'open';
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: CircleAvatar(
+        backgroundColor: const Color(0xFFF0FDFA),
+        foregroundColor: AppTheme.tealDark,
+        child: const Icon(Icons.receipt_long_rounded),
+      ),
+      title: Text(expense.description),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '${expense.groupName} • ${expense.category} • ${formatDate(expense.expenseDate)}',
+          ),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Chip(
+                visualDensity: VisualDensity.compact,
+                label: Text(
+                  expense.settlementStatus == 'paid' ? 'Finished' : 'Open',
+                ),
+              ),
+              if (expense.userPaymentStatus == 'paid')
+                const Chip(
+                  visualDensity: VisualDensity.compact,
+                  label: Text('You paid'),
+                ),
+              if (canMarkPaid)
+                TextButton.icon(
+                  onPressed: controller.loading
+                      ? null
+                      : () => onPaymentSheet(context, expense),
+                  icon: const Icon(Icons.payments_rounded),
+                  label: Text(
+                    'Pay ${money(expense.userOwes - expense.userPaid)}',
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
+      trailing: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Text(
+            money(expense.amount),
+            style: const TextStyle(fontWeight: FontWeight.w800),
+          ),
+          Text(
+            formatDate(expense.expenseDate),
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
       ),
     );
   }
@@ -3276,14 +4578,18 @@ class _VoteCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final mine = controller.user == null
+    final currentUserId = controller.user?.id;
+    final isCreator = currentUserId != null && vote.requestedBy == currentUserId;
+    final mine = currentUserId == null
         ? null
         : vote.decisions
-              .where((decision) => decision.userId == controller.user!.id)
+              .where((d) => d.userId == currentUserId)
               .cast<VoteDecision?>()
               .firstOrNull;
 
     final isPending = vote.status == 'pending';
+    final isApproved = mine?.decision == 'yes';
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: Card(
@@ -3299,7 +4605,9 @@ class _VoteCard extends StatelessWidget {
                 children: [
                   _StatusChip(label: vote.status, dark: isPending),
                   _StatusChip(label: vote.category, dark: isPending),
-                  if (mine != null)
+                  if (isCreator)
+                    _StatusChip(label: 'You created this', dark: isPending)
+                  else if (mine != null)
                     _StatusChip(
                       label: 'You voted ${mine.decision}',
                       dark: isPending,
@@ -3347,8 +4655,8 @@ class _VoteCard extends StatelessWidget {
                 runSpacing: 8,
                 children: vote.decisions
                     .map(
-                      (decision) => _StatusChip(
-                        label: '${decision.name}: ${decision.decision}',
+                      (d) => _StatusChip(
+                        label: '${d.name}: ${d.decision}',
                         dark: isPending,
                       ),
                     )
@@ -3356,65 +4664,197 @@ class _VoteCard extends StatelessWidget {
               ),
               if (isPending) ...[
                 const SizedBox(height: 18),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: controller.loading
-                            ? null
-                            : () async {
-                                try {
-                                  await controller.respondToVote(
-                                    voteId: vote.id,
-                                    decision: 'no',
-                                  );
-                                } catch (_) {
-                                  if (!context.mounted) return;
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                        controller.errorMessage ??
-                                            'Unable to submit vote.',
-                                      ),
-                                    ),
-                                  );
-                                }
-                              },
-                        child: const Text('Decline'),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: FilledButton(
-                        onPressed: controller.loading
-                            ? null
-                            : () async {
-                                try {
-                                  await controller.respondToVote(
-                                    voteId: vote.id,
-                                    decision: 'yes',
-                                  );
-                                } catch (_) {
-                                  if (!context.mounted) return;
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                        controller.errorMessage ??
-                                            'Unable to submit vote.',
-                                      ),
-                                    ),
-                                  );
-                                }
-                              },
-                        style: FilledButton.styleFrom(
-                          backgroundColor: const Color(0xFF5EEAD4),
-                          foregroundColor: AppTheme.slate,
+                if (isCreator && mine != null) ...[
+                  // Creator's auto-approved badge + undo — no Expanded so Row is never unconstrained
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 10,
+                          horizontal: 14,
                         ),
-                        child: const Text('Approve'),
+                        decoration: BoxDecoration(
+                          color: const Color(0x2622C55E),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: const Color(0x5922C55E)),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.check_circle_outline,
+                              color: Color(0xFF4ADE80),
+                              size: 16,
+                            ),
+                            SizedBox(width: 6),
+                            Text(
+                              'Approved',
+                              style: TextStyle(
+                                color: Color(0xFF4ADE80),
+                                fontWeight: FontWeight.w700,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
-                ),
+                      const SizedBox(width: 10),
+                      TextButton(
+                        onPressed: controller.loading
+                            ? null
+                            : () async {
+                                try {
+                                  await controller.undoVote(voteId: vote.id);
+                                } catch (_) {
+                                  if (!context.mounted) return;
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        controller.errorMessage ??
+                                            'Unable to undo vote.',
+                                      ),
+                                    ),
+                                  );
+                                }
+                              },
+                        style: TextButton.styleFrom(
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 8,
+                          ),
+                        ),
+                        child: const Text('Undo'),
+                      ),
+                    ],
+                  ),
+                ] else if (mine != null) ...[
+                  // Voter who already voted: decision badge + undo — same no-Expanded layout
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 10,
+                          horizontal: 14,
+                        ),
+                        decoration: BoxDecoration(
+                          color: isApproved
+                              ? const Color(0x2622C55E)
+                              : const Color(0x26EF4444),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: isApproved
+                                ? const Color(0x5922C55E)
+                                : const Color(0x59EF4444),
+                          ),
+                        ),
+                        child: Text(
+                          isApproved ? 'You approved' : 'You declined',
+                          style: TextStyle(
+                            color: isApproved
+                                ? const Color(0xFF4ADE80)
+                                : const Color(0xFFFCA5A5),
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      TextButton(
+                        onPressed: controller.loading
+                            ? null
+                            : () async {
+                                try {
+                                  await controller.undoVote(voteId: vote.id);
+                                } catch (_) {
+                                  if (!context.mounted) return;
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        controller.errorMessage ??
+                                            'Unable to undo vote.',
+                                      ),
+                                    ),
+                                  );
+                                }
+                              },
+                        style: TextButton.styleFrom(
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 8,
+                          ),
+                        ),
+                        child: const Text('Undo'),
+                      ),
+                    ],
+                  ),
+                ] else ...[
+                  // Unvoted member: approve / decline
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: controller.loading
+                              ? null
+                              : () async {
+                                  try {
+                                    await controller.respondToVote(
+                                      voteId: vote.id,
+                                      decision: 'no',
+                                    );
+                                  } catch (_) {
+                                    if (!context.mounted) return;
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          controller.errorMessage ??
+                                              'Unable to submit vote.',
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                },
+                          child: const Text('Decline'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: FilledButton(
+                          onPressed: controller.loading
+                              ? null
+                              : () async {
+                                  try {
+                                    await controller.respondToVote(
+                                      voteId: vote.id,
+                                      decision: 'yes',
+                                    );
+                                  } catch (_) {
+                                    if (!context.mounted) return;
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          controller.errorMessage ??
+                                              'Unable to submit vote.',
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                },
+                          style: FilledButton.styleFrom(
+                            backgroundColor: const Color(0xFF5EEAD4),
+                            foregroundColor: AppTheme.slate,
+                          ),
+                          child: const Text('Approve'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ],
           ),
