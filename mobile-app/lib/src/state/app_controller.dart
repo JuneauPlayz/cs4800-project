@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart' show ThemeMode;
 
 import '../data/api_client.dart';
 import '../data/models.dart';
@@ -14,6 +15,7 @@ class AppController extends ChangeNotifier {
 
   bool initializing = true;
   bool loading = false;
+  ThemeMode themeMode = ThemeMode.light;
   bool sendingChat = false;
   bool savingSettings = false;
   String? errorMessage;
@@ -48,6 +50,8 @@ class AppController extends ChangeNotifier {
 
   Future<void> initialize() async {
     _token = await sessionStore.readToken();
+    final darkMode = await sessionStore.readDarkMode();
+    themeMode = darkMode ? ThemeMode.dark : ThemeMode.light;
     if (_token != null) {
       try {
         await refreshAll(showLoader: false);
@@ -57,6 +61,12 @@ class AppController extends ChangeNotifier {
       }
     }
     initializing = false;
+    notifyListeners();
+  }
+
+  Future<void> setDarkMode(bool value) async {
+    themeMode = value ? ThemeMode.dark : ThemeMode.light;
+    await sessionStore.writeDarkMode(value);
     notifyListeners();
   }
 

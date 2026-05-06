@@ -32,6 +32,18 @@ export function getVotes(userId) {
   return buildVoteRows(groupIds);
 }
 
+export function undoVote(voteId, userId) {
+  const vote = db.prepare('SELECT * FROM votes WHERE id = ?').get(voteId);
+  if (!vote || vote.status !== 'pending') return null;
+  if (!requireMembership(vote.group_id, userId)) return null;
+
+  db.prepare('DELETE FROM vote_decisions WHERE vote_id = ? AND user_id = ?').run(voteId, userId);
+  db.prepare("UPDATE votes SET status = 'pending', resolved_at = NULL WHERE id = ? AND status != 'approved'").run(voteId);
+
+  const groupIds = [vote.group_id];
+  return buildVoteRows(groupIds).find((item) => item.id === voteId) ?? null;
+}
+
 export function respondToVote(voteId, decision, userId) {
   const vote = db.prepare('SELECT * FROM votes WHERE id = ?').get(voteId);
   if (!vote || !requireMembership(vote.group_id, userId)) return null;

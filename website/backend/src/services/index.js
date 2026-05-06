@@ -2,7 +2,7 @@ export { loginUser, registerUser } from './authService.js';
 export { getDashboard } from './dashboardService.js';
 export { listGroups, listPendingInvites, createGroup, updateGroup, leaveGroup, deleteGroup, respondToInvite } from './groupService.js';
 export { getExpenses, createExpense, createSettlement, calculateBalances } from './expenseService.js';
-export { getVotes, respondToVote } from './voteService.js';
+export { getVotes, respondToVote, undoVote } from './voteService.js';
 export { getAnalytics } from './analyticsService.js';
 export { getChallenges, createChallenge, contributeToChallenge } from './challengeService.js';
 export { getNotifications, markNotificationRead, getSettings, upsertSettings, getUserByEmail, getUserById, requireMembership } from './sharedService.js';

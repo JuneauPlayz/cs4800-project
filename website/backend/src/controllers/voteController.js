@@ -1,7 +1,13 @@
-import { getVotes, respondToVote } from '../services/index.js';
+import { getVotes, respondToVote, undoVote } from '../services/index.js';
 
 export function list(req, res) {
   res.json({ votes: getVotes(req.user.id) });
+}
+
+export function undo(req, res) {
+  const vote = undoVote(req.params.id, req.user.id);
+  if (!vote) return res.status(404).json({ message: 'Vote not found or already resolved.' });
+  return res.json({ vote });
 }
 
 export function respond(req, res) {
