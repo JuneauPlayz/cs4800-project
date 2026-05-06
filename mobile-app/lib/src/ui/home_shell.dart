@@ -73,6 +73,7 @@ class _HomeShellState extends State<HomeShell> {
   int _unseenVotes = 0;
   int _lastKnownGroupCount = 0;
   int _lastKnownPendingVoteCount = 0;
+  bool _baselineSet = false;
 
   @override
   void initState() {
@@ -91,6 +92,14 @@ class _HomeShellState extends State<HomeShell> {
     final newPendingVotes = widget.controller.votes
         .where((v) => v.status == 'pending')
         .length;
+
+    if (!_baselineSet) {
+      _lastKnownGroupCount = newGroupCount;
+      _lastKnownPendingVoteCount = newPendingVotes;
+      _baselineSet = true;
+      return;
+    }
+
     var changed = false;
 
     if (_currentIndex != 1 && newGroupCount > _lastKnownGroupCount) {
@@ -4127,10 +4136,10 @@ class _GroupExpensesPage extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.white,
-        iconTheme: const IconThemeData(color: AppTheme.slate),
-        systemOverlayStyle: SystemUiOverlayStyle.light,
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+        systemOverlayStyle: Theme.of(context).brightness == Brightness.dark
+            ? SystemUiOverlayStyle.light
+            : SystemUiOverlayStyle.dark,
       ),
       body: ListView(
         padding: EdgeInsets.fromLTRB(
@@ -4197,77 +4206,102 @@ class _GroupExpensesPage extends StatelessWidget {
               ),
             )
           else ...[
-            Text(
-              '${expenses.length} expense${expenses.length == 1 ? '' : 's'}',
-              style: const TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 16,
-              ),
-            ),
-            const SizedBox(height: 10),
-            ...expenses.map((expense) {
-              return Card(
-                margin: const EdgeInsets.only(bottom: 10),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
+            ...() {
+              final byMonth = <String, List<Expense>>{};
+              for (final e in expenses) {
+                final month = e.expenseDate.length >= 7
+                    ? e.expenseDate.substring(0, 7)
+                    : 'Unknown';
+                byMonth.putIfAbsent(month, () => []).add(e);
+              }
+              final sortedMonths = byMonth.keys.toList()
+                ..sort((a, b) => b.compareTo(a));
+              return sortedMonths.map((month) {
+                final items = byMonth[month]!;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Card(
+                    margin: EdgeInsets.zero,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(
-                            child: Text(
-                              expense.description,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 15,
-                              ),
-                            ),
-                          ),
                           Text(
-                            money(expense.amount),
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w800,
-                              fontSize: 16,
+                            _formatMonth(month),
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: Theme.of(context).colorScheme.primary,
                             ),
                           ),
+                          const SizedBox(height: 8),
+                          const Divider(height: 1),
+                          ...items.map((expense) => Padding(
+                                padding: const EdgeInsets.only(top: 12),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            expense.description,
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w700,
+                                              fontSize: 15,
+                                            ),
+                                          ),
+                                        ),
+                                        Text(
+                                          money(expense.amount),
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w800,
+                                            fontSize: 16,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      '${expense.category} • Paid by ${expense.paidByName} • ${formatDate(expense.expenseDate)}',
+                                      style: Theme.of(context).textTheme.bodySmall,
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Wrap(
+                                      spacing: 8,
+                                      runSpacing: 6,
+                                      children: [
+                                        Chip(
+                                          visualDensity: VisualDensity.compact,
+                                          label: Text(
+                                            expense.settlementStatus == 'paid'
+                                                ? 'Settled'
+                                                : 'Open',
+                                          ),
+                                        ),
+                                        if (expense.userPaymentStatus == 'paid')
+                                          const Chip(
+                                            visualDensity: VisualDensity.compact,
+                                            label: Text('You paid'),
+                                          ),
+                                        if (expense.userOwes > 0)
+                                          Chip(
+                                            visualDensity: VisualDensity.compact,
+                                            label: Text('Your share: ${money(expense.userOwes)}'),
+                                          ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              )),
                         ],
                       ),
-                      const SizedBox(height: 6),
-                      Text(
-                        '${expense.category} • Paid by ${expense.paidByName} • ${formatDate(expense.expenseDate)}',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 6,
-                        children: [
-                          Chip(
-                            visualDensity: VisualDensity.compact,
-                            label: Text(
-                              expense.settlementStatus == 'paid'
-                                  ? 'Settled'
-                                  : 'Open',
-                            ),
-                          ),
-                          if (expense.userPaymentStatus == 'paid')
-                            const Chip(
-                              visualDensity: VisualDensity.compact,
-                              label: Text('You paid'),
-                            ),
-                          if (expense.userOwes > 0)
-                            Chip(
-                              visualDensity: VisualDensity.compact,
-                              label: Text('Your share: ${money(expense.userOwes)}'),
-                            ),
-                        ],
-                      ),
-                    ],
+                    ),
                   ),
-                ),
-              );
-            }),
+                );
+              });
+            }(),
           ],
         ],
       ),
@@ -4425,16 +4459,17 @@ class _AllExpensesPage extends StatelessWidget {
     );
   }
 
-  String _formatMonth(String ym) {
-    if (ym.length < 7) return ym;
-    final parts = ym.split('-');
-    const months = [
-      '', 'January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December',
-    ];
-    final m = int.tryParse(parts[1]) ?? 0;
-    return '${months[m]} ${parts[0]}';
-  }
+}
+
+String _formatMonth(String ym) {
+  if (ym.length < 7) return ym;
+  final parts = ym.split('-');
+  const months = [
+    '', 'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December',
+  ];
+  final m = int.tryParse(parts[1]) ?? 0;
+  return '${months[m]} ${parts[0]}';
 }
 
 class _ExpenseTile extends StatelessWidget {
