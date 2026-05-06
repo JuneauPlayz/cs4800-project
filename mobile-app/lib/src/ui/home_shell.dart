@@ -192,17 +192,24 @@ class _HomeShellState extends State<HomeShell> {
   }
 }
 
-class _DashboardTab extends StatelessWidget {
+class _DashboardTab extends StatefulWidget {
   const _DashboardTab({required this.controller});
 
   final AppController controller;
 
   @override
-  Widget build(BuildContext context) {
-    final dashboard = controller.dashboard;
-    final analytics = controller.analytics;
+  State<_DashboardTab> createState() => _DashboardTabState();
+}
 
-    if (dashboard == null || analytics == null || controller.user == null) {
+class _DashboardTabState extends State<_DashboardTab> {
+  bool _showBudgetForm = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final dashboard = widget.controller.dashboard;
+    final analytics = widget.controller.analytics;
+
+    if (dashboard == null || analytics == null || widget.controller.user == null) {
       return const _CenteredState(
         icon: Icons.hourglass_bottom_rounded,
         title: 'Loading your dashboard',
@@ -210,213 +217,249 @@ class _DashboardTab extends StatelessWidget {
       );
     }
 
-    return RefreshIndicator(
-      onRefresh: () => controller.refreshAll(showLoader: false),
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+    return Stack(
+      children: [
+        RefreshIndicator(
+          onRefresh: () => widget.controller.refreshAll(showLoader: false),
+          child: ListView(
+        padding: const EdgeInsets.only(top: 8, bottom: 24),
         children: [
-          _BalanceHero(
-            user: controller.user!,
-            dashboard: dashboard,
-            analytics: analytics,
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: _StatCard(
-                  label: 'Owed to you',
-                  value: money(dashboard.balance.totalOwedToYou),
-                  tone: AppTheme.teal,
-                  onTap: () => _showBalanceSheet(
-                    context,
-                    title: 'People who owe you',
-                    emptyText: 'No one owes you right now.',
-                    balances: dashboard.balance.owedToYou,
-                    tone: AppTheme.teal,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _StatCard(
-                  label: 'You owe',
-                  value: money(dashboard.balance.totalYouOwe),
-                  tone: AppTheme.red,
-                  onTap: () => _showBalanceSheet(
-                    context,
-                    title: 'People you owe',
-                    emptyText: 'You are settled up right now.',
-                    balances: dashboard.balance.youOwe,
-                    tone: AppTheme.red,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _StatCard(
-                  label: 'Monthly spend',
-                  value: money(analytics.monthTotal),
-                  tone: AppTheme.slate,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _StatCard(
-                  label: 'Pending votes',
-                  value: '${dashboard.pendingVotes}',
-                  tone: AppTheme.amber,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          _SectionCard(
-            title: 'Top categories',
-            subtitle: 'Live totals from your approved expenses',
-            child: Column(
-              children: analytics.byCategory.take(4).map((item) {
-                final ratio = analytics.monthTotal == 0
-                    ? 0.0
-                    : (item.total / analytics.monthTotal).clamp(0.0, 1.0);
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 14),
-                  child: Column(
-                    children: [
-                      Row(
-                        children: [
-                          Text(
-                            item.category,
-                            style: Theme.of(context).textTheme.titleMedium,
-                          ),
-                          const Spacer(),
-                          Text(money(item.total)),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(999),
-                        child: LinearProgressIndicator(
-                          minHeight: 8,
-                          value: ratio,
-                          backgroundColor: const Color(0xFFE2E8F0),
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }).toList(),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: _BalanceHero(
+              user: widget.controller.user!,
+              dashboard: dashboard,
+              analytics: analytics,
             ),
           ),
           const SizedBox(height: 16),
-          _SectionCard(
-            title: 'Group spending',
-            subtitle: 'Which groups are driving the most spend',
-            child: Column(
-              children: analytics.byGroup.map((group) {
-                final fullGroup = controller.groups
-                    .where((item) => item.id == group.id)
-                    .firstOrNull;
-                return ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  onTap: fullGroup == null
-                      ? null
-                      : () => _showGroupDetailsSheet(context, fullGroup),
-                  leading: CircleAvatar(
-                    backgroundColor: AppTheme.teal.withValues(alpha: 0.12),
-                    foregroundColor: AppTheme.teal,
-                    child: Text(
-                      group.name.isEmpty ? '?' : group.name[0].toUpperCase(),
-                      style: const TextStyle(fontWeight: FontWeight.w700),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _StatCard(
+                    label: 'Owed to you',
+                    value: money(dashboard.balance.totalOwedToYou),
+                    tone: AppTheme.teal,
+                    onTap: () => _showBalanceSheet(
+                      context,
+                      title: 'People who owe you',
+                      emptyText: 'No one owes you right now.',
+                      balances: dashboard.balance.owedToYou,
+                      tone: AppTheme.teal,
                     ),
                   ),
-                  title: Text(group.name),
-                  trailing: Text(
-                    money(group.total),
-                    style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _StatCard(
+                    label: 'You owe',
+                    value: money(dashboard.balance.totalYouOwe),
+                    tone: AppTheme.red,
+                    onTap: () => _showBalanceSheet(
+                      context,
+                      title: 'People you owe',
+                      emptyText: 'You are settled up right now.',
+                      balances: dashboard.balance.youOwe,
+                      tone: AppTheme.red,
+                    ),
                   ),
-                );
-              }).toList(),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _StatCard(
+                    label: 'Monthly spend',
+                    value: money(analytics.monthTotal),
+                    tone: AppTheme.slate,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _StatCard(
+                    label: 'Pending votes',
+                    value: '${dashboard.pendingVotes}',
+                    tone: AppTheme.amber,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            child: _BudgetCard(
+              controller: widget.controller,
+              analytics: analytics,
+              onEdit: () => setState(() => _showBudgetForm = true),
             ),
           ),
           const SizedBox(height: 16),
-          _SectionCard(
-            title: 'Recent expenses',
-            subtitle: 'Latest activity across your groups',
-            child: Column(
-              children: controller.expenses.take(6).map((expense) {
-                final canMarkPaid = expense.userPaymentStatus == 'open';
-                return ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: CircleAvatar(
-                    backgroundColor: const Color(0xFFF0FDFA),
-                    foregroundColor: AppTheme.tealDark,
-                    child: const Icon(Icons.receipt_long_rounded),
-                  ),
-                  title: Text(expense.description),
-                  subtitle: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '${expense.groupName} • ${expense.category} • ${formatDate(expense.expenseDate)}',
-                      ),
-                      const SizedBox(height: 6),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 6,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          Chip(
-                            visualDensity: VisualDensity.compact,
-                            label: Text(
-                              expense.settlementStatus == 'paid'
-                                  ? 'Finished'
-                                  : 'Open',
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: _SectionCard(
+              title: 'Top categories',
+              subtitle: 'Live totals from your approved expenses',
+              child: Column(
+                children: analytics.byCategory.take(4).map((item) {
+                  final ratio = analytics.monthTotal == 0
+                      ? 0.0
+                      : (item.total / analytics.monthTotal).clamp(0.0, 1.0);
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 14),
+                    child: Column(
+                      children: [
+                        Row(
+                          children: [
+                            Text(
+                              item.category,
+                              style: Theme.of(context).textTheme.titleMedium,
                             ),
+                            const Spacer(),
+                            Text(money(item.total)),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(999),
+                          child: LinearProgressIndicator(
+                            minHeight: 8,
+                            value: ratio,
+                            backgroundColor: const Color(0xFFE2E8F0),
                           ),
-                          if (expense.userPaymentStatus == 'paid')
-                            const Chip(
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: _SectionCard(
+              title: 'Group spending',
+              subtitle: 'Which groups are driving the most spend',
+              child: Column(
+                children: analytics.byGroup.map((group) {
+                  final fullGroup = widget.controller.groups
+                      .where((item) => item.id == group.id)
+                      .firstOrNull;
+                  return ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    onTap: fullGroup == null
+                        ? null
+                        : () => _showGroupDetailsSheet(context, fullGroup),
+                    leading: CircleAvatar(
+                      backgroundColor: AppTheme.teal.withValues(alpha: 0.12),
+                      foregroundColor: AppTheme.teal,
+                      child: Text(
+                        group.name.isEmpty ? '?' : group.name[0].toUpperCase(),
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                    title: Text(group.name),
+                    trailing: Text(
+                      money(group.total),
+                      style: const TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: _SectionCard(
+              title: 'Recent expenses',
+              subtitle: 'Latest activity across your groups',
+              child: Column(
+                children: widget.controller.expenses.take(6).map((expense) {
+                  final canMarkPaid = expense.userPaymentStatus == 'open';
+                  return ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: CircleAvatar(
+                      backgroundColor: const Color(0xFFF0FDFA),
+                      foregroundColor: AppTheme.tealDark,
+                      child: const Icon(Icons.receipt_long_rounded),
+                    ),
+                    title: Text(expense.description),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${expense.groupName} • ${expense.category} • ${formatDate(expense.expenseDate)}',
+                        ),
+                        const SizedBox(height: 6),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 6,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            Chip(
                               visualDensity: VisualDensity.compact,
-                              label: Text('You paid'),
-                            ),
-                          if (canMarkPaid)
-                            TextButton.icon(
-                              onPressed: controller.loading
-                                  ? null
-                                  : () => _showPaymentSheet(context, expense),
-                              icon: const Icon(Icons.payments_rounded),
                               label: Text(
-                                'Pay ${money(expense.userOwes - expense.userPaid)}',
+                                expense.settlementStatus == 'paid'
+                                    ? 'Finished'
+                                    : 'Open',
                               ),
                             ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  trailing: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        money(expense.amount),
-                        style: const TextStyle(fontWeight: FontWeight.w800),
-                      ),
-                      Text(
-                        formatDate(expense.expenseDate),
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ],
-                  ),
-                );
-              }).toList(),
+                            if (expense.userPaymentStatus == 'paid')
+                              const Chip(
+                                visualDensity: VisualDensity.compact,
+                                label: Text('You paid'),
+                              ),
+                            if (canMarkPaid)
+                              TextButton.icon(
+                                onPressed: widget.controller.loading
+                                    ? null
+                                    : () => _showPaymentSheet(context, expense),
+                                icon: const Icon(Icons.payments_rounded),
+                                label: Text(
+                                  'Pay ${money(expense.userOwes - expense.userPaid)}',
+                                ),
+                              ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    trailing: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          money(expense.amount),
+                          style: const TextStyle(fontWeight: FontWeight.w800),
+                        ),
+                        Text(
+                          formatDate(expense.expenseDate),
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ),
             ),
           ),
         ],
       ),
+        ),
+        if (_showBudgetForm)
+          _BudgetFormOverlay(
+            controller: widget.controller,
+            onClose: () => setState(() => _showBudgetForm = false),
+          ),
+      ],
     );
   }
 
@@ -425,7 +468,8 @@ class _DashboardTab extends StatelessWidget {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      builder: (_) => _GroupDetailsSheet(group: group, controller: controller),
+      builder: (_) =>
+          _GroupDetailsSheet(group: group, controller: widget.controller),
     );
   }
 
@@ -565,7 +609,7 @@ class _DashboardTab extends StatelessWidget {
 
     if (payment == null || !context.mounted) return;
     try {
-      await controller.recordExpensePayment(
+      await widget.controller.recordExpensePayment(
         expenseId: expense.id,
         method: payment['method'] ?? _payoutMethods.first,
         note: payment['note'] ?? '',
@@ -574,7 +618,9 @@ class _DashboardTab extends StatelessWidget {
       if (!context.mounted) return;
       messenger.showSnackBar(
         SnackBar(
-          content: Text(controller.errorMessage ?? 'Unable to record payment.'),
+          content: Text(
+            widget.controller.errorMessage ?? 'Unable to record payment.',
+          ),
         ),
       );
       return;
@@ -761,15 +807,22 @@ class _AddExpenseTabState extends State<_AddExpenseTab> {
   final Map<String, TextEditingController> _splitControllers = {};
 
   @override
+  void initState() {
+    super.initState();
+    _groupId = 'self';
+  }
+
+  @override
   void didUpdateWidget(covariant _AddExpenseTab oldWidget) {
     super.didUpdateWidget(oldWidget);
     final groups = widget.controller.groups;
-    final missingGroup =
-        _groupId != null && !groups.any((group) => group.id == _groupId);
-    if ((_groupId == null || missingGroup) && groups.isNotEmpty) {
-      _groupId = widget.controller.groups.first.id;
+    final missingGroup = _groupId != null &&
+        _groupId != 'self' &&
+        !groups.any((group) => group.id == _groupId);
+    if (missingGroup) {
+      _groupId = groups.isEmpty ? 'self' : groups.first.id;
     }
-    _syncSplitControllers();
+    if (_groupId != 'self') _syncSplitControllers();
   }
 
   @override
@@ -783,8 +836,10 @@ class _AddExpenseTabState extends State<_AddExpenseTab> {
     super.dispose();
   }
 
+  bool get _isSelfExpense => _groupId == 'self';
+
   Group? get _selectedGroup {
-    if (widget.controller.groups.isEmpty) return null;
+    if (_isSelfExpense || widget.controller.groups.isEmpty) return null;
     return widget.controller.groups.firstWhere(
       (group) => group.id == _groupId,
       orElse: () => widget.controller.groups.first,
@@ -795,19 +850,12 @@ class _AddExpenseTabState extends State<_AddExpenseTab> {
   Widget build(BuildContext context) {
     final group = _selectedGroup;
     final groups = widget.controller.groups;
-    final missingGroup =
-        _groupId != null && !groups.any((group) => group.id == _groupId);
-    if ((_groupId == null || missingGroup) && groups.isNotEmpty) {
-      _groupId = groups.first.id;
-      _syncSplitControllers();
-    }
-
-    if (groups.isEmpty) {
-      return const _CenteredState(
-        icon: Icons.add_circle_outline_rounded,
-        title: 'No groups available',
-        subtitle: 'Create or join a group before adding a mobile expense.',
-      );
+    final missingGroup = _groupId != null &&
+        _groupId != 'self' &&
+        !groups.any((g) => g.id == _groupId);
+    if (missingGroup) {
+      _groupId = groups.isEmpty ? 'self' : groups.first.id;
+      if (!_isSelfExpense) _syncSplitControllers();
     }
 
     return ListView(
@@ -822,29 +870,35 @@ class _AddExpenseTabState extends State<_AddExpenseTab> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'Add shared expense',
+                    'Add expense',
                     style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
                   ),
                   const SizedBox(height: 6),
-                  const Text(
-                    'Split expenses equally, by percent, or with custom member amounts.',
+                  Text(
+                    _isSelfExpense
+                        ? 'Personal expenses are tracked in your monthly budget.'
+                        : 'Split expenses equally, by percent, or with custom member amounts.',
                   ),
                   const SizedBox(height: 18),
                   DropdownButtonFormField<String>(
                     initialValue: _groupId,
-                    decoration: const InputDecoration(labelText: 'Group'),
-                    items: groups
-                        .map(
-                          (item) => DropdownMenuItem(
-                            value: item.id,
-                            child: Text('${item.emoji} ${item.name}'),
-                          ),
-                        )
-                        .toList(),
+                    decoration: const InputDecoration(labelText: 'For'),
+                    items: [
+                      const DropdownMenuItem(
+                        value: 'self',
+                        child: Text('👤 Personal (Self)'),
+                      ),
+                      ...groups.map(
+                        (item) => DropdownMenuItem(
+                          value: item.id,
+                          child: Text('${item.emoji} ${item.name}'),
+                        ),
+                      ),
+                    ],
                     onChanged: (value) {
                       setState(() {
                         _groupId = value;
-                        _syncSplitControllers();
+                        if (!_isSelfExpense) _syncSplitControllers();
                       });
                     },
                   ),
@@ -913,69 +967,78 @@ class _AddExpenseTabState extends State<_AddExpenseTab> {
                     onCamera: () => _pickReceipt(ImageSource.camera),
                     onRemove: _clearReceipt,
                   ),
-                  const SizedBox(height: 14),
-                  DropdownButtonFormField<String>(
-                    initialValue: _splitMethod,
-                    decoration: const InputDecoration(
-                      labelText: 'Split method',
-                    ),
-                    items: const [
-                      DropdownMenuItem(value: 'equal', child: Text('Equal')),
-                      DropdownMenuItem(
-                        value: 'percent',
-                        child: Text('Percent'),
+                  if (!_isSelfExpense) ...[
+                    const SizedBox(height: 14),
+                    DropdownButtonFormField<String>(
+                      initialValue: _splitMethod,
+                      decoration: const InputDecoration(
+                        labelText: 'Split method',
                       ),
-                      DropdownMenuItem(value: 'custom', child: Text('Custom')),
-                    ],
-                    onChanged: (value) {
-                      setState(() {
-                        _splitMethod = value ?? 'equal';
-                        _syncSplitControllers();
-                      });
-                    },
-                  ),
-                  if (group != null && _splitMethod != 'equal') ...[
-                    const SizedBox(height: 16),
-                    Text(
-                      _splitMethod == 'percent'
-                          ? 'Per-member percentages'
-                          : 'Per-member dollar amounts',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: 8),
-                    ...group.members.map((member) {
-                      final field = _splitControllers[member.id]!;
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: TextFormField(
-                          controller: field,
-                          keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true,
-                          ),
-                          decoration: InputDecoration(
-                            labelText: member.name,
-                            suffixText: _splitMethod == 'percent' ? '%' : '\$',
-                          ),
-                          validator: (_) => _validateSplitRow(member.id),
+                      items: const [
+                        DropdownMenuItem(
+                          value: 'equal',
+                          child: Text('Equal'),
                         ),
-                      );
-                    }),
-                    _SplitSummary(
-                      splitMethod: _splitMethod,
-                      total: _currentSplitTotal(),
-                      amount:
-                          double.tryParse(_amountController.text.trim()) ?? 0,
+                        DropdownMenuItem(
+                          value: 'percent',
+                          child: Text('Percent'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'custom',
+                          child: Text('Custom'),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        setState(() {
+                          _splitMethod = value ?? 'equal';
+                          _syncSplitControllers();
+                        });
+                      },
+                    ),
+                    if (group != null && _splitMethod != 'equal') ...[
+                      const SizedBox(height: 16),
+                      Text(
+                        _splitMethod == 'percent'
+                            ? 'Per-member percentages'
+                            : 'Per-member dollar amounts',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 8),
+                      ...group.members.map((member) {
+                        final field = _splitControllers[member.id]!;
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: TextFormField(
+                            controller: field,
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            decoration: InputDecoration(
+                              labelText: member.name,
+                              suffixText:
+                                  _splitMethod == 'percent' ? '%' : '\$',
+                            ),
+                            validator: (_) => _validateSplitRow(member.id),
+                          ),
+                        );
+                      }),
+                      _SplitSummary(
+                        splitMethod: _splitMethod,
+                        total: _currentSplitTotal(),
+                        amount:
+                            double.tryParse(_amountController.text.trim()) ?? 0,
+                      ),
+                    ],
+                    const SizedBox(height: 14),
+                    TextFormField(
+                      controller: _reasonController,
+                      minLines: 2,
+                      maxLines: 4,
+                      decoration: const InputDecoration(
+                        labelText: 'Reason for vote if threshold is exceeded',
+                      ),
                     ),
                   ],
-                  const SizedBox(height: 14),
-                  TextFormField(
-                    controller: _reasonController,
-                    minLines: 2,
-                    maxLines: 4,
-                    decoration: const InputDecoration(
-                      labelText: 'Reason for vote if threshold is exceeded',
-                    ),
-                  ),
                   const SizedBox(height: 18),
                   FilledButton(
                     onPressed: widget.controller.loading ? null : _submit,
@@ -1051,6 +1114,36 @@ class _AddExpenseTabState extends State<_AddExpenseTab> {
     if (!_formKey.currentState!.validate()) return;
 
     final amount = double.parse(_amountController.text.trim());
+
+    if (_isSelfExpense) {
+      try {
+        await widget.controller.createExpense({
+          'groupId': 'self',
+          'description': _descriptionController.text.trim(),
+          'amount': amount,
+          'category': _category,
+          'expenseDate': _datePayload(_expenseDate),
+          if (_receiptImageBytes != null) ...{
+            'receiptImageBase64': base64Encode(_receiptImageBytes!),
+            'receiptFileName': _receiptFileName ?? 'receipt.jpg',
+            'receiptMimeType': _receiptMimeType ?? 'image/jpeg',
+          },
+        });
+        if (!mounted) return;
+        _descriptionController.clear();
+        _amountController.clear();
+        _clearReceipt(showUpdate: false);
+        _showMessage('Personal expense added and tracked in your budget.');
+      } catch (_) {
+        if (mounted) {
+          _showMessage(
+            widget.controller.errorMessage ?? 'Unable to save expense.',
+          );
+        }
+      }
+      return;
+    }
+
     if (_splitMethod == 'percent') {
       final total = _currentSplitTotal();
       if ((total - 100).abs() > 0.25) {
@@ -3212,6 +3305,425 @@ class _StatCard extends StatelessWidget {
   }
 }
 
+class _BudgetCard extends StatefulWidget {
+  const _BudgetCard({
+    required this.controller,
+    required this.analytics,
+    required this.onEdit,
+  });
+
+  final AppController controller;
+  final AnalyticsData analytics;
+  final VoidCallback onEdit;
+
+  @override
+  State<_BudgetCard> createState() => _BudgetCardState();
+}
+
+class _BudgetCardState extends State<_BudgetCard> {
+  bool _breakdownOpen = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final goal = widget.controller.budgetGoal;
+    final g = (goal != null && goal.total > 0) ? goal : null;
+    final breakdown = goal?.breakdown ?? const {};
+    final actuals = goal?.actuals ?? const {};
+    final spent = actuals.values.fold(0.0, (sum, v) => sum + v);
+    final unbudgeted = g != null
+        ? actuals.entries
+            .where((e) => (breakdown[e.key] ?? 0) == 0 && e.value > 0)
+            .toList()
+        : const <MapEntry<String, double>>[];
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Monthly Budget',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        g != null
+                            ? 'Goal: ${money(g.total)}'
+                            : 'No budget set for this month',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: widget.onEdit,
+                  icon: const Icon(Icons.edit_outlined, size: 16),
+                  label: Text(g != null ? 'Edit' : 'Set Budget'),
+                ),
+              ],
+            ),
+            if (g != null) ...[
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    '${money(spent)} spent',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  Text(
+                    '${money((g.total - spent).clamp(0, double.infinity))} left',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: spent > g.total ? AppTheme.red : AppTheme.teal,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(999),
+                child: LinearProgressIndicator(
+                  minHeight: 10,
+                  value: (spent / g.total).clamp(0.0, 1.0),
+                  backgroundColor: const Color(0xFFE2E8F0),
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    spent > g.total ? AppTheme.red : AppTheme.teal,
+                  ),
+                ),
+              ),
+            ],
+            if (unbudgeted.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEF3C7),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: AppTheme.amber.withValues(alpha: 0.4),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.info_outline_rounded,
+                          size: 16,
+                          color: AppTheme.amber,
+                        ),
+                        const SizedBox(width: 6),
+                        const Text(
+                          'Unbudgeted spending',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    ...unbudgeted.map(
+                      (e) => Text('• ${e.key}: ${money(e.value)}'),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Tap Edit to add a budget for these categories.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            if (breakdown.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: () => setState(() => _breakdownOpen = !_breakdownOpen),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    children: [
+                      Text(
+                        'Category breakdown',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Theme.of(context).colorScheme.primary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Icon(
+                        _breakdownOpen
+                            ? Icons.keyboard_arrow_up_rounded
+                            : Icons.keyboard_arrow_down_rounded,
+                        size: 18,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              if (_breakdownOpen) ...[
+                const SizedBox(height: 8),
+                ...breakdown.entries.map((e) {
+                  final budgeted = e.value;
+                  final catSpent = actuals[e.key] ?? 0.0;
+                  final ratio = budgeted > 0
+                      ? (catSpent / budgeted).clamp(0.0, 1.0)
+                      : 0.0;
+                  final over = catSpent > budgeted;
+                  final barColor = over ? AppTheme.red : AppTheme.teal;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              e.key,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodyMedium
+                                  ?.copyWith(fontWeight: FontWeight.w600),
+                            ),
+                            Text(
+                              '${money(catSpent)} / ${money(budgeted)}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: over ? AppTheme.red : null,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(999),
+                          child: LinearProgressIndicator(
+                            minHeight: 7,
+                            value: ratio,
+                            backgroundColor: const Color(0xFFE2E8F0),
+                            valueColor:
+                                AlwaysStoppedAnimation<Color>(barColor),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+              ],
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+}
+
+class _BudgetFormOverlay extends StatefulWidget {
+  const _BudgetFormOverlay({required this.controller, required this.onClose});
+
+  final AppController controller;
+  final VoidCallback onClose;
+
+  @override
+  State<_BudgetFormOverlay> createState() => _BudgetFormOverlayState();
+}
+
+class _BudgetFormOverlayState extends State<_BudgetFormOverlay> {
+  late final TextEditingController _totalCtrl;
+  final Map<String, TextEditingController> _catCtrls = {};
+  bool _saving = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    final existing = widget.controller.budgetGoal;
+    final currentTotal = (existing?.total ?? 0) > 0 ? existing!.total : null;
+    _totalCtrl = TextEditingController(
+      text: currentTotal != null ? currentTotal.toStringAsFixed(2) : '',
+    );
+    for (final cat in _categoryOptions) {
+      final val = existing?.breakdown[cat];
+      _catCtrls[cat] = TextEditingController(
+        text: val != null && val > 0 ? val.toStringAsFixed(2) : '',
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _totalCtrl.dispose();
+    for (final c in _catCtrls.values) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final total = double.tryParse(_totalCtrl.text.trim());
+    if (total == null || total <= 0) {
+      setState(() => _error = 'Enter a valid total budget amount.');
+      return;
+    }
+    final breakdown = <String, double>{};
+    for (final cat in _categoryOptions) {
+      final val = double.tryParse(_catCtrls[cat]!.text.trim());
+      if (val != null && val > 0) breakdown[cat] = val;
+    }
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      await widget.controller.saveBudget(total: total, breakdown: breakdown);
+      if (mounted) widget.onClose();
+    } catch (e) {
+      if (mounted) setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        // Scrim — tapping outside the card dismisses the form
+        Positioned.fill(
+          child: GestureDetector(
+            onTap: _saving ? null : widget.onClose,
+            child: const ColoredBox(color: Color(0x80000000)),
+          ),
+        ),
+        // Form card — centered within the page body
+        Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+            child: Material(
+              borderRadius: BorderRadius.circular(12),
+              child: GestureDetector(
+                onTap: () {}, // absorb taps so they don't reach the scrim
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Set Monthly Budget',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 18),
+                        TextField(
+                          controller: _totalCtrl,
+                          autofocus: true,
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          decoration: const InputDecoration(
+                            labelText: 'Total monthly goal (\$)',
+                            border: OutlineInputBorder(),
+                            prefixText: '\$ ',
+                          ),
+                        ),
+                        const SizedBox(height: 18),
+                        const Text(
+                          'Category breakdown (optional)',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Allocate your budget across spending categories.',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                        const SizedBox(height: 12),
+                        ..._categoryOptions.map(
+                          (cat) => Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: TextField(
+                              controller: _catCtrls[cat],
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                    decimal: true,
+                                  ),
+                              decoration: InputDecoration(
+                                labelText: cat,
+                                border: const OutlineInputBorder(),
+                                prefixText: '\$ ',
+                              ),
+                            ),
+                          ),
+                        ),
+                        if (_error != null) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            _error!,
+                            style: const TextStyle(color: AppTheme.red),
+                          ),
+                        ],
+                        const SizedBox(height: 20),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed:
+                                    _saving ? null : widget.onClose,
+                                child: const Text('Cancel'),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: FilledButton(
+                                onPressed: _saving ? null : _save,
+                                child: _saving
+                                    ? const SizedBox(
+                                        width: 18,
+                                        height: 18,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : const Text('Save'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _SectionCard extends StatelessWidget {
   const _SectionCard({
     required this.title,
@@ -3276,14 +3788,18 @@ class _VoteCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final mine = controller.user == null
+    final currentUserId = controller.user?.id;
+    final isCreator = currentUserId != null && vote.requestedBy == currentUserId;
+    final mine = currentUserId == null
         ? null
         : vote.decisions
-              .where((decision) => decision.userId == controller.user!.id)
+              .where((d) => d.userId == currentUserId)
               .cast<VoteDecision?>()
               .firstOrNull;
 
     final isPending = vote.status == 'pending';
+    final isApproved = mine?.decision == 'yes';
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: Card(
@@ -3299,7 +3815,9 @@ class _VoteCard extends StatelessWidget {
                 children: [
                   _StatusChip(label: vote.status, dark: isPending),
                   _StatusChip(label: vote.category, dark: isPending),
-                  if (mine != null)
+                  if (isCreator)
+                    _StatusChip(label: 'You created this', dark: isPending)
+                  else if (mine != null)
                     _StatusChip(
                       label: 'You voted ${mine.decision}',
                       dark: isPending,
@@ -3347,8 +3865,8 @@ class _VoteCard extends StatelessWidget {
                 runSpacing: 8,
                 children: vote.decisions
                     .map(
-                      (decision) => _StatusChip(
-                        label: '${decision.name}: ${decision.decision}',
+                      (d) => _StatusChip(
+                        label: '${d.name}: ${d.decision}',
                         dark: isPending,
                       ),
                     )
@@ -3356,65 +3874,197 @@ class _VoteCard extends StatelessWidget {
               ),
               if (isPending) ...[
                 const SizedBox(height: 18),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: controller.loading
-                            ? null
-                            : () async {
-                                try {
-                                  await controller.respondToVote(
-                                    voteId: vote.id,
-                                    decision: 'no',
-                                  );
-                                } catch (_) {
-                                  if (!context.mounted) return;
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                        controller.errorMessage ??
-                                            'Unable to submit vote.',
-                                      ),
-                                    ),
-                                  );
-                                }
-                              },
-                        child: const Text('Decline'),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: FilledButton(
-                        onPressed: controller.loading
-                            ? null
-                            : () async {
-                                try {
-                                  await controller.respondToVote(
-                                    voteId: vote.id,
-                                    decision: 'yes',
-                                  );
-                                } catch (_) {
-                                  if (!context.mounted) return;
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                        controller.errorMessage ??
-                                            'Unable to submit vote.',
-                                      ),
-                                    ),
-                                  );
-                                }
-                              },
-                        style: FilledButton.styleFrom(
-                          backgroundColor: const Color(0xFF5EEAD4),
-                          foregroundColor: AppTheme.slate,
+                if (isCreator && mine != null) ...[
+                  // Creator's auto-approved badge + undo — no Expanded so Row is never unconstrained
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 10,
+                          horizontal: 14,
                         ),
-                        child: const Text('Approve'),
+                        decoration: BoxDecoration(
+                          color: const Color(0x2622C55E),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: const Color(0x5922C55E)),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.check_circle_outline,
+                              color: Color(0xFF4ADE80),
+                              size: 16,
+                            ),
+                            SizedBox(width: 6),
+                            Text(
+                              'Approved',
+                              style: TextStyle(
+                                color: Color(0xFF4ADE80),
+                                fontWeight: FontWeight.w700,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
-                ),
+                      const SizedBox(width: 10),
+                      TextButton(
+                        onPressed: controller.loading
+                            ? null
+                            : () async {
+                                try {
+                                  await controller.undoVote(voteId: vote.id);
+                                } catch (_) {
+                                  if (!context.mounted) return;
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        controller.errorMessage ??
+                                            'Unable to undo vote.',
+                                      ),
+                                    ),
+                                  );
+                                }
+                              },
+                        style: TextButton.styleFrom(
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 8,
+                          ),
+                        ),
+                        child: const Text('Undo'),
+                      ),
+                    ],
+                  ),
+                ] else if (mine != null) ...[
+                  // Voter who already voted: decision badge + undo — same no-Expanded layout
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 10,
+                          horizontal: 14,
+                        ),
+                        decoration: BoxDecoration(
+                          color: isApproved
+                              ? const Color(0x2622C55E)
+                              : const Color(0x26EF4444),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: isApproved
+                                ? const Color(0x5922C55E)
+                                : const Color(0x59EF4444),
+                          ),
+                        ),
+                        child: Text(
+                          isApproved ? 'You approved' : 'You declined',
+                          style: TextStyle(
+                            color: isApproved
+                                ? const Color(0xFF4ADE80)
+                                : const Color(0xFFFCA5A5),
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      TextButton(
+                        onPressed: controller.loading
+                            ? null
+                            : () async {
+                                try {
+                                  await controller.undoVote(voteId: vote.id);
+                                } catch (_) {
+                                  if (!context.mounted) return;
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        controller.errorMessage ??
+                                            'Unable to undo vote.',
+                                      ),
+                                    ),
+                                  );
+                                }
+                              },
+                        style: TextButton.styleFrom(
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 8,
+                          ),
+                        ),
+                        child: const Text('Undo'),
+                      ),
+                    ],
+                  ),
+                ] else ...[
+                  // Unvoted member: approve / decline
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: controller.loading
+                              ? null
+                              : () async {
+                                  try {
+                                    await controller.respondToVote(
+                                      voteId: vote.id,
+                                      decision: 'no',
+                                    );
+                                  } catch (_) {
+                                    if (!context.mounted) return;
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          controller.errorMessage ??
+                                              'Unable to submit vote.',
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                },
+                          child: const Text('Decline'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: FilledButton(
+                          onPressed: controller.loading
+                              ? null
+                              : () async {
+                                  try {
+                                    await controller.respondToVote(
+                                      voteId: vote.id,
+                                      decision: 'yes',
+                                    );
+                                  } catch (_) {
+                                    if (!context.mounted) return;
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          controller.errorMessage ??
+                                              'Unable to submit vote.',
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                },
+                          style: FilledButton.styleFrom(
+                            backgroundColor: const Color(0xFF5EEAD4),
+                            foregroundColor: AppTheme.slate,
+                          ),
+                          child: const Text('Approve'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ],
           ),

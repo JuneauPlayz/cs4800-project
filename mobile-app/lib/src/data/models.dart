@@ -375,6 +375,7 @@ class Vote {
     required this.reason,
     required this.status,
     required this.createdAt,
+    required this.requestedBy,
     required this.requestedByName,
     required this.decisions,
   });
@@ -390,6 +391,7 @@ class Vote {
       reason: _string(json['reason']),
       status: _string(json['status']),
       createdAt: _string(json['createdAt']),
+      requestedBy: _string(json['requestedBy']),
       requestedByName: _string(json['requestedByName']),
       decisions: _list(
         json['decisions'],
@@ -407,6 +409,7 @@ class Vote {
   final String reason;
   final String status;
   final String createdAt;
+  final String requestedBy;
   final String requestedByName;
   final List<VoteDecision> decisions;
 }
@@ -714,6 +717,39 @@ class ChatMessage {
 
   final String role;
   final String text;
+}
+
+class BudgetGoal {
+  BudgetGoal({
+    required this.total,
+    required this.breakdown,
+    required this.month,
+    required this.actuals,
+  });
+
+  factory BudgetGoal.fromJson(Map<String, dynamic> json) {
+    final raw = json['breakdown'];
+    final breakdown = <String, double>{};
+    if (raw is Map) {
+      raw.forEach((k, v) => breakdown[k.toString()] = _double(v));
+    }
+    final rawActuals = json['actuals'];
+    final actuals = <String, double>{};
+    if (rawActuals is Map) {
+      rawActuals.forEach((k, v) => actuals[k.toString()] = _double(v));
+    }
+    return BudgetGoal(
+      total: _double(json['total']),
+      breakdown: breakdown,
+      month: _string(json['month']),
+      actuals: actuals,
+    );
+  }
+
+  final double total;
+  final Map<String, double> breakdown;
+  final String month;
+  final Map<String, double> actuals;
 }
 
 String _string(dynamic value) => value?.toString() ?? '';
