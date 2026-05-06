@@ -1,4 +1,5 @@
 import { createExpense, createSettlement, getExpenses, requireMembership } from '../services/index.js';
+import { saveReceiptImage, saveReceiptImageBytes } from '../services/receiptService.js';
 import { getMembersByGroup } from '../services/sharedService.js';
 
 function validateSplits({ groupId, amount, splitMethod, splits }) {
@@ -31,6 +32,23 @@ export function list(req, res) {
   res.json({ expenses: getExpenses(req.user.id) });
 }
 
+export function uploadReceipt(req, res) {
+  try {
+    const receiptUrl = saveReceiptImageBytes({
+      bytes: req.body,
+      mimeType: req.headers['content-type'] || 'image/jpeg'
+    });
+    if (!receiptUrl) {
+      return res.status(400).json({ message: 'Receipt image data is required.' });
+    }
+    return res.status(201).json({ receiptUrl });
+  } catch (error) {
+    return res.status(error.statusCode || 400).json({
+      message: error.message || 'Unable to save receipt image.'
+    });
+  }
+}
+
 export function create(req, res) {
   const { groupId, description, amount, category, splitMethod = 'equal' } = req.body ?? {};
   if (!description || !amount || !category) {
@@ -54,7 +72,27 @@ export function create(req, res) {
   if (splitError) {
     return res.status(400).json({ message: splitError });
   }
-  const result = createExpense({ ...req.body, description: normalizedDescription, amount: amountValue, splitMethod, paidBy: req.user.id });
+
+  let receiptUrl = req.body?.receiptUrl ?? null;
+  try {
+    receiptUrl = saveReceiptImage({
+      imageBase64: req.body?.receiptImageBase64,
+      mimeType: req.body?.receiptMimeType
+    }) ?? receiptUrl;
+  } catch (error) {
+    return res.status(error.statusCode || 400).json({
+      message: error.message || 'Unable to save receipt image.'
+    });
+  }
+
+  const result = createExpense({
+    ...req.body,
+    description: normalizedDescription,
+    amount: amountValue,
+    splitMethod,
+    paidBy: req.user.id,
+    receiptUrl
+  });
   return res.status(201).json(result);
 }
 

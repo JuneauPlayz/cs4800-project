@@ -257,6 +257,31 @@ class AppController extends ChangeNotifier {
     }
   }
 
+  Future<String> uploadReceipt({
+    required Uint8List bytes,
+    required String mimeType,
+    String? fileName,
+  }) async {
+    final token = _requireToken();
+    loading = true;
+    errorMessage = null;
+    notifyListeners();
+    try {
+      return await apiClient.uploadReceipt(
+        token,
+        bytes: bytes,
+        mimeType: mimeType,
+        fileName: fileName,
+      );
+    } catch (error) {
+      _setError(error);
+      rethrow;
+    } finally {
+      loading = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> recordExpensePayment({
     required String expenseId,
     required String method,

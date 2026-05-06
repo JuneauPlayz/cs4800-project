@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import express, { Router } from 'express';
 import * as authController from '../controllers/authController.js';
 import * as budgetController from '../controllers/budgetController.js';
 import * as challengeController from '../controllers/challengeController.js';
@@ -9,6 +9,20 @@ import * as workspaceController from '../controllers/workspaceController.js';
 import { auth } from '../middleware/auth.js';
 
 const router = Router();
+const receiptUploadParser = express.raw({
+  limit: process.env.RECEIPT_RAW_BODY_LIMIT || process.env.RECEIPT_UPLOAD_BODY_LIMIT || '20mb',
+  type: [
+    'application/octet-stream',
+    'image/jpeg',
+    'image/jpg',
+    'image/pjpeg',
+    'image/png',
+    'image/webp',
+    'image/gif',
+    'image/heic',
+    'image/heif'
+  ]
+});
 
 router.get('/health', workspaceController.health);
 router.post('/auth/login', authController.login);
@@ -29,6 +43,7 @@ router.get('/invites', groupController.invites);
 router.post('/invites/:id/respond', groupController.respondInvite);
 
 router.get('/expenses', expenseController.list);
+router.post('/receipts', receiptUploadParser, expenseController.uploadReceipt);
 router.post('/expenses', expenseController.create);
 router.post('/expenses/:id/settlements', expenseController.settle);
 

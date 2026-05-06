@@ -219,6 +219,34 @@ class ApiClient {
     return _request('POST', '/api/expenses', token: token, body: payload);
   }
 
+  Future<String> uploadReceipt(
+    String token, {
+    required Uint8List bytes,
+    required String mimeType,
+    String? fileName,
+  }) async {
+    final uri = Uri.parse('$baseUrl/api/receipts');
+    final response = await _client.post(
+      uri,
+      headers: {
+        'Content-Type': mimeType,
+        'Authorization': 'Bearer $token',
+        if (fileName != null && fileName.trim().isNotEmpty)
+          'X-Receipt-File-Name': fileName.trim(),
+      },
+      body: bytes,
+    );
+    final json = _decodeResponse(response);
+    final receiptUrl = (json['receiptUrl'] ?? '').toString();
+    if (receiptUrl.isEmpty) {
+      throw ApiException(
+        message: 'Receipt upload did not return a saved image URL.',
+        statusCode: response.statusCode,
+      );
+    }
+    return receiptUrl;
+  }
+
   Future<void> recordExpensePayment(
     String token, {
     required String expenseId,
@@ -246,15 +274,8 @@ class ApiClient {
     );
   }
 
-  Future<void> undoVote(
-    String token, {
-    required String voteId,
-  }) {
-    return _request(
-      'DELETE',
-      '/api/votes/$voteId/respond',
-      token: token,
-    );
+  Future<void> undoVote(String token, {required String voteId}) {
+    return _request('DELETE', '/api/votes/$voteId/respond', token: token);
   }
 
   Future<void> markNotificationRead(
@@ -339,20 +360,7 @@ class ApiClient {
         throw UnsupportedError('Unsupported method $method');
     }
 
-    final text = response.body.trim();
-    final json = text.isEmpty
-        ? <String, dynamic>{}
-        : Map<String, dynamic>.from(jsonDecode(text) as Map);
-
-    if (response.statusCode >= 400) {
-      throw ApiException(
-        message: (json['message'] ?? 'Request failed (${response.statusCode})')
-            .toString(),
-        statusCode: response.statusCode,
-      );
-    }
-
-    return json;
+    return _decodeResponse(response);
   }
 
   static String _defaultBaseUrl() {
@@ -362,6 +370,33 @@ class ApiClient {
     if (Platform.isAndroid) return 'http://10.0.2.2:3001';
     return 'http://127.0.0.1:3001';
   }
+}
+
+Map<String, dynamic> _decodeResponse(http.Response response) {
+  final text = response.body.trim();
+  Map<String, dynamic> json = {};
+  if (text.isNotEmpty) {
+    try {
+      final decoded = jsonDecode(text);
+      if (decoded is Map) {
+        json = Map<String, dynamic>.from(decoded);
+      } else {
+        json = {'message': text};
+      }
+    } catch (_) {
+      json = {'message': text};
+    }
+  }
+
+  if (response.statusCode >= 400) {
+    throw ApiException(
+      message: (json['message'] ?? 'Request failed (${response.statusCode})')
+          .toString(),
+      statusCode: response.statusCode,
+    );
+  }
+
+  return json;
 }
 
 class ApiException implements Exception {

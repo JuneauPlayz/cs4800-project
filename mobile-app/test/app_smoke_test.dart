@@ -32,6 +32,17 @@ THANK YOU
     expect(debugReceiptAmountFromText(receiptText), 84.80);
   });
 
+  test('extracts a small receipt total with cents', () {
+    const receiptText = '''
+RECEIPT
+ITEM 12.00
+TAX 1.05
+TOTAL 13.05
+''';
+
+    expect(debugReceiptAmountFromText(receiptText), 13.05);
+  });
+
   test('extracts total amount when OCR misreads the total label', () {
     const receiptText = '''
 CASH RECEIPT

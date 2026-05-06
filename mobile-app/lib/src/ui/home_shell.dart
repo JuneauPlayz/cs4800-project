@@ -1,8 +1,10 @@
-import 'dart:convert';
+import 'dart:math' as math;
 
-import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
+import 'package:flutter/foundation.dart'
+    show compute, kIsWeb, visibleForTesting;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 
 import '../core/app_theme.dart';
@@ -41,6 +43,14 @@ const _assistantSuggestions = [
   'How many receipts are attached?',
   'How are my challenges doing?',
 ];
+
+const _receiptPickerImageQuality = 70;
+const _receiptPickerMaxWidth = 1400.0;
+const _receiptPickerMaxHeight = 2200.0;
+const _receiptUploadMaxBytes = 4 * 1024 * 1024;
+const _receiptUploadMaxWidth = 1400;
+const _receiptUploadMaxHeight = 2200;
+const _receiptUploadJpegQualities = [70, 62, 54, 46];
 
 const _avatarSeeds = [
   '',
@@ -294,7 +304,9 @@ class _DashboardTabState extends State<_DashboardTab> {
     final dashboard = widget.controller.dashboard;
     final analytics = widget.controller.analytics;
 
-    if (dashboard == null || analytics == null || widget.controller.user == null) {
+    if (dashboard == null ||
+        analytics == null ||
+        widget.controller.user == null) {
       return const _CenteredState(
         icon: Icons.hourglass_bottom_rounded,
         title: 'Loading your dashboard',
@@ -307,247 +319,256 @@ class _DashboardTabState extends State<_DashboardTab> {
         RefreshIndicator(
           onRefresh: () => widget.controller.refreshAll(showLoader: false),
           child: ListView(
-        padding: const EdgeInsets.only(top: 8, bottom: 24),
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: _BalanceHero(
-              user: widget.controller.user!,
-              dashboard: dashboard,
-              analytics: analytics,
-            ),
-          ),
-          const SizedBox(height: 16),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              children: [
-                Expanded(
-                  child: _StatCard(
-                    label: 'Owed to you',
-                    value: money(dashboard.balance.totalOwedToYou),
-                    tone: AppTheme.teal,
-                    onTap: () => _showBalanceSheet(
-                      context,
-                      title: 'People who owe you',
-                      emptyText: 'No one owes you right now.',
-                      balances: dashboard.balance.owedToYou,
-                      tone: AppTheme.teal,
-                    ),
-                  ),
+            padding: const EdgeInsets.only(top: 8, bottom: 24),
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: _BalanceHero(
+                  user: widget.controller.user!,
+                  dashboard: dashboard,
+                  analytics: analytics,
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _StatCard(
-                    label: 'You owe',
-                    value: money(dashboard.balance.totalYouOwe),
-                    tone: AppTheme.red,
-                    onTap: () => _showBalanceSheet(
-                      context,
-                      title: 'People you owe',
-                      emptyText: 'You are settled up right now.',
-                      balances: dashboard.balance.youOwe,
-                      tone: AppTheme.red,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              children: [
-                Expanded(
-                  child: _StatCard(
-                    label: 'Monthly spend',
-                    value: money(analytics.monthTotal),
-                    tone: AppTheme.muted,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _StatCard(
-                    label: 'Pending votes',
-                    value: '${dashboard.pendingVotes}',
-                    tone: AppTheme.amber,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 6),
-            child: _BudgetCard(
-              controller: widget.controller,
-              analytics: analytics,
-              onEdit: () => setState(() => _showBudgetForm = true),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: _SectionCard(
-              title: 'Top categories',
-              subtitle: 'Live totals from your approved expenses',
-              child: Column(
-                children: analytics.byCategory.take(4).map((item) {
-                  final ratio = analytics.monthTotal == 0
-                      ? 0.0
-                      : (item.total / analytics.monthTotal).clamp(0.0, 1.0);
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 14),
-                    child: Column(
-                      children: [
-                        Row(
-                          children: [
-                            Text(
-                              item.category,
-                              style: Theme.of(context).textTheme.titleMedium,
-                            ),
-                            const Spacer(),
-                            Text(money(item.total)),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(999),
-                          child: LinearProgressIndicator(
-                            minHeight: 8,
-                            value: ratio,
-                            backgroundColor: const Color(0xFFE2E8F0),
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }).toList(),
               ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: _GroupSpendingSection(controller: widget.controller),
-          ),
-          const SizedBox(height: 16),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: _SectionCard(
-              title: 'Recent expenses',
-              subtitle: 'Latest activity across your groups',
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  ...widget.controller.expenses.take(3).map((expense) {
-                    final canMarkPaid = expense.userPaymentStatus == 'open';
-                    return ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: CircleAvatar(
-                        backgroundColor: const Color(0xFFF0FDFA),
-                        foregroundColor: AppTheme.tealDark,
-                        child: const Icon(Icons.receipt_long_rounded),
-                      ),
-                      title: Text(expense.description),
-                      subtitle: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '${expense.groupName} • ${expense.category} • ${formatDate(expense.expenseDate)}',
-                          ),
-                          const SizedBox(height: 6),
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 6,
-                            crossAxisAlignment: WrapCrossAlignment.center,
-                            children: [
-                              Chip(
-                                visualDensity: VisualDensity.compact,
-                                label: Text(
-                                  expense.settlementStatus == 'paid'
-                                      ? 'Finished'
-                                      : 'Open',
-                                ),
-                              ),
-                              if (expense.userPaymentStatus == 'paid')
-                                const Chip(
-                                  visualDensity: VisualDensity.compact,
-                                  label: Text('You paid'),
-                                ),
-                              if (canMarkPaid)
-                                TextButton.icon(
-                                  onPressed: widget.controller.loading
-                                      ? null
-                                      : () => _showPaymentSheet(context, expense),
-                                  icon: const Icon(Icons.payments_rounded),
-                                  label: Text(
-                                    'Pay ${money(expense.userOwes - expense.userPaid)}',
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ],
-                      ),
-                      trailing: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text(
-                            money(expense.amount),
-                            style: const TextStyle(fontWeight: FontWeight.w800),
-                          ),
-                          Text(
-                            formatDate(expense.expenseDate),
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        ],
-                      ),
-                    );
-                  }),
-                  if (widget.controller.expenses.length > 3) ...[
-                    const Divider(height: 16),
-                    InkWell(
-                      borderRadius: BorderRadius.circular(8),
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute<void>(
-                          builder: (_) => _AllExpensesPage(
-                            controller: widget.controller,
-                            onPaymentSheet: _showPaymentSheet,
-                          ),
+              const SizedBox(height: 16),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _StatCard(
+                        label: 'Owed to you',
+                        value: money(dashboard.balance.totalOwedToYou),
+                        tone: AppTheme.teal,
+                        onTap: () => _showBalanceSheet(
+                          context,
+                          title: 'People who owe you',
+                          emptyText: 'No one owes you right now.',
+                          balances: dashboard.balance.owedToYou,
+                          tone: AppTheme.teal,
                         ),
                       ),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              'See more',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w700,
-                                color: Theme.of(context).colorScheme.primary,
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            Icon(
-                              Icons.arrow_forward_rounded,
-                              size: 16,
-                              color: Theme.of(context).colorScheme.primary,
-                            ),
-                          ],
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _StatCard(
+                        label: 'You owe',
+                        value: money(dashboard.balance.totalYouOwe),
+                        tone: AppTheme.red,
+                        onTap: () => _showBalanceSheet(
+                          context,
+                          title: 'People you owe',
+                          emptyText: 'You are settled up right now.',
+                          balances: dashboard.balance.youOwe,
+                          tone: AppTheme.red,
                         ),
                       ),
                     ),
                   ],
-                ],
+                ),
               ),
-            ),
+              const SizedBox(height: 12),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _StatCard(
+                        label: 'Monthly spend',
+                        value: money(analytics.monthTotal),
+                        tone: AppTheme.muted,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _StatCard(
+                        label: 'Pending votes',
+                        value: '${dashboard.pendingVotes}',
+                        tone: AppTheme.amber,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                child: _BudgetCard(
+                  controller: widget.controller,
+                  analytics: analytics,
+                  onEdit: () => setState(() => _showBudgetForm = true),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: _SectionCard(
+                  title: 'Top categories',
+                  subtitle: 'Live totals from your approved expenses',
+                  child: Column(
+                    children: analytics.byCategory.take(4).map((item) {
+                      final ratio = analytics.monthTotal == 0
+                          ? 0.0
+                          : (item.total / analytics.monthTotal).clamp(0.0, 1.0);
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 14),
+                        child: Column(
+                          children: [
+                            Row(
+                              children: [
+                                Text(
+                                  item.category,
+                                  style: Theme.of(
+                                    context,
+                                  ).textTheme.titleMedium,
+                                ),
+                                const Spacer(),
+                                Text(money(item.total)),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(999),
+                              child: LinearProgressIndicator(
+                                minHeight: 8,
+                                value: ratio,
+                                backgroundColor: const Color(0xFFE2E8F0),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: _GroupSpendingSection(controller: widget.controller),
+              ),
+              const SizedBox(height: 16),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: _SectionCard(
+                  title: 'Recent expenses',
+                  subtitle: 'Latest activity across your groups',
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      ...widget.controller.expenses.take(3).map((expense) {
+                        final canMarkPaid = expense.userPaymentStatus == 'open';
+                        return ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: CircleAvatar(
+                            backgroundColor: const Color(0xFFF0FDFA),
+                            foregroundColor: AppTheme.tealDark,
+                            child: const Icon(Icons.receipt_long_rounded),
+                          ),
+                          title: Text(expense.description),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '${expense.groupName} • ${expense.category} • ${formatDate(expense.expenseDate)}',
+                              ),
+                              const SizedBox(height: 6),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 6,
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                children: [
+                                  Chip(
+                                    visualDensity: VisualDensity.compact,
+                                    label: Text(
+                                      expense.settlementStatus == 'paid'
+                                          ? 'Finished'
+                                          : 'Open',
+                                    ),
+                                  ),
+                                  if (expense.userPaymentStatus == 'paid')
+                                    const Chip(
+                                      visualDensity: VisualDensity.compact,
+                                      label: Text('You paid'),
+                                    ),
+                                  if (canMarkPaid)
+                                    TextButton.icon(
+                                      onPressed: widget.controller.loading
+                                          ? null
+                                          : () => _showPaymentSheet(
+                                              context,
+                                              expense,
+                                            ),
+                                      icon: const Icon(Icons.payments_rounded),
+                                      label: Text(
+                                        'Pay ${money(expense.userOwes - expense.userPaid)}',
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ],
+                          ),
+                          trailing: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(
+                                money(expense.amount),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              Text(
+                                formatDate(expense.expenseDate),
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+                      if (widget.controller.expenses.length > 3) ...[
+                        const Divider(height: 16),
+                        InkWell(
+                          borderRadius: BorderRadius.circular(8),
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute<void>(
+                              builder: (_) => _AllExpensesPage(
+                                controller: widget.controller,
+                                onPaymentSheet: _showPaymentSheet,
+                              ),
+                            ),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  'See more',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.primary,
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                Icon(
+                                  Icons.arrow_forward_rounded,
+                                  size: 16,
+                                  color: Theme.of(context).colorScheme.primary,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
         ),
         if (_showBudgetForm)
           _BudgetFormOverlay(
@@ -901,7 +922,8 @@ class _AddExpenseTabState extends State<_AddExpenseTab> {
   void didUpdateWidget(covariant _AddExpenseTab oldWidget) {
     super.didUpdateWidget(oldWidget);
     final groups = widget.controller.groups;
-    final missingGroup = _groupId != null &&
+    final missingGroup =
+        _groupId != null &&
         _groupId != 'self' &&
         !groups.any((group) => group.id == _groupId);
     if (missingGroup) {
@@ -935,7 +957,8 @@ class _AddExpenseTabState extends State<_AddExpenseTab> {
   Widget build(BuildContext context) {
     final group = _selectedGroup;
     final groups = widget.controller.groups;
-    final missingGroup = _groupId != null &&
+    final missingGroup =
+        _groupId != null &&
         _groupId != 'self' &&
         !groups.any((g) => g.id == _groupId);
     if (missingGroup) {
@@ -1060,10 +1083,7 @@ class _AddExpenseTabState extends State<_AddExpenseTab> {
                         labelText: 'Split method',
                       ),
                       items: const [
-                        DropdownMenuItem(
-                          value: 'equal',
-                          child: Text('Equal'),
-                        ),
+                        DropdownMenuItem(value: 'equal', child: Text('Equal')),
                         DropdownMenuItem(
                           value: 'percent',
                           child: Text('Percent'),
@@ -1100,8 +1120,9 @@ class _AddExpenseTabState extends State<_AddExpenseTab> {
                             ),
                             decoration: InputDecoration(
                               labelText: member.name,
-                              suffixText:
-                                  _splitMethod == 'percent' ? '%' : '\$',
+                              suffixText: _splitMethod == 'percent'
+                                  ? '%'
+                                  : '\$',
                             ),
                             validator: (_) => _validateSplitRow(member.id),
                           ),
@@ -1202,18 +1223,16 @@ class _AddExpenseTabState extends State<_AddExpenseTab> {
 
     if (_isSelfExpense) {
       try {
-        await widget.controller.createExpense({
+        final receiptUrl = await _uploadAttachedReceipt();
+        final payload = {
           'groupId': 'self',
           'description': _descriptionController.text.trim(),
           'amount': amount,
           'category': _category,
           'expenseDate': _datePayload(_expenseDate),
-          if (_receiptImageBytes != null) ...{
-            'receiptImageBase64': base64Encode(_receiptImageBytes!),
-            'receiptFileName': _receiptFileName ?? 'receipt.jpg',
-            'receiptMimeType': _receiptMimeType ?? 'image/jpeg',
-          },
-        });
+        };
+        if (receiptUrl != null) payload['receiptUrl'] = receiptUrl;
+        await widget.controller.createExpense(payload);
         if (!mounted) return;
         _descriptionController.clear();
         _amountController.clear();
@@ -1255,7 +1274,8 @@ class _AddExpenseTabState extends State<_AddExpenseTab> {
     }).toList();
 
     try {
-      final triggeredVote = await widget.controller.createExpense({
+      final receiptUrl = await _uploadAttachedReceipt();
+      final payload = {
         'groupId': group.id,
         'description': _descriptionController.text.trim(),
         'amount': amount,
@@ -1263,13 +1283,10 @@ class _AddExpenseTabState extends State<_AddExpenseTab> {
         'expenseDate': _datePayload(_expenseDate),
         'splitMethod': _splitMethod,
         'reason': _reasonController.text.trim(),
-        if (_receiptImageBytes != null) ...{
-          'receiptImageBase64': base64Encode(_receiptImageBytes!),
-          'receiptFileName': _receiptFileName ?? 'receipt.jpg',
-          'receiptMimeType': _receiptMimeType ?? 'image/jpeg',
-        },
-        if (_splitMethod != 'equal') 'splits': splits,
-      });
+      };
+      if (receiptUrl != null) payload['receiptUrl'] = receiptUrl;
+      if (_splitMethod != 'equal') payload['splits'] = splits;
+      final triggeredVote = await widget.controller.createExpense(payload);
       if (!mounted) return;
       _descriptionController.clear();
       _amountController.clear();
@@ -1289,6 +1306,16 @@ class _AddExpenseTabState extends State<_AddExpenseTab> {
     }
   }
 
+  Future<String?> _uploadAttachedReceipt() {
+    final imageBytes = _receiptImageBytes;
+    if (imageBytes == null) return Future.value(null);
+    return widget.controller.uploadReceipt(
+      bytes: imageBytes,
+      mimeType: _receiptMimeType ?? 'image/jpeg',
+      fileName: _receiptFileName ?? 'receipt.jpg',
+    );
+  }
+
   void _showMessage(String message) {
     ScaffoldMessenger.of(
       context,
@@ -1304,18 +1331,34 @@ class _AddExpenseTabState extends State<_AddExpenseTab> {
       final picker = ImagePicker();
       final picked = await picker.pickImage(
         source: source,
-        imageQuality: 100,
-        maxWidth: 2400,
+        imageQuality: _receiptPickerImageQuality,
+        maxWidth: _receiptPickerMaxWidth,
+        maxHeight: _receiptPickerMaxHeight,
       );
       if (picked == null) return;
       imagePath = picked.path;
       final bytes = await picked.readAsBytes();
-      imageBytes = bytes;
-      mimeType = picked.mimeType ?? 'image/jpeg';
+      final compressedBytes = await compute(
+        _compressReceiptImageForUpload,
+        bytes,
+      );
+      imageBytes = compressedBytes ?? bytes;
+      if (imageBytes.length > _receiptUploadMaxBytes) {
+        if (mounted) {
+          _showMessage(
+            'Receipt image is too large. Crop it or choose a smaller photo.',
+          );
+        }
+        return;
+      }
+      final wasCompressed = compressedBytes != null;
+      mimeType = wasCompressed ? 'image/jpeg' : picked.mimeType ?? 'image/jpeg';
       if (!mounted) return;
       setState(() {
-        _receiptImageBytes = bytes;
-        _receiptFileName = picked.name;
+        _receiptImageBytes = imageBytes;
+        _receiptFileName = wasCompressed
+            ? _receiptJpegFileName(picked.name)
+            : picked.name;
         _receiptMimeType = mimeType;
         _receiptSourceLabel = source == ImageSource.camera
             ? 'Camera capture'
@@ -1452,6 +1495,45 @@ DateTime _clampedPickerDate(
   if (normalizedDate.isBefore(normalizedFirst)) return normalizedFirst;
   if (normalizedDate.isAfter(normalizedLast)) return normalizedLast;
   return normalizedDate;
+}
+
+Uint8List? _compressReceiptImageForUpload(Uint8List bytes) {
+  final decoded = img.decodeImage(bytes);
+  if (decoded == null) return null;
+
+  var prepared = decoded;
+  final scale = math.max(
+    decoded.width / _receiptUploadMaxWidth,
+    decoded.height / _receiptUploadMaxHeight,
+  );
+  if (scale > 1) {
+    prepared = img.copyResize(
+      decoded,
+      width: math.max(1, (decoded.width / scale).round()),
+      height: math.max(1, (decoded.height / scale).round()),
+      interpolation: img.Interpolation.average,
+    );
+  }
+
+  Uint8List? smallest;
+  for (final quality in _receiptUploadJpegQualities) {
+    final encoded = Uint8List.fromList(
+      img.encodeJpg(prepared, quality: quality),
+    );
+    smallest = encoded;
+    if (encoded.length <= _receiptUploadMaxBytes) return encoded;
+  }
+  return smallest;
+}
+
+String _receiptJpegFileName(String fileName) {
+  final normalizedName = fileName.trim().split(RegExp(r'[\\/]')).last;
+  final dotIndex = normalizedName.lastIndexOf('.');
+  final stem = dotIndex <= 0
+      ? normalizedName
+      : normalizedName.substring(0, dotIndex);
+  final safeStem = stem.trim().isEmpty ? 'receipt' : stem.trim();
+  return '$safeStem.jpg';
 }
 
 class _ReceiptScannerPanel extends StatelessWidget {
@@ -2896,9 +2978,8 @@ class _SettingsTabState extends State<_SettingsTab> {
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute<void>(
-                    builder: (_) => _ReadNotificationsPage(
-                      controller: widget.controller,
-                    ),
+                    builder: (_) =>
+                        _ReadNotificationsPage(controller: widget.controller),
                   ),
                 ),
                 child: Padding(
@@ -2929,7 +3010,10 @@ class _SettingsTabState extends State<_SettingsTab> {
                           ],
                         ),
                       ),
-                      const Icon(Icons.chevron_right_rounded, color: AppTheme.muted),
+                      const Icon(
+                        Icons.chevron_right_rounded,
+                        color: AppTheme.muted,
+                      ),
                     ],
                   ),
                 ),
@@ -3154,7 +3238,11 @@ class _ReadNotificationsPage extends StatelessWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.done_all_rounded, size: 48, color: AppTheme.muted),
+                    Icon(
+                      Icons.done_all_rounded,
+                      size: 48,
+                      color: AppTheme.muted,
+                    ),
                     SizedBox(height: 12),
                     Text(
                       'No read notifications yet',
@@ -3669,7 +3757,11 @@ class _BudgetCardState extends State<_BudgetCard> {
                 children: [
                   const Text(
                     'Spending outside your budget:',
-                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: Colors.black),
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                      color: Colors.black,
+                    ),
                   ),
                   const SizedBox(height: 6),
                   ...unbudgeted.map(
@@ -3677,7 +3769,10 @@ class _BudgetCardState extends State<_BudgetCard> {
                       padding: const EdgeInsets.only(bottom: 4),
                       child: Text(
                         'You spent ${money(e.value)} on ${e.key}, but no budget is set for this category.',
-                        style: const TextStyle(fontSize: 13, color: Colors.black),
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: Colors.black,
+                        ),
                       ),
                     ),
                   ),
@@ -3738,9 +3833,7 @@ class _BudgetCardState extends State<_BudgetCard> {
                           children: [
                             Text(
                               e.key,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodyMedium
+                              style: Theme.of(context).textTheme.bodyMedium
                                   ?.copyWith(fontWeight: FontWeight.w600),
                             ),
                             Text(
@@ -3760,8 +3853,7 @@ class _BudgetCardState extends State<_BudgetCard> {
                             minHeight: 7,
                             value: ratio,
                             backgroundColor: const Color(0xFFE2E8F0),
-                            valueColor:
-                                AlwaysStoppedAnimation<Color>(barColor),
+                            valueColor: AlwaysStoppedAnimation<Color>(barColor),
                           ),
                         ),
                       ],
@@ -3775,7 +3867,6 @@ class _BudgetCardState extends State<_BudgetCard> {
       ),
     );
   }
-
 }
 
 class _BudgetFormOverlay extends StatefulWidget {
@@ -3977,8 +4068,7 @@ class _BudgetFormOverlayState extends State<_BudgetFormOverlay> {
                           children: [
                             Expanded(
                               child: OutlinedButton(
-                                onPressed:
-                                    _saving ? null : widget.onClose,
+                                onPressed: _saving ? null : widget.onClose,
                                 child: const Text('Cancel'),
                               ),
                             ),
@@ -4061,8 +4151,9 @@ class _GroupSpendingSection extends StatelessWidget {
                       children: [
                         CircleAvatar(
                           radius: 18,
-                          backgroundColor:
-                              AppTheme.teal.withValues(alpha: 0.12),
+                          backgroundColor: AppTheme.teal.withValues(
+                            alpha: 0.12,
+                          ),
                           foregroundColor: AppTheme.teal,
                           child: Text(
                             name.isEmpty ? '?' : name[0].toUpperCase(),
@@ -4237,64 +4328,70 @@ class _GroupExpensesPage extends StatelessWidget {
                           ),
                           const SizedBox(height: 8),
                           const Divider(height: 1),
-                          ...items.map((expense) => Padding(
-                                padding: const EdgeInsets.only(top: 12),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        Expanded(
-                                          child: Text(
-                                            expense.description,
-                                            style: const TextStyle(
-                                              fontWeight: FontWeight.w700,
-                                              fontSize: 15,
-                                            ),
-                                          ),
-                                        ),
-                                        Text(
-                                          money(expense.amount),
+                          ...items.map(
+                            (expense) => Padding(
+                              padding: const EdgeInsets.only(top: 12),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          expense.description,
                                           style: const TextStyle(
-                                            fontWeight: FontWeight.w800,
-                                            fontSize: 16,
+                                            fontWeight: FontWeight.w700,
+                                            fontSize: 15,
                                           ),
                                         ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      '${expense.category} • Paid by ${expense.paidByName} • ${formatDate(expense.expenseDate)}',
-                                      style: Theme.of(context).textTheme.bodySmall,
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Wrap(
-                                      spacing: 8,
-                                      runSpacing: 6,
-                                      children: [
+                                      ),
+                                      Text(
+                                        money(expense.amount),
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 16,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    '${expense.category} • Paid by ${expense.paidByName} • ${formatDate(expense.expenseDate)}',
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodySmall,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Wrap(
+                                    spacing: 8,
+                                    runSpacing: 6,
+                                    children: [
+                                      Chip(
+                                        visualDensity: VisualDensity.compact,
+                                        label: Text(
+                                          expense.settlementStatus == 'paid'
+                                              ? 'Settled'
+                                              : 'Open',
+                                        ),
+                                      ),
+                                      if (expense.userPaymentStatus == 'paid')
+                                        const Chip(
+                                          visualDensity: VisualDensity.compact,
+                                          label: Text('You paid'),
+                                        ),
+                                      if (expense.userOwes > 0)
                                         Chip(
                                           visualDensity: VisualDensity.compact,
                                           label: Text(
-                                            expense.settlementStatus == 'paid'
-                                                ? 'Settled'
-                                                : 'Open',
+                                            'Your share: ${money(expense.userOwes)}',
                                           ),
                                         ),
-                                        if (expense.userPaymentStatus == 'paid')
-                                          const Chip(
-                                            visualDensity: VisualDensity.compact,
-                                            label: Text('You paid'),
-                                          ),
-                                        if (expense.userOwes > 0)
-                                          Chip(
-                                            visualDensity: VisualDensity.compact,
-                                            label: Text('Your share: ${money(expense.userOwes)}'),
-                                          ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              )),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -4335,8 +4432,7 @@ class _AllExpensesPage extends StatelessWidget {
           : 'Unknown';
       byMonth.putIfAbsent(month, () => []).add(expense);
     }
-    final sortedMonths = byMonth.keys.toList()
-      ..sort((a, b) => b.compareTo(a));
+    final sortedMonths = byMonth.keys.toList()..sort((a, b) => b.compareTo(a));
 
     return Scaffold(
       appBar: AppBar(
@@ -4391,11 +4487,13 @@ class _AllExpensesPage extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 12),
-                    ...unpaid.map((expense) => _ExpenseTile(
-                          expense: expense,
-                          onPaymentSheet: onPaymentSheet,
-                          controller: controller,
-                        )),
+                    ...unpaid.map(
+                      (expense) => _ExpenseTile(
+                        expense: expense,
+                        onPaymentSheet: onPaymentSheet,
+                        controller: controller,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -4435,11 +4533,13 @@ class _AllExpensesPage extends StatelessWidget {
                             ),
                           ),
                           const Divider(height: 1),
-                          ...items.map((expense) => _ExpenseTile(
-                                expense: expense,
-                                onPaymentSheet: onPaymentSheet,
-                                controller: controller,
-                              )),
+                          ...items.map(
+                            (expense) => _ExpenseTile(
+                              expense: expense,
+                              onPaymentSheet: onPaymentSheet,
+                              controller: controller,
+                            ),
+                          ),
                         ],
                       );
                     }),
@@ -4458,15 +4558,25 @@ class _AllExpensesPage extends StatelessWidget {
       ),
     );
   }
-
 }
 
 String _formatMonth(String ym) {
   if (ym.length < 7) return ym;
   final parts = ym.split('-');
   const months = [
-    '', 'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December',
+    '',
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
   ];
   final m = int.tryParse(parts[1]) ?? 0;
   return '${months[m]} ${parts[0]}';
@@ -4614,7 +4724,8 @@ class _VoteCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final currentUserId = controller.user?.id;
-    final isCreator = currentUserId != null && vote.requestedBy == currentUserId;
+    final isCreator =
+        currentUserId != null && vote.requestedBy == currentUserId;
     final mine = currentUserId == null
         ? null
         : vote.decisions
