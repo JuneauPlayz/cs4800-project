@@ -195,6 +195,8 @@ class _AuthScreenState extends State<AuthScreen> {
                                 ),
                                 validator: (value) {
                                   final p = value ?? '';
+                                  if (p.isEmpty) return 'Enter your password';
+                                  if (!_register) return null;
                                   if (p.length < 8) {
                                     return 'Password must be at least 8 characters';
                                   }
@@ -211,9 +213,10 @@ class _AuthScreenState extends State<AuthScreen> {
                                 },
                               ),
                               const SizedBox(height: 10),
-                              _PasswordRequirements(
-                                password: _passwordController.text,
-                              ),
+                              if (_register)
+                                _PasswordRequirements(
+                                  password: _passwordController.text,
+                                ),
                               const SizedBox(height: 18),
                               if (widget.controller.errorMessage != null) ...[
                                 _InlineMessage(
