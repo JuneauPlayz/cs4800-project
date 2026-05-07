@@ -559,13 +559,20 @@ class AppController extends ChangeNotifier {
     final token = _requireToken();
     final trimmed = message.trim();
     if (trimmed.isEmpty) return;
+    final history = chatMessages.length > 8
+        ? chatMessages.sublist(chatMessages.length - 8)
+        : List<ChatMessage>.from(chatMessages);
     chatMessages = [...chatMessages, ChatMessage(role: 'user', text: trimmed)];
     sendingChat = true;
     errorMessage = null;
     notifyListeners();
 
     try {
-      final reply = await apiClient.sendChat(token, message: trimmed);
+      final reply = await apiClient.sendChat(
+        token,
+        message: trimmed,
+        history: history,
+      );
       chatMessages = [
         ...chatMessages,
         ChatMessage(role: 'assistant', text: reply),

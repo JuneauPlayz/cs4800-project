@@ -31,6 +31,8 @@ export function useAppController() {
   const [notifications, setNotifications] = useState([]);
   const [invites, setInvites] = useState([]);
   const [expenseForm, setExpenseForm] = useState(initialExpenseForm);
+  const [receiptAttachment, setReceiptAttachment] = useState(null);
+  const [receiptUploading, setReceiptUploading] = useState(false);
   const [splitInputs, setSplitInputs] = useState({ percent: {}, custom: {} });
   const [groupForm, setGroupForm] = useState(initialGroupForm);
   const [showGroupModal, setShowGroupModal] = useState(false);
@@ -65,6 +67,8 @@ export function useAppController() {
     setNotifications([]);
     setInvites([]);
     setExpenseForm(initialExpenseForm);
+    setReceiptAttachment(null);
+    setReceiptUploading(false);
     setChallengeForm(initialChallengeForm);
     setSplitInputs({ percent: {}, custom: {} });
     setContributionAmounts({});
@@ -379,14 +383,62 @@ export function useAppController() {
       ? { userId: member.id, percent: Number(member.percent || 0) }
       : { userId: member.id, amount: Number(member.amount || 0) });
     try {
-      await splitStackApi.createExpense({ ...expenseForm, amount: amountNumber, splits }, token);
+      let receiptUrl = receiptAttachment?.receiptUrl || null;
+      if (!receiptUrl && receiptAttachment?.file) {
+        setReceiptUploading(true);
+        const upload = await splitStackApi.uploadReceipt(receiptAttachment.file, token);
+        receiptUrl = upload.receiptUrl;
+      }
+      await splitStackApi.createExpense({ ...expenseForm, amount: amountNumber, splits, receiptUrl }, token);
       setExpenseForm((current) => ({ ...current, description: '', amount: '', reason: '' }));
+      if (receiptAttachment?.previewUrl) URL.revokeObjectURL(receiptAttachment.previewUrl);
+      setReceiptAttachment(null);
       setSplitInputs((current) => ({ ...current, custom: buildEvenCustomMap(memberSharesBase, 0) }));
       await loadAll();
       setPage('home');
     } catch (nextError) {
       setError(nextError.message);
+    } finally {
+      setReceiptUploading(false);
     }
+  }
+
+  function attachReceipt(file) {
+    if (!file) return;
+    setReceiptAttachment((current) => {
+      if (current?.previewUrl) URL.revokeObjectURL(current.previewUrl);
+      return {
+      file,
+      name: file.name || 'receipt',
+      size: file.size || 0,
+      type: file.type || 'application/octet-stream',
+      previewUrl: file.type?.startsWith('image/') ? URL.createObjectURL(file) : null
+      };
+    });
+  }
+
+  function clearReceipt() {
+    if (receiptAttachment?.previewUrl) URL.revokeObjectURL(receiptAttachment.previewUrl);
+    setReceiptAttachment(null);
+  }
+
+  async function recordExpensePayment(expense, method = 'Other') {
+    const remaining = Number((Number(expense.userOwes || 0) - Number(expense.userPaid || 0)).toFixed(2));
+    if (remaining <= 0) return;
+    try {
+      setError('');
+      await splitStackApi.recordExpensePayment(expense.id, { amount: remaining, method }, token);
+      await loadAll({ silent: true });
+    } catch (nextError) {
+      setError(nextError.message);
+    }
+  }
+
+  async function promptExpensePayment(expense) {
+    const remaining = Number((Number(expense.userOwes || 0) - Number(expense.userPaid || 0)).toFixed(2));
+    const method = window.prompt(`Mark ${expense.description} paid for $${remaining.toFixed(2)}. Payment method?`, 'Venmo');
+    if (method === null) return;
+    await recordExpensePayment(expense, method.trim() || 'Other');
   }
 
   async function handleVoteResponse(voteId, decision) {
@@ -513,6 +565,10 @@ export function useAppController() {
     invites,
     expenseForm,
     setExpenseForm,
+    receiptAttachment,
+    receiptUploading,
+    attachReceipt,
+    clearReceipt,
     splitInputs,
     groupForm,
     setGroupForm,
@@ -558,6 +614,7 @@ export function useAppController() {
     handleLeaveGroup,
     handleDeleteGroup,
     submitExpense,
+    promptExpensePayment,
     updatePercentSplit,
     updateCustomSplit,
     applyEvenPercentSplit,

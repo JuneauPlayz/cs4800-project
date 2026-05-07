@@ -44,6 +44,13 @@ const _assistantSuggestions = [
   'How are my challenges doing?',
 ];
 
+class _AssistantQuickReply {
+  const _AssistantQuickReply({required this.label, required this.value});
+
+  final String label;
+  final String value;
+}
+
 const _receiptPickerImageQuality = 70;
 const _receiptPickerMaxWidth = 1400.0;
 const _receiptPickerMaxHeight = 2200.0;
@@ -287,8 +294,6 @@ class _HomeShellState extends State<HomeShell> {
   }
 }
 
-
-
 // ── Dashboard tab ──────────────────────────────────────────────────────────
 
 class _DashboardTab extends StatefulWidget {
@@ -337,8 +342,9 @@ class _DashboardTabState extends State<_DashboardTab> {
         );
         return sum + split.amount;
       });
-      myAvgMonthlySpend =
-          activeMonths.isEmpty ? 0 : totalShare / activeMonths.length;
+      myAvgMonthlySpend = activeMonths.isEmpty
+          ? 0
+          : totalShare / activeMonths.length;
     }
 
     final currentYear = '${now.year}';
@@ -582,11 +588,13 @@ class _DashboardTabState extends State<_DashboardTab> {
                                     spacing: 6,
                                     runSpacing: 4,
                                     children: balance.groups
-                                        .map((g) => Chip(
-                                              label: Text(g.name),
-                                              visualDensity:
-                                                  VisualDensity.compact,
-                                            ))
+                                        .map(
+                                          (g) => Chip(
+                                            label: Text(g.name),
+                                            visualDensity:
+                                                VisualDensity.compact,
+                                          ),
+                                        )
                                         .toList(),
                                   ),
                                 ],
@@ -3287,6 +3295,22 @@ class _AssistantScreenState extends State<AssistantScreen> {
     return AnimatedBuilder(
       animation: widget.controller,
       builder: (context, _) {
+        final messages = widget.controller.chatMessages;
+        final latestMessage = messages.isEmpty ? null : messages.last;
+        final replyOptions =
+            !widget.controller.sendingChat && latestMessage?.role == 'assistant'
+            ? _getAssistantQuickReplyOptions(latestMessage!.text)
+            : const <_AssistantQuickReply>[];
+        final chips = replyOptions.isNotEmpty
+            ? replyOptions
+            : _assistantSuggestions
+                  .map(
+                    (suggestion) => _AssistantQuickReply(
+                      label: suggestion,
+                      value: suggestion,
+                    ),
+                  )
+                  .toList(growable: false);
         return Scaffold(
           appBar: AppBar(title: const Text('AI Assistant')),
           body: Column(
@@ -3343,16 +3367,26 @@ class _AssistantScreenState extends State<AssistantScreen> {
                         height: 42,
                         child: ListView.separated(
                           scrollDirection: Axis.horizontal,
-                          itemCount: _assistantSuggestions.length,
+                          itemCount: chips.length,
                           separatorBuilder: (context, index) =>
                               const SizedBox(width: 8),
                           itemBuilder: (context, index) {
-                            final suggestion = _assistantSuggestions[index];
+                            final quickReply = chips[index];
                             return ActionChip(
-                              label: Text(suggestion),
+                              label: Text(
+                                quickReply.label,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
                               onPressed: widget.controller.sendingChat
                                   ? null
-                                  : () => _send(suggestion),
+                                  : () => _send(quickReply.value),
                             );
                           },
                         ),
@@ -3421,6 +3455,199 @@ class _AssistantScreenState extends State<AssistantScreen> {
       );
     }
   }
+}
+
+List<_AssistantQuickReply> _getAssistantQuickReplyOptions(String text) {
+  final lines = text
+      .trim()
+      .split(RegExp(r'\n+'))
+      .map((line) => line.trim())
+      .where((line) => line.isNotEmpty)
+      .toList(growable: false);
+  if (lines.isEmpty) return const [];
+
+  final lastLine = lines.last;
+  if (!RegExp(r'\?\s*$').hasMatch(lastLine)) return const [];
+
+  final cleaned = lastLine
+      .replaceFirst(RegExp(r'^question:\s*', caseSensitive: false), '')
+      .replaceFirst(RegExp(r'\?\s*$'), '')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
+  final afterColon = cleaned.contains(':')
+      ? cleaned.split(':').last.trim()
+      : cleaned;
+
+  final budgetOptions = _getBudgetQuickReplyOptions(afterColon);
+  if (budgetOptions.length >= 2) {
+    return budgetOptions.take(4).toList(growable: false);
+  }
+
+  final optionText = afterColon
+      .replaceFirst(
+        RegExp(
+          r'^(?:do you want|would you like|should i|should we|shall we|do we|which would you prefer|which should we review|what should we focus on)\s+',
+          caseSensitive: false,
+        ),
+        '',
+      )
+      .replaceFirst(
+        RegExp(
+          r'^(?:to\s+)?(?:budget\s+for|set|create|make)\s+(?:a\s+)?(?:budget\s+for\s+)?',
+          caseSensitive: false,
+        ),
+        '',
+      );
+  final uniqueParts = <String, String>{};
+  for (final part in optionText.split(
+    RegExp(r'\s*,\s*|\s+or\s+', caseSensitive: false),
+  )) {
+    final cleanedPart = part
+        .replaceFirst(
+          RegExp(r'^(?:or|and|the|a|an)\s+', caseSensitive: false),
+          '',
+        )
+        .trim();
+    if (cleanedPart.isEmpty ||
+        cleanedPart.length > 38 ||
+        cleanedPart.split(RegExp(r'\s+')).length > 5) {
+      continue;
+    }
+    uniqueParts.putIfAbsent(cleanedPart.toLowerCase(), () => cleanedPart);
+  }
+  if (uniqueParts.length >= 2 && uniqueParts.length <= 4) {
+    return uniqueParts.values
+        .map(
+          (option) => _AssistantQuickReply(
+            label: option,
+            value: "Let's focus on $option.",
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  if (RegExp(
+    r'^(question:\s*)?(do|does|did|should|would|could|can|are|is|am|have|has|will)\b',
+    caseSensitive: false,
+  ).hasMatch(lastLine)) {
+    final topic = _getQuestionTopic(lastLine);
+    return [
+      _AssistantQuickReply(
+        label: 'yes',
+        value: topic.isNotEmpty ? 'Yes, $topic.' : 'Yes',
+      ),
+      _AssistantQuickReply(
+        label: 'no',
+        value: topic.isNotEmpty ? 'No, not $topic.' : 'No',
+      ),
+    ];
+  }
+
+  return const [];
+}
+
+List<_AssistantQuickReply> _getBudgetQuickReplyOptions(String question) {
+  if (!RegExp(r'\bbudget', caseSensitive: false).hasMatch(question) ||
+      !RegExp(r'\bcategor', caseSensitive: false).hasMatch(question)) {
+    return const [];
+  }
+
+  final options = <_AssistantQuickReply>[];
+  if (RegExp(
+    r'\b(?:total\s+)?monthly\s+budget\b',
+    caseSensitive: false,
+  ).hasMatch(question)) {
+    final amount = RegExp(
+      r'\$\s*(?:[0-9]+(?:,[0-9]{3})*|[0-9]+)(?:\.[0-9]{1,2})?',
+    ).firstMatch(question)?.group(0)?.replaceAll(RegExp(r'\s+'), '');
+    options.add(
+      _AssistantQuickReply(
+        label: 'set a monthly budget',
+        value: amount == null
+            ? 'Set a total monthly budget.'
+            : 'Set a total monthly budget of $amount.',
+      ),
+    );
+  }
+
+  final lowerQuestion = question.toLowerCase();
+  final categoryMatches =
+      _categoryOptions
+          .where((category) => category != 'Other')
+          .map(
+            (category) => (
+              category: category,
+              index: lowerQuestion.indexOf(category.toLowerCase()),
+            ),
+          )
+          .where((match) => match.index >= 0)
+          .toList()
+        ..sort((first, second) => first.index.compareTo(second.index));
+
+  for (final match in categoryMatches) {
+    final amount = _findCategoryBudgetAmount(question, match.category);
+    options.add(
+      _AssistantQuickReply(
+        label: match.category,
+        value: amount.isEmpty
+            ? 'Set a ${match.category} budget.'
+            : 'Set a ${match.category} budget of $amount.',
+      ),
+    );
+  }
+
+  final seen = <String>{};
+  return options
+      .where((option) {
+        final key = option.label.toLowerCase();
+        if (seen.contains(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .toList(growable: false);
+}
+
+String _findCategoryBudgetAmount(String question, String category) {
+  final escapedCategory = RegExp.escape(category);
+  const amountPattern =
+      r'\$\s*(?:[0-9]+(?:,[0-9]{3})*|[0-9]+)(?:\.[0-9]{1,2})?';
+  final patterns = [
+    RegExp(
+      '\\b$escapedCategory\\b\\s*\\(\\s*($amountPattern)\\s*\\)',
+      caseSensitive: false,
+    ),
+    RegExp(
+      '\\b$escapedCategory\\b[^.\$?]{0,40}?\\b(?:at|of|to|for|around|about)\\s+($amountPattern)',
+      caseSensitive: false,
+    ),
+    RegExp('\\b$escapedCategory\\b\\s+($amountPattern)', caseSensitive: false),
+    RegExp(
+      '($amountPattern)[^.\$?]{0,40}?\\b$escapedCategory\\b',
+      caseSensitive: false,
+    ),
+  ];
+
+  for (final pattern in patterns) {
+    final match = pattern.firstMatch(question);
+    if (match != null) {
+      return match.group(1)?.replaceAll(RegExp(r'\s+'), '') ?? '';
+    }
+  }
+  return '';
+}
+
+String _getQuestionTopic(String question) {
+  final cleaned = question
+      .replaceFirst(RegExp(r'^question:\s*', caseSensitive: false), '')
+      .replaceFirst(RegExp(r'\?\s*$'), '')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
+  final match = RegExp(
+    r'^(?:do you want|would you like|should i|should we|shall we|do we|can i|can we|could i|could we)\s+(.+)$',
+    caseSensitive: false,
+  ).firstMatch(cleaned);
+  if (match == null) return '';
+  return match.group(1)?.trim() ?? '';
 }
 
 class _BalanceHero extends StatelessWidget {
@@ -3512,10 +3739,7 @@ class _BalanceHero extends StatelessWidget {
                 ),
               ),
               Expanded(
-                child: _HeroMetric(
-                  label: 'YTD spend',
-                  value: money(ytdSpend),
-                ),
+                child: _HeroMetric(label: 'YTD spend', value: money(ytdSpend)),
               ),
             ],
           ),
@@ -3617,13 +3841,18 @@ class _StatCard extends StatelessWidget {
               Row(
                 children: [
                   Expanded(
-                    child: Text(label, style: Theme.of(context).textTheme.bodySmall),
+                    child: Text(
+                      label,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
                   ),
                   if (onTap != null)
                     Icon(
                       Icons.chevron_right_rounded,
                       size: 18,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
                     ),
                 ],
               ),
@@ -4111,8 +4340,6 @@ class _BudgetFormOverlayState extends State<_BudgetFormOverlay> {
   }
 }
 
-
-
 // ── Owed to person page ────────────────────────────────────────────────────
 
 class _OwedToPersonPage extends StatefulWidget {
@@ -4134,10 +4361,12 @@ class _OwedToPersonPageState extends State<_OwedToPersonPage> {
   final Set<String> _selected = {};
 
   List<Expense> get _openExpenses => widget.controller.expenses
-      .where((e) =>
-          e.paidById == widget.balance.id &&
-          e.userPaymentStatus != 'paid' &&
-          e.userOwes > 0)
+      .where(
+        (e) =>
+            e.paidById == widget.balance.id &&
+            e.userPaymentStatus != 'paid' &&
+            e.userOwes > 0,
+      )
       .toList();
 
   bool get _allSelected =>
@@ -4160,8 +4389,7 @@ class _OwedToPersonPageState extends State<_OwedToPersonPage> {
 
   Future<void> _paySelected(BuildContext context) async {
     final toPayIds = Set<String>.from(_selected);
-    final toPay =
-        _openExpenses.where((e) => toPayIds.contains(e.id)).toList();
+    final toPay = _openExpenses.where((e) => toPayIds.contains(e.id)).toList();
     if (toPay.isEmpty) return;
 
     final messenger = ScaffoldMessenger.of(context);
@@ -4175,9 +4403,7 @@ class _OwedToPersonPageState extends State<_OwedToPersonPage> {
     setState(() => _selected.removeAll(toPayIds));
 
     if (_openExpenses.isEmpty && mounted) {
-      messenger.showSnackBar(
-        const SnackBar(content: Text('All settled up!')),
-      );
+      messenger.showSnackBar(const SnackBar(content: Text('All settled up!')));
       navigator.pop();
     }
   }
@@ -4421,10 +4647,8 @@ class _RecentExpensesCard extends StatelessWidget {
                 borderRadius: BorderRadius.circular(6),
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute<void>(
-                    builder: (_) => _MyExpensesPage(
-                      controller: controller,
-                      userId: userId,
-                    ),
+                    builder: (_) =>
+                        _MyExpensesPage(controller: controller, userId: userId),
                   ),
                 ),
                 child: Row(
@@ -4484,8 +4708,7 @@ class _MyExpensesPage extends StatelessWidget {
           : 'Unknown';
       byMonth.putIfAbsent(month, () => []).add(e);
     }
-    final sortedMonths = byMonth.keys.toList()
-      ..sort((a, b) => b.compareTo(a));
+    final sortedMonths = byMonth.keys.toList()..sort((a, b) => b.compareTo(a));
 
     return Scaffold(
       appBar: AppBar(
@@ -4535,9 +4758,7 @@ class _MyExpensesPage extends StatelessWidget {
                                 style: TextStyle(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w700,
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.primary,
+                                  color: Theme.of(context).colorScheme.primary,
                                 ),
                               ),
                             ],
@@ -4899,7 +5120,6 @@ class _GroupExpensesPage extends StatelessWidget {
   }
 }
 
-
 String _formatMonth(String ym) {
   if (ym.length < 7) return ym;
   final parts = ym.split('-');
@@ -4921,7 +5141,6 @@ String _formatMonth(String ym) {
   final m = int.tryParse(parts[1]) ?? 0;
   return '${months[m]} ${parts[0]}';
 }
-
 
 class _SectionCard extends StatelessWidget {
   const _SectionCard({

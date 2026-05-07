@@ -228,6 +228,19 @@ function generateLocalReply(userId, question) {
     const vote = pendingVotes[0];
     return `The current pending vote is ${vote.description} for ${moneyLike(vote.amount)} in ${vote.groupName}. ${vote.decisions.length} decision(s) have been logged so far.`;
   }
+  if (lower.includes('budget')) {
+    const topCategories = adviceContext.analysisMonthByCategory.length
+      ? adviceContext.analysisMonthByCategory
+      : analytics.byCategory;
+    if (!topCategories.length) {
+      return 'Insight: You do not have enough tracked expenses for a reliable budget yet. Action: Log a few personal or group expenses first so I can size categories from real spending. Question: Do you want to start with personal expenses, group expenses, or both?';
+    }
+    const categorySummary = topCategories
+      .slice(0, 3)
+      .map((item) => `${item.category} at ${moneyLike(item.total)}`)
+      .join(', ');
+    return `Insight: Based on your tracked spending, your top categories are ${categorySummary}. Action: Use those categories as the starting point for a realistic monthly budget instead of guessing from scratch. Question: Do you want to budget for personal expenses, group expenses, or both?`;
+  }
   return `${adviceContext.primaryConcern.title} ${adviceContext.recommendedAction} ${adviceContext.followUpOptions[0]}`;
 }
 
@@ -339,12 +352,19 @@ export async function generateAiReply(userId, question, history = []) {
               'You are the SplitStack AI spending coach for a shared-expense app.',
               'Use only the provided workspace data, computed adviceContext, and chat history.',
               'Treat questions about improving, analyzing, overspending, reducing costs, risk, budgets, or what to do next as advice questions.',
+              'Before asking the user for spending categories, totals, balances, groups, or recent expenses, first analyze the tracked workspace data and adviceContext.',
+              'For budget questions, use tracked expenses, analytics.byCategory, adviceContext.analysisMonthByCategory, personalVsGroupSpend, and budgetStatus to infer the best starting budget.',
+              'If any spending data exists, do not ask the user what their top spending categories are; name the top categories and dollar amounts from the data instead.',
+              'When the user agrees to set up budget categories or a category-by-category spending plan, propose concrete category names and amounts from tracked spending; do not ask which categories are important unless no category data exists.',
+              'If the existing budgetStatus.total already matches the discussed total, do not present setting that same total as the main action; focus on missing or improved category breakdowns.',
+              'Only ask the user for missing financial details when the workspace has no relevant tracked data or the dataQuality flags show the answer would be unreliable.',
               'For every advice question, use exactly three short labeled lines: "Insight: ...", "Action: ...", and "Question: ...". Do not omit any of the three lines.',
               'When the latest user message is a short quick reply such as "Yes, help me..." or "No, not...", treat it as an answer to your previous Question line and continue that thread; do not repeat the original analysis.',
               'Use exact dollar amounts, categories, person names, and group names when available.',
               'Never say the data does not contain advice. If data is sparse, give a cautious recommendation and say what extra data would improve confidence.',
               'Do not invent transactions, budgets, goals, votes, challenges, or balances.',
-              'If the user asks to log an expense, set a budget, or change account data, explain the intended change briefly; the app will show a separate confirmation before anything is saved.',
+              'If the user asks to log an expense, set a budget, set budget categories, create or update a challenge, mark an expense paid, respond to a vote, or change account data, explain the intended change briefly; the app will show a separate confirmation before anything is saved.',
+              'Do not say a budget or other account change has been saved, and avoid saying "I will set" before confirmation; say "I can set" or "I can propose" until the app confirms the change.',
               'For simple lookup questions, answer directly and briefly; add a coaching nudge only if it is useful.'
             ].join(' ')
           }]

@@ -62,6 +62,33 @@ export const splitStackApi = {
   createExpense(payload, token) {
     return api('/api/expenses', { method: 'POST', body: JSON.stringify(payload) }, token);
   },
+  async uploadReceipt(file, token) {
+    const response = await fetch('/api/receipts', {
+      method: 'POST',
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        'Content-Type': file.type || 'application/octet-stream',
+        'X-Receipt-File-Name': file.name || 'receipt'
+      },
+      body: file
+    });
+
+    if (!response.ok) {
+      let payload = {};
+      let fallbackText = '';
+      try {
+        payload = await response.json();
+      } catch {
+        fallbackText = await response.text().catch(() => '');
+      }
+      throw new Error(payload.message || fallbackText || `Receipt upload failed (${response.status})`);
+    }
+
+    return response.json();
+  },
+  recordExpensePayment(expenseId, payload, token) {
+    return api(`/api/expenses/${expenseId}/settlements`, { method: 'POST', body: JSON.stringify(payload) }, token);
+  },
   getVotes(token) {
     return api('/api/votes', {}, token);
   },

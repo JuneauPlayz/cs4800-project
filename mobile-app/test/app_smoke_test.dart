@@ -377,6 +377,7 @@ TOTAL \$84.80
             description: 'Pizza night',
             amount: 37,
             category: 'Dining',
+            paidById: 'u2',
             paidByName: 'Alex Chen',
             expenseDate: '2026-05-06',
             splitMethod: 'equal',

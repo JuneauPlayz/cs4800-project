@@ -720,6 +720,8 @@ class ChatMessage {
 
   final String role;
   final String text;
+
+  Map<String, dynamic> toJson() => {'role': role, 'text': text};
 }
 
 class BudgetGoal {

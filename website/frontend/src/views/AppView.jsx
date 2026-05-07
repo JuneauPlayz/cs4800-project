@@ -39,6 +39,29 @@ function UserAvatar({ user, className = 'ava-sm' }) {
   return <div className={className} style={{ background: user?.avatarColor }}>{user?.initials}</div>;
 }
 
+function formatMonthLabel(month = '') {
+  if (!/^\d{4}-\d{2}$/.test(month)) return month || 'Unknown';
+  return new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)) - 1).toLocaleString('default', { month: 'long', year: 'numeric' });
+}
+
+function getExpenseMonth(expense) {
+  return (expense.expenseDate || expense.createdAt || '').slice(0, 7) || 'Unknown';
+}
+
+function getUserShare(expense, userId) {
+  if (expense.groupId === 'self') return Number(expense.amount || 0);
+  return Number(expense.splits?.find((split) => split.userId === userId)?.amount || 0);
+}
+
+function groupExpensesByMonth(expenses = []) {
+  return expenses.reduce((groups, expense) => {
+    const month = getExpenseMonth(expense);
+    groups[month] ??= [];
+    groups[month].push(expense);
+    return groups;
+  }, {});
+}
+
 export function AppView({ controller }) {
   const {
     session,
@@ -61,6 +84,10 @@ export function AppView({ controller }) {
     invites,
     expenseForm,
     setExpenseForm,
+    receiptAttachment,
+    receiptUploading,
+    attachReceipt,
+    clearReceipt,
     splitInputs,
     groupForm,
     setGroupForm,
@@ -104,6 +131,7 @@ export function AppView({ controller }) {
     handleLeaveGroup,
     handleDeleteGroup,
     submitExpense,
+    promptExpensePayment,
     updatePercentSplit,
     updateCustomSplit,
     applyEvenPercentSplit,
@@ -224,6 +252,8 @@ export function AppView({ controller }) {
                 analytics={analytics}
                 budgetGoal={budgetGoal}
                 saveBudget={saveBudget}
+                onPayment={promptExpensePayment}
+                userId={session.user.id}
               />
             )}
 
@@ -233,6 +263,7 @@ export function AppView({ controller }) {
                 expenses={expenses}
                 votes={votes}
                 setPage={setPage}
+                onPayment={promptExpensePayment}
               />
             )}
 
@@ -277,6 +308,10 @@ export function AppView({ controller }) {
                 updateCustomSplit={updateCustomSplit}
                 applyEvenPercentSplit={applyEvenPercentSplit}
                 applyEvenCustomSplit={applyEvenCustomSplit}
+                receiptAttachment={receiptAttachment}
+                receiptUploading={receiptUploading}
+                attachReceipt={attachReceipt}
+                clearReceipt={clearReceipt}
                 submitExpense={submitExpense}
               />
             )}
@@ -344,12 +379,16 @@ function BudgetGoalCard({ budgetGoal, onSave, analytics, setPage }) {
   }, [budgetGoal]);
 
   const currentMonth = new Date().toISOString().slice(0, 7);
-  const monthTotal = analytics?.monthlyTrend?.find((t) => t.month === currentMonth)?.total ?? 0;
+  const actuals = budgetGoal?.actuals || {};
+  const monthTotal = Object.keys(actuals).length
+    ? Object.values(actuals).reduce((sum, value) => sum + Number(value || 0), 0)
+    : analytics?.monthlyTrend?.find((t) => t.month === currentMonth)?.total ?? 0;
 
   const budgetTotal = budgetGoal?.total || 0;
   const progressPct = budgetTotal ? Math.min(100, (monthTotal / budgetTotal) * 100) : 0;
   const isOver = monthTotal > budgetTotal && budgetTotal > 0;
   const isNew = !budgetGoal || !budgetGoal.total;
+  const unbudgeted = Object.entries(actuals).filter(([category, spent]) => Number(spent) > 0 && Number(budgetGoal?.breakdown?.[category] || 0) <= 0);
 
   const breakdownSum = Object.values(formBreakdown).reduce((sum, v) => sum + (Number(v) || 0), 0);
   const breakdownOverBudget = Number(formTotal) > 0 && breakdownSum > Number(formTotal);
@@ -366,14 +405,52 @@ function BudgetGoalCard({ budgetGoal, onSave, analytics, setPage }) {
   }
 
   if (!isNew && !editing) {
+    const breakdownEntries = Object.entries(budgetGoal?.breakdown || {}).filter(([, value]) => Number(value) > 0);
     return (
       <div className="card settlements-card">
-        <div className="settlements-label" style={{ color: 'var(--amber)' }}>Monthly Budget</div>
+        <div className="settlements-label" style={{ color: 'var(--amber)' }}>{formatMonthLabel(budgetGoal.month || currentMonth)} Budget</div>
         <div className="settlements-total" style={{ color: 'var(--slate)' }}>{money(budgetTotal)}</div>
-        <div className="settlements-count">{money(monthTotal)} spent · {progressPct.toFixed(0)}%</div>
+        <div className="settlements-count">{money(monthTotal)} spent · {money(Math.max(budgetTotal - monthTotal, 0))} left · {progressPct.toFixed(0)}%</div>
         <div className="budget-progress">
           <div className="budget-progress-fill" style={{ width: `${progressPct}%`, background: isOver ? 'var(--red)' : 'var(--teal)' }} />
         </div>
+        {unbudgeted.length ? (
+          <div className="budget-warning">
+            <strong>Spending outside your budget</strong>
+            {unbudgeted.slice(0, 3).map(([category, spent]) => (
+              <span key={category}>You spent {money(spent)} on {category}, but no budget is set.</span>
+            ))}
+          </div>
+        ) : null}
+        {breakdownEntries.length ? (
+          <>
+            <button className="budget-breakdown-toggle" type="button" onClick={() => setShowBreakdown((current) => !current)}>
+              Category breakdown <span>{showBreakdown ? '▲' : '▼'}</span>
+            </button>
+            {showBreakdown ? (
+              <div className="budget-mini-list">
+                {breakdownEntries.map(([category, limit]) => {
+                  const spent = Number(actuals[category] || 0);
+                  const ratio = Number(limit) > 0 ? Math.min(100, (spent / Number(limit)) * 100) : 0;
+                  const over = spent > Number(limit);
+                  return (
+                    <div className="budget-mini-category" key={category}>
+                      <div className="budget-mini-row">
+                        <span>{category}</span>
+                        <strong className={over ? 'warn-text' : ''}>{money(spent)} / {money(limit)}</strong>
+                      </div>
+                      <div className="budget-progress mini">
+                        <div className="budget-progress-fill" style={{ width: `${ratio}%`, background: over ? 'var(--red)' : 'var(--teal)' }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : null}
+          </>
+        ) : (
+          <div className="scanner-hint mt-3">No category budgets yet.</div>
+        )}
         <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
           <button className="btn btn-secondary btn-sm" onClick={() => setEditing(true)}>Edit</button>
           <button className="btn btn-secondary btn-sm" onClick={() => setPage('analytics')}>View breakdown</button>
@@ -434,7 +511,22 @@ function BudgetGoalCard({ budgetGoal, onSave, analytics, setPage }) {
   );
 }
 
-function HomePage({ dashboard, groups, expenses, groupMonthlyTotals, balanceModal, setBalanceModal, setPage, setSelectedGroup, analytics, budgetGoal, saveBudget }) {
+function HomePage({ dashboard, groups, expenses, groupMonthlyTotals, balanceModal, setBalanceModal, setPage, setSelectedGroup, analytics, budgetGoal, saveBudget, onPayment, userId }) {
+  const [selectedBalancePerson, setSelectedBalancePerson] = useState(null);
+  const [showAllExpenses, setShowAllExpenses] = useState(false);
+  const sortedExpenses = [...expenses].sort((first, second) => (second.expenseDate || second.createdAt || '').localeCompare(first.expenseDate || first.createdAt || ''));
+  const recentExpenses = sortedExpenses.slice(0, 3);
+  const groupedExpenses = groupExpensesByMonth(sortedExpenses);
+  const groupedMonths = Object.keys(groupedExpenses).sort((first, second) => second.localeCompare(first));
+  const selectedPersonExpenses = selectedBalancePerson
+    ? sortedExpenses.filter((expense) => expense.paidBy === selectedBalancePerson.id && expense.userPaymentStatus === 'open' && Number(expense.userOwes || 0) > Number(expense.userPaid || 0))
+    : [];
+
+  function closeBalanceModal() {
+    setSelectedBalancePerson(null);
+    setBalanceModal(null);
+  }
+
   return (
     <div className="page show" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
       <div className="balance-card">
@@ -459,12 +551,12 @@ function HomePage({ dashboard, groups, expenses, groupMonthlyTotals, balanceModa
       </div>
 
       <div className="g3">
-        <div className="card settlements-card settlements-clickable" onClick={() => setBalanceModal('owedToYou')}>
+        <div className="card settlements-card settlements-clickable" onClick={() => { setSelectedBalancePerson(null); setBalanceModal('owedToYou'); }}>
           <div className="settlements-label teal">Owed to you</div>
           <div className="settlements-total teal">{money(dashboard.balances.totalOwedToYou)}</div>
           <div className="settlements-count">{dashboard.balances.owedToYou.length} {dashboard.balances.owedToYou.length === 1 ? 'person' : 'people'}</div>
         </div>
-        <div className="card settlements-card settlements-clickable" onClick={() => setBalanceModal('youOwe')}>
+        <div className="card settlements-card settlements-clickable" onClick={() => { setSelectedBalancePerson(null); setBalanceModal('youOwe'); }}>
           <div className="settlements-label red">You owe others</div>
           <div className="settlements-total red">{money(dashboard.balances.totalYouOwe)}</div>
           <div className="settlements-count">{dashboard.balances.youOwe.length} {dashboard.balances.youOwe.length === 1 ? 'person' : 'people'}</div>
@@ -477,30 +569,84 @@ function HomePage({ dashboard, groups, expenses, groupMonthlyTotals, balanceModa
         />
       </div>
 
+      <div className="g2">
+        <StatCard label="Avg/month" value={money(analytics?.avgPerMonth || 0)} />
+        <StatCard label="Pending votes" value={dashboard.pendingVotes} />
+      </div>
+
       {balanceModal && (
-        <div className="modal-overlay" onClick={() => setBalanceModal(null)}>
-          <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-overlay" onClick={closeBalanceModal}>
+          <div className="modal-box modal-box-wide" onClick={(e) => e.stopPropagation()}>
             <div className="modal-head">
-              <span>{balanceModal === 'owedToYou' ? 'People who owe you' : 'People you owe'}</span>
-              <button className="modal-close" onClick={() => setBalanceModal(null)}>✕</button>
+              <span>{selectedBalancePerson ? `You owe ${selectedBalancePerson.name}` : balanceModal === 'owedToYou' ? 'People who owe you' : 'People you owe'}</span>
+              <button className="modal-close" onClick={closeBalanceModal}>✕</button>
             </div>
             <div className="settlements-list">
-              {(balanceModal === 'owedToYou' ? dashboard.balances.owedToYou : dashboard.balances.youOwe).length === 0
+              {selectedBalancePerson ? (
+                <div className="owed-detail">
+                  <div className="owed-detail-head">
+                    <UserAvatar user={selectedBalancePerson} />
+                    <div>
+                      <div className="p-name">{selectedBalancePerson.name}</div>
+                      <div className="p-group">Total owed: {money(selectedBalancePerson.amount)}</div>
+                    </div>
+                    <button className="btn btn-secondary btn-sm" type="button" onClick={() => setSelectedBalancePerson(null)}>Back</button>
+                  </div>
+                  {selectedPersonExpenses.length ? selectedPersonExpenses.map((expense) => {
+                    const remaining = Number((Number(expense.userOwes || 0) - Number(expense.userPaid || 0)).toFixed(2));
+                    return (
+                      <div className="activity-row" key={expense.id}>
+                        <div className="act-icon">{expense.category.slice(0, 1)}</div>
+                        <div>
+                          <div className="act-name">{expense.description}</div>
+                          <div className="act-meta">{expense.groupName} · {expense.category} · {expense.expenseDate}</div>
+                        </div>
+                        <div className="activity-actions">
+                          <strong className="p-amount red">{money(remaining)}</strong>
+                          <button className="btn btn-secondary btn-sm" type="button" onClick={() => onPayment(expense)}>Pay</button>
+                        </div>
+                      </div>
+                    );
+                  }) : <div className="settlements-empty">Nothing open. You are settled up with this person.</div>}
+                </div>
+              ) : (balanceModal === 'owedToYou' ? dashboard.balances.owedToYou : dashboard.balances.youOwe).length === 0
                 ? <div className="settlements-empty" style={{ padding: '24px 20px', textAlign: 'center' }}>{balanceModal === 'owedToYou' ? 'No one owes you right now.' : "You're all settled up!"}</div>
                 : (balanceModal === 'owedToYou' ? dashboard.balances.owedToYou : dashboard.balances.youOwe).map((person) => (
-                  <div className="settlement-row" key={person.id} style={{ padding: '14px 20px' }}>
+                  <div className={`settlement-row ${balanceModal === 'youOwe' ? 'settlement-row-clickable' : ''}`} key={person.id} style={{ padding: '14px 20px' }} onClick={() => { if (balanceModal === 'youOwe') setSelectedBalancePerson(person); }}>
                     <UserAvatar user={person} />
                     <div className="modal-person-info">
                       <div className="p-name">{person.name}</div>
                       <div className="modal-group-tags">{person.groups.map((group) => <span className="tag tag-muted" key={group.id}>{group.name}</span>)}</div>
                     </div>
                     <div className={`p-amount ${balanceModal === 'owedToYou' ? 'teal' : 'red'}`}>{money(person.amount)}</div>
+                    {balanceModal === 'youOwe' ? <span className="expense-chevron">›</span> : null}
                   </div>
                 ))}
             </div>
           </div>
         </div>
       )}
+
+      {analytics?.byCategory?.length ? (
+        <div className="card">
+          <div className="card-head">
+            <span>Top categories</span>
+            <span className="card-sub" style={{ margin: 0 }}>Live totals from approved expenses</span>
+          </div>
+          {analytics.byCategory.slice(0, 4).map((item) => {
+            const max = analytics.byCategory[0]?.total || 1;
+            return (
+              <div className="bar-row" key={item.category}>
+                <div className="row-b">
+                  <span>{item.category}</span>
+                  <strong>{money(item.total)}</strong>
+                </div>
+                <div className="bar-shell"><div className="bar-fill" style={{ width: `${Math.min(100, (item.total / max) * 100)}%` }} /></div>
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
 
       <div className="card">
         <div className="card-head">
@@ -520,31 +666,75 @@ function HomePage({ dashboard, groups, expenses, groupMonthlyTotals, balanceModa
       </div>
 
       <div className="card">
-        <div className="card-head">Recent activity</div>
+        <div className="card-head">Recent expenses</div>
         <div className="activity-scroll">
-          {expenses.map((expense) => {
+          {recentExpenses.map((expense) => {
             const expenseGroup = groups.find((group) => group.id === expense.groupId);
+            const remaining = Number((Number(expense.userOwes || 0) - Number(expense.userPaid || 0)).toFixed(2));
+            const canPay = expense.userPaymentStatus === 'open' && remaining > 0;
+            const share = getUserShare(expense, userId);
             return (
               <div className="activity-row" key={expense.id}>
                 <div className="act-icon">{expense.category.slice(0, 1)}</div>
-                <div>
+                <div style={{ flex: 1, minWidth: 0 }}>
                   <div className="act-name">{expense.description}</div>
                   <div className="act-meta">{expense.category} · Paid by {expense.paidByName}</div>
+                  {expense.receiptUrl ? <a href={expense.receiptUrl} target="_blank" rel="noreferrer" className="receipt-link">View receipt</a> : null}
                 </div>
-                <div>
-                  <div className="act-amt">{money(expense.amount)}</div>
+                <div className="activity-actions">
+                  <div className="act-amt">{money(share)}</div>
                   <div className="act-type">{expenseGroup?.name || 'Shared group'}</div>
+                  {expense.userPaymentStatus === 'paid' ? <span className="tag tag-teal">Paid</span> : null}
+                  {canPay ? <button className="btn btn-secondary btn-sm" type="button" onClick={() => onPayment(expense)}>Pay {money(remaining)}</button> : null}
                 </div>
               </div>
             );
           })}
+          {sortedExpenses.length > 3 ? (
+            <button className="text-action" type="button" onClick={() => setShowAllExpenses(true)}>See more →</button>
+          ) : null}
         </div>
       </div>
+
+      {showAllExpenses ? (
+        <div className="modal-overlay" onClick={() => setShowAllExpenses(false)}>
+          <div className="modal-box modal-box-wide" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-head">
+              <span>My expenses</span>
+              <button className="modal-close" onClick={() => setShowAllExpenses(false)}>✕</button>
+            </div>
+            <div className="all-expenses-list">
+              {groupedMonths.map((month) => {
+                const items = groupedExpenses[month];
+                const monthTotal = items.reduce((sum, expense) => sum + getUserShare(expense, userId), 0);
+                return (
+                  <div className="expense-month-group" key={month}>
+                    <div className="expense-month-head">
+                      <span>{formatMonthLabel(month)}</span>
+                      <strong>{money(monthTotal)}</strong>
+                    </div>
+                    {items.map((expense) => (
+                      <div className="activity-row" key={expense.id}>
+                        <div className="act-icon">{expense.category.slice(0, 1)}</div>
+                        <div>
+                          <div className="act-name">{expense.description}</div>
+                          <div className="act-meta">{expense.groupId === 'self' ? 'Personal' : expense.groupName} · {expense.category} · {expense.expenseDate}</div>
+                        </div>
+                        <strong className="act-amt">{money(getUserShare(expense, userId))}</strong>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
 
-function GroupDetailPage({ selectedGroup, expenses, votes, setPage }) {
+function GroupDetailPage({ selectedGroup, expenses, votes, setPage, onPayment }) {
   const groupExpenses = expenses.filter((item) => item.groupId === selectedGroup.id);
   const pendingGroupVotes = votes.filter((item) => item.status === 'pending' && item.groupId === selectedGroup.id);
   const memberCount = selectedGroup.members?.length || 1;
@@ -607,6 +797,14 @@ function GroupDetailPage({ selectedGroup, expenses, votes, setPage }) {
                 )}
               </div>
               <div style={{ textAlign: 'right' }}>
+                {(() => {
+                  const remaining = Number((Number(expense.userOwes || 0) - Number(expense.userPaid || 0)).toFixed(2));
+                  return expense.userPaymentStatus === 'open' && remaining > 0
+                    ? <button className="btn btn-secondary btn-sm" type="button" style={{ marginBottom: 6 }} onClick={() => onPayment(expense)}>Pay {money(remaining)}</button>
+                    : expense.userPaymentStatus === 'paid'
+                      ? <div style={{ marginBottom: 6 }}><span className="tag tag-teal">Paid</span></div>
+                      : null;
+                })()}
                 <div className="act-amt">{money(expense.amount)}</div>
                 <div className="act-type">{new Date(`${expense.expenseDate}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>
               </div>
@@ -830,6 +1028,10 @@ function AddExpensePage({
   updateCustomSplit,
   applyEvenPercentSplit,
   applyEvenCustomSplit,
+  receiptAttachment,
+  receiptUploading,
+  attachReceipt,
+  clearReceipt,
   submitExpense
 }) {
   const amountNumber = Number(expenseForm.amount || 0);
@@ -866,12 +1068,39 @@ function AddExpensePage({
                 <textarea className="f-inp" rows="3" value={expenseForm.reason} onChange={(e) => setExpenseForm({ ...expenseForm, reason: e.target.value })} placeholder="Used only if this purchase exceeds the voting threshold." />
               </>
             )}
-            <button className="btn btn-primary" type="submit">Save expense</button>
+            <button className="btn btn-primary" type="submit" disabled={receiptUploading}>{receiptUploading ? 'Uploading receipt...' : 'Save expense'}</button>
           </form>
         </div>
         <div className="card">
-          <div className="card-head">Receipt scanning</div>
-          <div className="scan-box"><div className="scan-icon-wrap"><StackLogo size={20} /></div><div className="scan-box-title">Coming with the mobile app</div><div className="scan-box-sub">Receipt scanning is intentionally deferred for the mobile build. The rest of the web app saves real data now.</div></div>
+          <div className="card-head">Receipt</div>
+          <div className="receipt-upload-panel">
+            <div className="scan-icon-wrap"><StackLogo size={20} /></div>
+            <div className="receipt-upload-copy">
+              <div className="scan-box-title">{receiptAttachment ? 'Receipt attached' : 'Attach receipt image'}</div>
+              <div className="scan-box-sub">{receiptAttachment ? `${receiptAttachment.name} will be saved with this expense.` : 'Upload a receipt photo so it is visible from expense history.'}</div>
+            </div>
+            <label className="btn btn-secondary btn-sm receipt-file-btn">
+              Choose image
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(event) => {
+                  attachReceipt(event.target.files?.[0]);
+                  event.target.value = '';
+                }}
+              />
+            </label>
+          </div>
+          {receiptAttachment ? (
+            <div className="receipt-preview">
+              {receiptAttachment.previewUrl ? <img src={receiptAttachment.previewUrl} alt="Receipt preview" /> : null}
+              <div className="receipt-preview-main">
+                <div className="p-name">{receiptAttachment.name}</div>
+                <div className="p-group">{receiptUploading ? 'Uploading receipt...' : `${Math.ceil(receiptAttachment.size / 1024)} KB`}</div>
+              </div>
+              <button className="btn btn-secondary btn-sm" type="button" onClick={clearReceipt} disabled={receiptUploading}>Remove</button>
+            </div>
+          ) : null}
         </div>
       </div>
     </div>
@@ -1078,6 +1307,28 @@ function getQuickReplyOptions(text = '') {
   const lastLine = lines.at(-1) || '';
   if (!/[?]\s*$/.test(lastLine)) return [];
 
+  const cleaned = lastLine
+    .replace(/^question:\s*/i, '')
+    .replace(/[?]\s*$/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const afterColon = cleaned.includes(':') ? cleaned.split(':').at(-1).trim() : cleaned;
+  const budgetOptions = getBudgetQuickReplyOptions(afterColon);
+  if (budgetOptions.length >= 2) return budgetOptions.slice(0, 4);
+
+  const optionText = afterColon
+    .replace(/^(?:do you want|would you like|should i|should we|shall we|do we|which would you prefer|which should we review|what should we focus on)\s+/i, '')
+    .replace(/^(?:to\s+)?(?:set|create|make)\s+(?:a\s+)?budget\s+for\s+/i, '');
+  const parts = optionText
+    .split(/\s*,\s*|\s+or\s+/i)
+    .map((part) => part.replace(/^(?:or|and|the|a|an)\s+/i, '').trim())
+    .filter((part) => part && part.length <= 38 && part.split(/\s+/).length <= 5);
+
+  const unique = [...new Map(parts.map((part) => [part.toLowerCase(), part])).values()];
+  if (unique.length >= 2 && unique.length <= 4) {
+    return unique.map((option) => ({ label: option, value: `Let's focus on ${option}.` }));
+  }
+
   if (/^(question:\s*)?(do|does|did|should|would|could|can|are|is|am|have|has|will)\b/i.test(lastLine)) {
     const topic = getQuestionTopic(lastLine);
     return [
@@ -1086,21 +1337,50 @@ function getQuickReplyOptions(text = '') {
     ];
   }
 
-  const cleaned = lastLine
-    .replace(/^question:\s*/i, '')
-    .replace(/[?]\s*$/, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-  const afterColon = cleaned.includes(':') ? cleaned.split(':').at(-1).trim() : cleaned;
-  const optionText = afterColon.replace(/^(?:do you want|would you like|should i|should we|shall we|do we|which would you prefer|which should we review|what should we focus on)\s+/i, '');
-  const parts = optionText
-    .split(/\s*,\s*|\s+or\s+/i)
-    .map((part) => part.replace(/^(?:the|a|an)\s+/i, '').trim())
-    .filter((part) => part && part.length <= 38 && part.split(/\s+/).length <= 5);
+  return [];
+}
 
-  const unique = [...new Map(parts.map((part) => [part.toLowerCase(), part])).values()];
-  if (unique.length < 2 || unique.length > 4) return [];
-  return unique.map((option) => ({ label: option, value: `Let's focus on ${option}.` }));
+function getBudgetQuickReplyOptions(question = '') {
+  if (!/\bbudget/i.test(question) || !/\bcategor/i.test(question)) return [];
+
+  const options = [];
+  if (/\b(?:total\s+)?monthly\s+budget\b/i.test(question)) {
+    const amount = question.match(/\$\s*(?:[0-9]+(?:,[0-9]{3})*|[0-9]+)(?:\.[0-9]{1,2})?/)?.[0]?.replace(/\s+/g, '');
+    options.push({
+      label: 'set a monthly budget',
+      value: amount ? `Set a total monthly budget of ${amount}.` : 'Set a total monthly budget.'
+    });
+  }
+
+  const lowerQuestion = question.toLowerCase();
+  const categoryMatches = categoryOptions
+    .filter((category) => category !== 'Other')
+    .map((category) => ({ category, index: lowerQuestion.search(new RegExp(`\\b${category.toLowerCase()}\\b`)) }))
+    .filter((match) => match.index >= 0)
+    .sort((first, second) => first.index - second.index)
+    .map((match) => match.category);
+  categoryMatches.forEach((category) => {
+    const amount = findCategoryBudgetAmount(question, category);
+    options.push({
+      label: category,
+      value: amount ? `Set a ${category} budget of ${amount}.` : `Set a ${category} budget.`
+    });
+  });
+
+  return [...new Map(options.map((option) => [option.label.toLowerCase(), option])).values()];
+}
+
+function findCategoryBudgetAmount(question = '', category = '') {
+  const escapedCategory = category.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const amountPattern = String.raw`\$\s*(?:[0-9]+(?:,[0-9]{3})*|[0-9]+)(?:\.[0-9]{1,2})?`;
+  const patterns = [
+    new RegExp(String.raw`\b${escapedCategory}\b\s*\(\s*(${amountPattern})\s*\)`, 'i'),
+    new RegExp(String.raw`\b${escapedCategory}\b[^.$?]{0,40}?\b(?:at|of|to|for|around|about)\s+(${amountPattern})`, 'i'),
+    new RegExp(String.raw`\b${escapedCategory}\b\s+(${amountPattern})`, 'i'),
+    new RegExp(String.raw`(${amountPattern})[^.$?]{0,40}?\b${escapedCategory}\b`, 'i')
+  ];
+  const match = patterns.map((pattern) => String(question).match(pattern)).find(Boolean);
+  return match?.[1]?.replace(/\s+/g, '') || '';
 }
 
 function getQuestionTopic(question = '') {

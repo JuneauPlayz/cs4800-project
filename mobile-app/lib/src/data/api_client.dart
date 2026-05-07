@@ -323,12 +323,19 @@ class ApiClient {
     return BudgetGoal.fromJson(json['goal'] as Map<String, dynamic>);
   }
 
-  Future<String> sendChat(String token, {required String message}) async {
+  Future<String> sendChat(
+    String token, {
+    required String message,
+    List<ChatMessage> history = const [],
+  }) async {
     final json = await _request(
       'POST',
       '/api/ai/chat',
       token: token,
-      body: {'message': message},
+      body: {
+        'message': message,
+        'history': history.map((message) => message.toJson()).toList(),
+      },
     );
     return (json['reply'] ?? '').toString();
   }

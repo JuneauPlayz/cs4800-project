@@ -285,7 +285,7 @@ svg { display: block; }
 .msg-bub.user { background: var(--teal); color: #fff; border-radius: 18px 18px 4px 18px; }
 .msg-bub.typing { color: var(--muted); font-style: italic; }
 .chat-reply-actions { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; max-width: 520px; }
-.chat-reply-actions button { border: 1px solid var(--teal-m); background: var(--white); color: var(--teal-d); border-radius: 999px; padding: 7px 18px; font-size: 12px; font-weight: 800; }
+.chat-reply-actions button { min-height: 42px; border: 1px solid var(--teal-m); background: var(--white); color: var(--teal-d); border-radius: 999px; padding: 10px 24px; font-size: 15px; font-weight: 800; }
 .chat-reply-actions button:hover { background: var(--teal-l); }
 .chat-input-bar { padding: 16px 20px; display: flex; gap: 10px; align-items: flex-end; border-top: 1px solid var(--border); }
 #chat-inp { flex: 1; resize: none; min-height: 46px; max-height: 140px; }
@@ -385,15 +385,42 @@ svg { display: block; }
 .settlements-count { font-size: 12px; color: var(--muted); margin-top: 4px; }
 .budget-progress { height: 6px; background: var(--border); border-radius: 3px; margin-top: 10px; overflow: hidden; }
 .budget-progress-fill { height: 100%; border-radius: 3px; transition: width 0.3s; }
+.budget-progress.mini { height: 7px; margin-top: 6px; }
 .budget-breakdown { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
 .budget-cat-row { display: flex; align-items: center; gap: 8px; }
 .budget-cat-label { font-size: 12px; color: var(--muted); width: 88px; flex-shrink: 0; }
+.budget-warning { margin-top: 10px; padding: 10px 12px; border-radius: 10px; background: #FFF7ED; border: 1px solid rgba(245,158,11,.35); color: #92400E; display: flex; flex-direction: column; gap: 4px; font-size: 12px; line-height: 1.4; }
+.budget-warning strong { color: #78350F; }
+.budget-breakdown-toggle { margin-top: 10px; padding: 0; background: transparent; color: var(--teal); font-size: 13px; font-weight: 800; display: inline-flex; align-items: center; gap: 5px; }
+.budget-mini-list { margin-top: 10px; display: flex; flex-direction: column; gap: 5px; }
+.budget-mini-category { display: flex; flex-direction: column; gap: 0; }
+.budget-mini-row { display: flex; justify-content: space-between; gap: 10px; color: var(--muted); font-size: 12px; }
+.budget-mini-row strong { color: var(--slate); }
+.activity-actions { text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.receipt-upload-panel { display: flex; align-items: center; gap: 12px; padding: 18px; border: 1px dashed var(--teal-m); border-radius: 14px; background: var(--teal-l); }
+.receipt-upload-copy { flex: 1; min-width: 0; }
+.receipt-file-btn { position: relative; overflow: hidden; white-space: nowrap; }
+.receipt-file-btn input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.receipt-preview { margin-top: 12px; display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg); }
+.receipt-preview img { width: 54px; height: 54px; object-fit: cover; border-radius: 10px; border: 1px solid var(--border); }
+.receipt-preview-main { flex: 1; min-width: 0; }
 .settlements-list { max-height: 340px; overflow-y: auto; }
 .settlements-empty { font-size: 13px; color: var(--muted); }
 .settlement-row { display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--border2); }
 .settlement-row:last-child { border-bottom: none; }
+.settlement-row-clickable { cursor: pointer; }
+.settlement-row-clickable:hover { background: var(--bg); }
+.owed-detail { padding: 16px 20px 20px; }
+.owed-detail-head { display: flex; align-items: center; gap: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border2); }
+.all-expenses-list { padding: 16px 20px 20px; max-height: min(70vh, 620px); overflow-y: auto; }
+.expense-month-group { padding: 14px 0; border-bottom: 1px solid var(--border2); }
+.expense-month-group:first-child { padding-top: 0; }
+.expense-month-group:last-child { border-bottom: none; }
+.expense-month-head { display: flex; justify-content: space-between; color: var(--teal); font-size: 13px; font-weight: 800; margin-bottom: 4px; }
+.text-action { margin-top: 10px; margin-left: auto; display: block; background: transparent; color: var(--teal); font-size: 13px; font-weight: 800; }
 .modal-overlay { position: fixed; inset: 0; background: rgba(15,23,42,.45); z-index: 100; display: flex; align-items: center; justify-content: center; padding: 20px; }
 .modal-box { background: var(--white); border-radius: 18px; width: 100%; max-width: 420px; box-shadow: var(--sh2); overflow: hidden; }
+.modal-box-wide { max-width: 620px; }
 .modal-head { display: flex; justify-content: space-between; align-items: center; padding: 18px 20px; border-bottom: 1px solid var(--border); font-weight: 800; font-size: 15px; }
 .modal-close { background: var(--bg); border: none; border-radius: 8px; width: 30px; height: 30px; font-size: 14px; color: var(--muted); cursor: pointer; display: flex; align-items: center; justify-content: center; }
 .modal-close:hover { background: var(--border); }
