@@ -636,82 +636,75 @@ class _DashboardTabState extends State<_DashboardTab> {
     }
 
     final messenger = ScaffoldMessenger.of(context);
-    final noteController = TextEditingController();
     String method = _payoutMethods.first;
+    String note = '';
     Map<String, String>? payment;
 
-    try {
-      payment = await showModalBottomSheet<Map<String, String>>(
-        context: context,
-        isScrollControlled: true,
-        useSafeArea: true,
-        builder: (sheetContext) {
-          return StatefulBuilder(
-            builder: (context, setSheetState) {
-              return SingleChildScrollView(
-                padding: EdgeInsets.fromLTRB(
-                  20,
-                  20,
-                  20,
-                  MediaQuery.of(context).viewInsets.bottom + 20,
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Pay expense',
-                      style: Theme.of(context).textTheme.titleLarge,
+    payment = await showModalBottomSheet<Map<String, String>>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return SingleChildScrollView(
+              padding: EdgeInsets.fromLTRB(
+                20,
+                20,
+                20,
+                MediaQuery.of(context).viewInsets.bottom + 20,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Pay expense',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: 8),
+                  Text('${expense.description} • ${money(remaining)}'),
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<String>(
+                    initialValue: method,
+                    decoration: const InputDecoration(
+                      labelText: 'Payout method',
                     ),
-                    const SizedBox(height: 8),
-                    Text('${expense.description} • ${money(remaining)}'),
-                    const SizedBox(height: 16),
-                    DropdownButtonFormField<String>(
-                      initialValue: method,
-                      decoration: const InputDecoration(
-                        labelText: 'Payout method',
-                      ),
-                      items: _payoutMethods
-                          .map(
-                            (item) => DropdownMenuItem(
-                              value: item,
-                              child: Text(item),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (value) {
-                        if (value != null) setSheetState(() => method = value);
-                      },
+                    items: _payoutMethods
+                        .map(
+                          (item) =>
+                              DropdownMenuItem(value: item, child: Text(item)),
+                        )
+                        .toList(),
+                    onChanged: (value) {
+                      if (value != null) setSheetState(() => method = value);
+                    },
+                  ),
+                  const SizedBox(height: 14),
+                  TextField(
+                    decoration: const InputDecoration(
+                      labelText: 'Note or confirmation optional',
                     ),
-                    const SizedBox(height: 14),
-                    TextField(
-                      controller: noteController,
-                      decoration: const InputDecoration(
-                        labelText: 'Note or confirmation optional',
-                      ),
+                    onChanged: (value) => note = value.trim(),
+                  ),
+                  const SizedBox(height: 18),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: () => Navigator.of(
+                        sheetContext,
+                      ).pop({'method': method, 'note': note}),
+                      icon: const Icon(Icons.payments_rounded),
+                      label: const Text('Pay'),
                     ),
-                    const SizedBox(height: 18),
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton.icon(
-                        onPressed: () => Navigator.of(sheetContext).pop({
-                          'method': method,
-                          'note': noteController.text.trim(),
-                        }),
-                        icon: const Icon(Icons.payments_rounded),
-                        label: const Text('Pay'),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            },
-          );
-        },
-      );
-    } finally {
-      noteController.dispose();
-    }
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
 
     if (payment == null || !context.mounted) return;
     try {

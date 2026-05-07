@@ -9,6 +9,24 @@ import 'package:mobile_app/src/state/app_controller.dart';
 import 'package:mobile_app/src/ui/home_shell.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+class _PaymentTestController extends AppController {
+  _PaymentTestController()
+    : super(apiClient: ApiClient(), sessionStore: SessionStore());
+
+  String? recordedMethod;
+  String? recordedNote;
+
+  @override
+  Future<void> recordExpensePayment({
+    required String expenseId,
+    required String method,
+    String note = '',
+  }) async {
+    recordedMethod = method;
+    recordedNote = note;
+  }
+}
+
 void main() {
   String ymd(DateTime date) {
     final month = date.month.toString().padLeft(2, '0');
@@ -311,6 +329,93 @@ TOTAL \$84.80
 
     expect(find.byType(DatePickerDialog), findsOneWidget);
   });
+
+  testWidgets(
+    'marks an expense paid from the payout sheet without exceptions',
+    (tester) async {
+      FlutterSecureStorage.setMockInitialValues({});
+      tester.view.physicalSize = const Size(800, 1000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      final controller = _PaymentTestController()
+        ..user = User(
+          id: 'u1',
+          name: 'Jordan Lee',
+          email: 'jordan@example.com',
+          initials: 'JL',
+          avatarColor: '#0D9488',
+          avatarEmoji: '',
+        )
+        ..dashboard = DashboardData(
+          balance: BalanceSummary(
+            net: -18.5,
+            totalOwedToYou: 0,
+            totalYouOwe: 18.5,
+            settleCount: 1,
+            owedToYou: const [],
+            youOwe: const [],
+            people: const [],
+          ),
+          pendingVotes: 0,
+        )
+        ..analytics = AnalyticsData(
+          monthTotal: 37,
+          avgExpense: 37,
+          expenseCount: 1,
+          byCategory: [CategorySpend(category: 'Dining', total: 37)],
+          byGroup: [GroupSpend(id: 'g1', name: 'Roommates', total: 37)],
+        )
+        ..expenses = [
+          Expense(
+            id: 'e1',
+            groupId: 'g1',
+            groupName: 'Roommates',
+            description: 'Pizza night',
+            amount: 37,
+            category: 'Dining',
+            paidByName: 'Alex Chen',
+            expenseDate: '2026-05-06',
+            splitMethod: 'equal',
+            userOwes: 18.5,
+            userPaid: 0,
+            settlementStatus: 'open',
+            userPaymentStatus: 'open',
+            receiptUrl: '',
+            splits: const [],
+          ),
+        ];
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light(),
+          home: HomeShell(controller: controller),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.scrollUntilVisible(
+        find.text('Pay \$18.50'),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.text('Pay \$18.50').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Venmo'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Zelle').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Pay'));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(controller.recordedMethod, 'Zelle');
+      expect(find.text('Expense marked paid.'), findsOneWidget);
+    },
+  );
 
   testWidgets('renders challenges tab with contribution controls', (
     tester,
