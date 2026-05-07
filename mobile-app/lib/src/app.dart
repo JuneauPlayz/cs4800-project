@@ -48,9 +48,7 @@ class _SplitStackAppState extends State<SplitStackApp> {
   }
 
   Widget _buildHome() {
-    if (_controller.initializing) {
-      return const _SplashScreen();
-    }
+    if (_controller.initializing) return const _SplashScreen();
     if (!_controller.isAuthenticated) {
       return AuthScreen(controller: _controller);
     }

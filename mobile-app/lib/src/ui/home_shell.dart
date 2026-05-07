@@ -287,6 +287,10 @@ class _HomeShellState extends State<HomeShell> {
   }
 }
 
+
+
+// ── Dashboard tab ──────────────────────────────────────────────────────────
+
 class _DashboardTab extends StatefulWidget {
   const _DashboardTab({required this.controller});
 
@@ -310,9 +314,48 @@ class _DashboardTabState extends State<_DashboardTab> {
       return const _CenteredState(
         icon: Icons.hourglass_bottom_rounded,
         title: 'Loading your dashboard',
+
         subtitle: 'Pulling balances, expenses, and groups from the API.',
       );
     }
+
+    final userId = widget.controller.user!.id;
+    final now = DateTime.now();
+
+    double myAvgMonthlySpend = 0;
+    if (widget.controller.expenses.isNotEmpty) {
+      final allExpenses = widget.controller.expenses;
+      final activeMonths = allExpenses
+          .where((e) => e.expenseDate.length >= 7)
+          .map((e) => e.expenseDate.substring(0, 7))
+          .toSet();
+      final totalShare = allExpenses.fold(0.0, (sum, e) {
+        if (e.groupId == 'self') return sum + e.amount;
+        final split = e.splits.firstWhere(
+          (s) => s.userId == userId,
+          orElse: () => ExpenseSplit(userId: '', amount: 0),
+        );
+        return sum + split.amount;
+      });
+      myAvgMonthlySpend =
+          activeMonths.isEmpty ? 0 : totalShare / activeMonths.length;
+    }
+
+    final currentYear = '${now.year}';
+    final myYtdSpend = widget.controller.expenses
+        .where(
+          (e) =>
+              e.expenseDate.length >= 4 &&
+              e.expenseDate.startsWith(currentYear),
+        )
+        .fold(0.0, (sum, e) {
+          if (e.groupId == 'self') return sum + e.amount;
+          final split = e.splits.firstWhere(
+            (s) => s.userId == userId,
+            orElse: () => ExpenseSplit(userId: '', amount: 0),
+          );
+          return sum + split.amount;
+        });
 
     return Stack(
       children: [
@@ -327,6 +370,8 @@ class _DashboardTabState extends State<_DashboardTab> {
                   user: widget.controller.user!,
                   dashboard: dashboard,
                   analytics: analytics,
+                  avgMonthlySpend: myAvgMonthlySpend,
+                  ytdSpend: myYtdSpend,
                 ),
               ),
               const SizedBox(height: 16),
@@ -360,6 +405,19 @@ class _DashboardTabState extends State<_DashboardTab> {
                           emptyText: 'You are settled up right now.',
                           balances: dashboard.balance.youOwe,
                           tone: AppTheme.red,
+                          showName: false,
+                          onArrow: (sheetCtx, balance) {
+                            Navigator.of(sheetCtx).pop();
+                            Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                builder: (_) => _OwedToPersonPage(
+                                  balance: balance,
+                                  controller: widget.controller,
+                                  onPaymentSheet: _showPaymentSheet,
+                                ),
+                              ),
+                            );
+                          },
                         ),
                       ),
                     ),
@@ -373,8 +431,8 @@ class _DashboardTabState extends State<_DashboardTab> {
                   children: [
                     Expanded(
                       child: _StatCard(
-                        label: 'Monthly spend',
-                        value: money(analytics.monthTotal),
+                        label: 'Avg/month',
+                        value: money(myAvgMonthlySpend),
                         tone: AppTheme.muted,
                       ),
                     ),
@@ -449,122 +507,10 @@ class _DashboardTabState extends State<_DashboardTab> {
               const SizedBox(height: 16),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: _SectionCard(
-                  title: 'Recent expenses',
-                  subtitle: 'Latest activity across your groups',
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      ...widget.controller.expenses.take(3).map((expense) {
-                        final canMarkPaid = expense.userPaymentStatus == 'open';
-                        return ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          leading: CircleAvatar(
-                            backgroundColor: const Color(0xFFF0FDFA),
-                            foregroundColor: AppTheme.tealDark,
-                            child: const Icon(Icons.receipt_long_rounded),
-                          ),
-                          title: Text(expense.description),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '${expense.groupName} • ${expense.category} • ${formatDate(expense.expenseDate)}',
-                              ),
-                              const SizedBox(height: 6),
-                              Wrap(
-                                spacing: 8,
-                                runSpacing: 6,
-                                crossAxisAlignment: WrapCrossAlignment.center,
-                                children: [
-                                  Chip(
-                                    visualDensity: VisualDensity.compact,
-                                    label: Text(
-                                      expense.settlementStatus == 'paid'
-                                          ? 'Finished'
-                                          : 'Open',
-                                    ),
-                                  ),
-                                  if (expense.userPaymentStatus == 'paid')
-                                    const Chip(
-                                      visualDensity: VisualDensity.compact,
-                                      label: Text('You paid'),
-                                    ),
-                                  if (canMarkPaid)
-                                    TextButton.icon(
-                                      onPressed: widget.controller.loading
-                                          ? null
-                                          : () => _showPaymentSheet(
-                                              context,
-                                              expense,
-                                            ),
-                                      icon: const Icon(Icons.payments_rounded),
-                                      label: Text(
-                                        'Pay ${money(expense.userOwes - expense.userPaid)}',
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ],
-                          ),
-                          trailing: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Text(
-                                money(expense.amount),
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                              Text(
-                                formatDate(expense.expenseDate),
-                                style: Theme.of(context).textTheme.bodySmall,
-                              ),
-                            ],
-                          ),
-                        );
-                      }),
-                      if (widget.controller.expenses.length > 3) ...[
-                        const Divider(height: 16),
-                        InkWell(
-                          borderRadius: BorderRadius.circular(8),
-                          onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute<void>(
-                              builder: (_) => _AllExpensesPage(
-                                controller: widget.controller,
-                                onPaymentSheet: _showPaymentSheet,
-                              ),
-                            ),
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 8),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  'See more',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w700,
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.primary,
-                                  ),
-                                ),
-                                const SizedBox(width: 4),
-                                Icon(
-                                  Icons.arrow_forward_rounded,
-                                  size: 16,
-                                  color: Theme.of(context).colorScheme.primary,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
+                child: _RecentExpensesCard(
+                  controller: widget.controller,
+                  userId: userId,
+                  onPaymentSheet: _showPaymentSheet,
                 ),
               ),
             ],
@@ -585,6 +531,8 @@ class _DashboardTabState extends State<_DashboardTab> {
     required String emptyText,
     required List<CounterpartyBalance> balances,
     required Color tone,
+    void Function(BuildContext, CounterpartyBalance)? onArrow,
+    bool showName = true,
   }) {
     return showModalBottomSheet<void>(
       context: context,
@@ -599,24 +547,74 @@ class _DashboardTabState extends State<_DashboardTab> {
               _EmptyCard(text: emptyText)
             else
               ...balances.map(
-                (balance) => ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: _ProfileAvatar(
-                    initials: balance.initials,
-                    avatarColor: balance.avatarColor,
-                    avatarEmoji: balance.avatarEmoji,
-                  ),
-                  title: Text(balance.name),
-                  subtitle: Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: balance.groups
-                        .map((group) => Chip(label: Text(group.name)))
-                        .toList(),
-                  ),
-                  trailing: Text(
-                    money(balance.amount),
-                    style: TextStyle(color: tone, fontWeight: FontWeight.w800),
+                (balance) => Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Card(
+                    margin: EdgeInsets.zero,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                      child: Row(
+                        children: [
+                          _ProfileAvatar(
+                            initials: balance.initials,
+                            avatarColor: balance.avatarColor,
+                            avatarEmoji: balance.avatarEmoji,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (showName)
+                                  Text(
+                                    balance.name,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 15,
+                                    ),
+                                  ),
+                                if (balance.groups.isNotEmpty) ...[
+                                  if (showName) const SizedBox(height: 4),
+                                  Wrap(
+                                    spacing: 6,
+                                    runSpacing: 4,
+                                    children: balance.groups
+                                        .map((g) => Chip(
+                                              label: Text(g.name),
+                                              visualDensity:
+                                                  VisualDensity.compact,
+                                            ))
+                                        .toList(),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            money(balance.amount),
+                            style: TextStyle(
+                              color: tone,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 15,
+                            ),
+                          ),
+                          if (onArrow != null) ...[
+                            const SizedBox(width: 4),
+                            IconButton(
+                              icon: const Icon(
+                                Icons.arrow_forward_ios_rounded,
+                                size: 16,
+                              ),
+                              onPressed: () => onArrow(sheetContext, balance),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -3430,11 +3428,15 @@ class _BalanceHero extends StatelessWidget {
     required this.user,
     required this.dashboard,
     required this.analytics,
+    required this.avgMonthlySpend,
+    required this.ytdSpend,
   });
 
   final User user;
   final DashboardData dashboard;
   final AnalyticsData analytics;
+  final double avgMonthlySpend;
+  final double ytdSpend;
 
   @override
   Widget build(BuildContext context) {
@@ -3511,8 +3513,8 @@ class _BalanceHero extends StatelessWidget {
               ),
               Expanded(
                 child: _HeroMetric(
-                  label: 'Average expense',
-                  value: money(analytics.avgExpense),
+                  label: 'YTD spend',
+                  value: money(ytdSpend),
                 ),
               ),
             ],
@@ -3612,7 +3614,19 @@ class _StatCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(label, style: Theme.of(context).textTheme.bodySmall),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(label, style: Theme.of(context).textTheme.bodySmall),
+                  ),
+                  if (onTap != null)
+                    Icon(
+                      Icons.chevron_right_rounded,
+                      size: 18,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
+                    ),
+                ],
+              ),
               const SizedBox(height: 8),
               Text(
                 value,
@@ -3672,9 +3686,11 @@ class _BudgetCardState extends State<_BudgetCard> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'Monthly Budget',
-                        style: TextStyle(
+                      Text(
+                        g != null
+                            ? '${_formatMonth(g.month)} Budget'
+                            : '${_formatMonth(DateTime.now().toIso8601String().substring(0, 7))} Budget',
+                        style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w800,
                         ),
@@ -4095,6 +4111,490 @@ class _BudgetFormOverlayState extends State<_BudgetFormOverlay> {
   }
 }
 
+
+
+// ── Owed to person page ────────────────────────────────────────────────────
+
+class _OwedToPersonPage extends StatefulWidget {
+  const _OwedToPersonPage({
+    required this.balance,
+    required this.controller,
+    required this.onPaymentSheet,
+  });
+
+  final CounterpartyBalance balance;
+  final AppController controller;
+  final Future<void> Function(BuildContext, Expense) onPaymentSheet;
+
+  @override
+  State<_OwedToPersonPage> createState() => _OwedToPersonPageState();
+}
+
+class _OwedToPersonPageState extends State<_OwedToPersonPage> {
+  final Set<String> _selected = {};
+
+  List<Expense> get _openExpenses => widget.controller.expenses
+      .where((e) =>
+          e.paidById == widget.balance.id &&
+          e.userPaymentStatus != 'paid' &&
+          e.userOwes > 0)
+      .toList();
+
+  bool get _allSelected =>
+      _openExpenses.isNotEmpty &&
+      _openExpenses.every((e) => _selected.contains(e.id));
+
+  double get _selectedTotal => _openExpenses
+      .where((e) => _selected.contains(e.id))
+      .fold(0.0, (sum, e) => sum + (e.userOwes - e.userPaid));
+
+  void _toggleAll() {
+    setState(() {
+      if (_allSelected) {
+        _selected.clear();
+      } else {
+        _selected.addAll(_openExpenses.map((e) => e.id));
+      }
+    });
+  }
+
+  Future<void> _paySelected(BuildContext context) async {
+    final toPayIds = Set<String>.from(_selected);
+    final toPay =
+        _openExpenses.where((e) => toPayIds.contains(e.id)).toList();
+    if (toPay.isEmpty) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+
+    for (final expense in toPay) {
+      await widget.onPaymentSheet(context, expense);
+      if (!mounted) return;
+    }
+
+    setState(() => _selected.removeAll(toPayIds));
+
+    if (_openExpenses.isEmpty && mounted) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('All settled up!')),
+      );
+      navigator.pop();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final expenses = _openExpenses;
+    final balance = widget.balance;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('You owe ${balance.name}'),
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+        systemOverlayStyle: Theme.of(context).brightness == Brightness.dark
+            ? SystemUiOverlayStyle.light
+            : SystemUiOverlayStyle.dark,
+      ),
+      body: expenses.isEmpty
+          ? const Center(child: Text('Nothing open — all settled!'))
+          : Column(
+              children: [
+                // Header card
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                  child: Card(
+                    margin: EdgeInsets.zero,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Row(
+                        children: [
+                          _ProfileAvatar(
+                            initials: balance.initials,
+                            avatarColor: balance.avatarColor,
+                            avatarEmoji: balance.avatarEmoji,
+                            radius: 24,
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  balance.name,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                                Text(
+                                  'Total owed: ${money(balance.amount)}',
+                                  style: const TextStyle(
+                                    color: AppTheme.red,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                // Select all row
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                  child: Row(
+                    children: [
+                      Checkbox(
+                        value: _allSelected,
+                        onChanged: (_) => _toggleAll(),
+                        activeColor: AppTheme.teal,
+                      ),
+                      const Text(
+                        'Select all',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ),
+                ),
+                // Expense list
+                Expanded(
+                  child: ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 100),
+                    itemCount: expenses.length,
+                    itemBuilder: (context, i) {
+                      final expense = expenses[i];
+                      final remaining = expense.userOwes - expense.userPaid;
+                      final checked = _selected.contains(expense.id);
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        child: CheckboxListTile(
+                          value: checked,
+                          activeColor: AppTheme.teal,
+                          onChanged: (_) => setState(() {
+                            if (checked) {
+                              _selected.remove(expense.id);
+                            } else {
+                              _selected.add(expense.id);
+                            }
+                          }),
+                          title: Text(
+                            expense.description,
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          subtitle: Text(
+                            '${expense.groupName} • ${expense.category} • ${formatDate(expense.expenseDate)}',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                          secondary: Text(
+                            money(remaining),
+                            style: const TextStyle(
+                              color: AppTheme.red,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 15,
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+      // Pay button anchored to bottom
+      bottomNavigationBar: expenses.isEmpty
+          ? null
+          : SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                child: FilledButton(
+                  onPressed: _selected.isEmpty
+                      ? null
+                      : () => _paySelected(context),
+                  child: Text(
+                    _selected.isEmpty
+                        ? 'Select expenses to pay'
+                        : 'Pay selected (${money(_selectedTotal)})',
+                  ),
+                ),
+              ),
+            ),
+    );
+  }
+}
+
+// ── Recent expenses card ───────────────────────────────────────────────────
+
+class _RecentExpensesCard extends StatelessWidget {
+  const _RecentExpensesCard({
+    required this.controller,
+    required this.userId,
+    required this.onPaymentSheet,
+  });
+
+  final AppController controller;
+  final String userId;
+  final Future<void> Function(BuildContext, Expense) onPaymentSheet;
+
+  double _userShare(Expense e) {
+    if (e.groupId == 'self') return e.amount;
+    final split = e.splits.firstWhere(
+      (s) => s.userId == userId,
+      orElse: () => ExpenseSplit(userId: '', amount: 0),
+    );
+    return split.amount;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final sorted = [...controller.expenses]
+      ..sort((a, b) => b.expenseDate.compareTo(a.expenseDate));
+    final top3 = sorted.take(3).toList();
+    final hasMore = sorted.length > 3;
+
+    if (sorted.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Recent Expenses',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w800,
+                fontSize: 18,
+              ),
+            ),
+            const SizedBox(height: 12),
+            ...top3.map((expense) {
+              final share = _userShare(expense);
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: () => onPaymentSheet(context, expense),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              expense.description,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 14,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              '${expense.groupId == 'self' ? 'Personal' : expense.groupName} • ${formatDate(expense.expenseDate)}',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        money(share),
+                        style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 15,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+            if (hasMore) ...[
+              const Divider(height: 1),
+              const SizedBox(height: 8),
+              InkWell(
+                borderRadius: BorderRadius.circular(6),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => _MyExpensesPage(
+                      controller: controller,
+                      userId: userId,
+                    ),
+                  ),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    Text(
+                      'See more',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.primary,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Icon(
+                      Icons.arrow_forward_rounded,
+                      size: 16,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── My expenses page ───────────────────────────────────────────────────────
+
+class _MyExpensesPage extends StatelessWidget {
+  const _MyExpensesPage({required this.controller, required this.userId});
+
+  final AppController controller;
+  final String userId;
+
+  double _userShare(Expense e) {
+    if (e.groupId == 'self') return e.amount;
+    final split = e.splits.firstWhere(
+      (s) => s.userId == userId,
+      orElse: () => ExpenseSplit(userId: '', amount: 0),
+    );
+    return split.amount;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final sorted = [...controller.expenses]
+      ..sort((a, b) => b.expenseDate.compareTo(a.expenseDate));
+
+    final byMonth = <String, List<Expense>>{};
+    for (final e in sorted) {
+      final month = e.expenseDate.length >= 7
+          ? e.expenseDate.substring(0, 7)
+          : 'Unknown';
+      byMonth.putIfAbsent(month, () => []).add(e);
+    }
+    final sortedMonths = byMonth.keys.toList()
+      ..sort((a, b) => b.compareTo(a));
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('My Expenses'),
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+        systemOverlayStyle: Theme.of(context).brightness == Brightness.dark
+            ? SystemUiOverlayStyle.light
+            : SystemUiOverlayStyle.dark,
+      ),
+      body: sorted.isEmpty
+          ? const Center(child: Text('No expenses yet.'))
+          : ListView.builder(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+              itemCount: sortedMonths.length,
+              itemBuilder: (context, index) {
+                final month = sortedMonths[index];
+                final items = byMonth[month]!;
+                final monthTotal = items.fold(
+                  0.0,
+                  (sum, e) => sum + _userShare(e),
+                );
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Card(
+                    margin: EdgeInsets.zero,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  _formatMonth(month),
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.primary,
+                                  ),
+                                ),
+                              ),
+                              Text(
+                                money(monthTotal),
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.primary,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          const Divider(height: 1),
+                          ...items.map((expense) {
+                            final share = _userShare(expense);
+                            return Padding(
+                              padding: const EdgeInsets.only(top: 12),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          expense.description,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 14,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          '${expense.groupId == 'self' ? 'Personal' : expense.groupName} • ${expense.category} • ${formatDate(expense.expenseDate)}',
+                                          style: Theme.of(
+                                            context,
+                                          ).textTheme.bodySmall,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    money(share),
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 15,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+    );
+  }
+}
+
 // ── Group spending section ─────────────────────────────────────────────────
 
 class _GroupSpendingSection extends StatelessWidget {
@@ -4399,159 +4899,6 @@ class _GroupExpensesPage extends StatelessWidget {
   }
 }
 
-class _AllExpensesPage extends StatelessWidget {
-  const _AllExpensesPage({
-    required this.controller,
-    required this.onPaymentSheet,
-  });
-
-  final AppController controller;
-  final Future<void> Function(BuildContext, Expense) onPaymentSheet;
-
-  @override
-  Widget build(BuildContext context) {
-    final unpaid = controller.expenses
-        .where((e) => e.userPaymentStatus == 'open')
-        .toList();
-
-    // Group remaining expenses by month
-    final paid = controller.expenses
-        .where((e) => e.userPaymentStatus != 'open')
-        .toList();
-    final byMonth = <String, List<Expense>>{};
-    for (final expense in paid) {
-      final month = expense.expenseDate.length >= 7
-          ? expense.expenseDate.substring(0, 7)
-          : 'Unknown';
-      byMonth.putIfAbsent(month, () => []).add(expense);
-    }
-    final sortedMonths = byMonth.keys.toList()..sort((a, b) => b.compareTo(a));
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('All expenses'),
-        backgroundColor: AppTheme.slate,
-        foregroundColor: AppTheme.surfaceAlt,
-        iconTheme: const IconThemeData(color: AppTheme.surfaceAlt),
-        systemOverlayStyle: SystemUiOverlayStyle.light,
-        titleTextStyle: const TextStyle(
-          color: AppTheme.surfaceAlt,
-          fontSize: 22,
-          fontWeight: FontWeight.w800,
-          letterSpacing: -0.4,
-        ),
-      ),
-      body: ListView(
-        padding: EdgeInsets.fromLTRB(
-          16,
-          16,
-          16,
-          16 + MediaQuery.of(context).padding.bottom,
-        ),
-        children: [
-          if (unpaid.isNotEmpty) ...[
-            Card(
-              margin: EdgeInsets.zero,
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.pending_actions_rounded,
-                          color: AppTheme.amber,
-                          size: 18,
-                        ),
-                        const SizedBox(width: 8),
-                        const Text(
-                          'Needs payment',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        const Spacer(),
-                        Text(
-                          '${unpaid.length} pending',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    ...unpaid.map(
-                      (expense) => _ExpenseTile(
-                        expense: expense,
-                        onPaymentSheet: onPaymentSheet,
-                        controller: controller,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-          ],
-          if (sortedMonths.isNotEmpty)
-            Card(
-              margin: EdgeInsets.zero,
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'All expenses',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    ...sortedMonths.map((month) {
-                      final items = byMonth[month]!;
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.only(top: 8, bottom: 6),
-                            child: Text(
-                              _formatMonth(month),
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                                color: Theme.of(context).colorScheme.primary,
-                              ),
-                            ),
-                          ),
-                          const Divider(height: 1),
-                          ...items.map(
-                            (expense) => _ExpenseTile(
-                              expense: expense,
-                              onPaymentSheet: onPaymentSheet,
-                              controller: controller,
-                            ),
-                          ),
-                        ],
-                      );
-                    }),
-                  ],
-                ),
-              ),
-            ),
-          if (unpaid.isEmpty && sortedMonths.isEmpty)
-            const Center(
-              child: Padding(
-                padding: EdgeInsets.symmetric(vertical: 40),
-                child: Text('No expenses yet.'),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
 
 String _formatMonth(String ym) {
   if (ym.length < 7) return ym;
@@ -4575,82 +4922,6 @@ String _formatMonth(String ym) {
   return '${months[m]} ${parts[0]}';
 }
 
-class _ExpenseTile extends StatelessWidget {
-  const _ExpenseTile({
-    required this.expense,
-    required this.onPaymentSheet,
-    required this.controller,
-  });
-
-  final Expense expense;
-  final Future<void> Function(BuildContext, Expense) onPaymentSheet;
-  final AppController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    final canMarkPaid = expense.userPaymentStatus == 'open';
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      leading: CircleAvatar(
-        backgroundColor: const Color(0xFFF0FDFA),
-        foregroundColor: AppTheme.tealDark,
-        child: const Icon(Icons.receipt_long_rounded),
-      ),
-      title: Text(expense.description),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '${expense.groupName} • ${expense.category} • ${formatDate(expense.expenseDate)}',
-          ),
-          const SizedBox(height: 6),
-          Wrap(
-            spacing: 8,
-            runSpacing: 6,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              Chip(
-                visualDensity: VisualDensity.compact,
-                label: Text(
-                  expense.settlementStatus == 'paid' ? 'Finished' : 'Open',
-                ),
-              ),
-              if (expense.userPaymentStatus == 'paid')
-                const Chip(
-                  visualDensity: VisualDensity.compact,
-                  label: Text('You paid'),
-                ),
-              if (canMarkPaid)
-                TextButton.icon(
-                  onPressed: controller.loading
-                      ? null
-                      : () => onPaymentSheet(context, expense),
-                  icon: const Icon(Icons.payments_rounded),
-                  label: Text(
-                    'Pay ${money(expense.userOwes - expense.userPaid)}',
-                  ),
-                ),
-            ],
-          ),
-        ],
-      ),
-      trailing: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          Text(
-            money(expense.amount),
-            style: const TextStyle(fontWeight: FontWeight.w800),
-          ),
-          Text(
-            formatDate(expense.expenseDate),
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 class _SectionCard extends StatelessWidget {
   const _SectionCard({

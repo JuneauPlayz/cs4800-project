@@ -302,6 +302,7 @@ class Expense {
     required this.description,
     required this.amount,
     required this.category,
+    required this.paidById,
     required this.paidByName,
     required this.expenseDate,
     required this.splitMethod,
@@ -321,6 +322,7 @@ class Expense {
       description: _string(json['description']),
       amount: _double(json['amount']),
       category: _string(json['category']),
+      paidById: _string(json['paidBy']),
       paidByName: _string(json['paidByName']),
       expenseDate: _string(json['expenseDate']),
       splitMethod: _string(json['splitMethod']),
@@ -339,6 +341,7 @@ class Expense {
   final String description;
   final double amount;
   final String category;
+  final String paidById;
   final String paidByName;
   final String expenseDate;
   final String splitMethod;
