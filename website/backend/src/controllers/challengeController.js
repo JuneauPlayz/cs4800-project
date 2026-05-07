@@ -5,20 +5,20 @@ export function list(req, res) {
 }
 
 export function create(req, res) {
-  const { groupId, name, description, goal, endDate } = req.body ?? {};
-  if (!groupId || !name || !description || !goal) {
-    return res.status(400).json({ message: 'groupId, name, description, and goal are required.' });
+  const { groupId, name, description, goal, endDate, startDate, type } = req.body ?? {};
+  const challengeType = type === 'spending_goal' ? 'spending_goal' : 'group_goal';
+  if (!groupId || !name || !goal) {
+    return res.status(400).json({ message: 'groupId, name, and goal are required.' });
   }
   const normalizedName = String(name).trim();
-  const normalizedDescription = String(description).trim();
-  if (!normalizedName || !normalizedDescription) {
-    return res.status(400).json({ message: 'Challenge name and description are required.' });
+  if (!normalizedName) {
+    return res.status(400).json({ message: 'Challenge name is required.' });
   }
   const goalValue = Number(goal);
   if (!Number.isFinite(goalValue) || goalValue <= 0) {
     return res.status(400).json({ message: 'A positive goal amount is required.' });
   }
-  const challenge = createChallenge({ userId: req.user.id, groupId, name: normalizedName, description: normalizedDescription, goal: goalValue, endDate });
+  const challenge = createChallenge({ userId: req.user.id, groupId, name: normalizedName, description: description || '', goal: goalValue, endDate, startDate, type: challengeType });
   if (!challenge) return res.status(403).json({ message: 'You are not a member of this group.' });
   return res.status(201).json({ challenge });
 }

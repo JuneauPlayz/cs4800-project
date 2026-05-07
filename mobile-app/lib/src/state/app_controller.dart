@@ -314,6 +314,7 @@ class AppController extends ChangeNotifier {
     required String description,
     required double goal,
     String endDate = '',
+    String startDate = '',
   }) async {
     final token = _requireToken();
     loading = true;
@@ -327,6 +328,7 @@ class AppController extends ChangeNotifier {
         description: description,
         goal: goal,
         endDate: endDate,
+        startDate: startDate,
       );
       await refreshAll(showLoader: false);
     } catch (error) {
@@ -336,75 +338,6 @@ class AppController extends ChangeNotifier {
       loading = false;
       notifyListeners();
     }
-  }
-
-  Future<void> contributeToChallenge({
-    required String challengeId,
-    required double amount,
-  }) async {
-    final token = _requireToken();
-    final previousChallengeData = challengeData;
-    errorMessage = null;
-    _addLocalContribution(challengeId: challengeId, amount: amount);
-    notifyListeners();
-    try {
-      final updatedChallenge = await apiClient.contributeToChallenge(
-        token,
-        challengeId: challengeId,
-        amount: amount,
-      );
-      _replaceChallenge(updatedChallenge);
-      notifyListeners();
-    } catch (error) {
-      challengeData = previousChallengeData;
-      _setError(error);
-      notifyListeners();
-      rethrow;
-    }
-  }
-
-  void _addLocalContribution({
-    required String challengeId,
-    required double amount,
-  }) {
-    final data = challengeData;
-    final currentUser = user;
-    if (data == null || currentUser == null) return;
-
-    final now = DateTime.now().toIso8601String();
-    final nextChallenges = data.challenges.map((challenge) {
-      if (challenge.id != challengeId) return challenge;
-
-      return Challenge(
-        id: challenge.id,
-        groupId: challenge.groupId,
-        groupName: challenge.groupName,
-        name: challenge.name,
-        description: challenge.description,
-        goal: challenge.goal,
-        current: challenge.current + amount,
-        unit: challenge.unit,
-        color: challenge.color,
-        startDate: challenge.startDate,
-        endDate: challenge.endDate,
-        createdByName: challenge.createdByName,
-        contributions: [
-          ChallengeContribution(
-            id: 'local-$now',
-            userId: currentUser.id,
-            amount: amount,
-            createdAt: now,
-            name: currentUser.name,
-            initials: currentUser.initials,
-            avatarColor: currentUser.avatarColor,
-            avatarEmoji: currentUser.avatarEmoji,
-          ),
-          ...challenge.contributions,
-        ],
-      );
-    }).toList();
-
-    _setChallenges(nextChallenges);
   }
 
   Future<void> respondToInvite({
@@ -674,39 +607,6 @@ class AppController extends ChangeNotifier {
   void dispose() {
     _stopPolling();
     super.dispose();
-  }
-
-  void _replaceChallenge(Challenge updatedChallenge) {
-    final data = challengeData;
-    if (data == null) return;
-
-    final nextChallenges = data.challenges
-        .map(
-          (challenge) => challenge.id == updatedChallenge.id
-              ? updatedChallenge
-              : challenge,
-        )
-        .toList();
-
-    _setChallenges(nextChallenges);
-  }
-
-  void _setChallenges(List<Challenge> nextChallenges) {
-    challengeData = ChallengeData(
-      challenges: nextChallenges,
-      rings: nextChallenges
-          .take(3)
-          .map(
-            (challenge) => ChallengeRing(
-              id: challenge.id,
-              label: challenge.name,
-              value: challenge.current,
-              max: challenge.goal,
-              color: challenge.color,
-            ),
-          )
-          .toList(),
-    );
   }
 
   String _requireToken() {

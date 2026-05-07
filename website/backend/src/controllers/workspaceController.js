@@ -9,6 +9,7 @@ import {
   getSettings,
   markNotificationRead,
   reserveAiChatSlot,
+  updateUserProfile,
   upsertSettings
 } from '../services/index.js';
 
@@ -18,6 +19,12 @@ export function health(_req, res) {
 
 export function me(req, res) {
   res.json({ user: req.user, invites: getPendingInvitesForUser(req.user) });
+}
+
+export function updateMe(req, res) {
+  const { avatarEmoji } = req.body ?? {};
+  const updated = updateUserProfile(req.user.id, { avatarEmoji });
+  res.json({ user: updated });
 }
 
 export function dashboard(req, res) {

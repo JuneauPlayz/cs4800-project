@@ -99,7 +99,11 @@ export function calculateBalances(userId) {
 
   const relatedUserIds = [...new Set(groups.flatMap((group) => group.members.map((member) => member.id)))];
   const userRows = relatedUserIds.length
-    ? db.prepare(`SELECT id, name, initials, avatar_color as avatarColor, avatar_emoji as avatarEmoji FROM users WHERE id IN (${relatedUserIds.map(() => '?').join(',')})`).all(...relatedUserIds)
+    ? db.prepare(`
+        SELECT u.id, u.name, u.initials, u.avatar_color as avatarColor, u.avatar_emoji as avatarEmoji
+        FROM users u
+        WHERE u.id IN (${relatedUserIds.map(() => '?').join(',')})
+      `).all(...relatedUserIds)
     : [];
 
   const summary = Object.fromEntries(userRows.map((user) => [user.id, { ...user, paid: 0, owed: 0, net: 0 }]));

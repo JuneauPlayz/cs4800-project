@@ -469,7 +469,7 @@ TOTAL \$84.80
                 startDate: '2026-04-01',
                 endDate: '2026-04-30',
                 createdByName: 'Jordan Lee',
-                contributions: const [],
+                memberProgress: const [],
               ),
             ],
           );

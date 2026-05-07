@@ -524,7 +524,7 @@ class Challenge {
     required this.startDate,
     required this.endDate,
     required this.createdByName,
-    required this.contributions,
+    required this.memberProgress,
   });
 
   factory Challenge.fromJson(Map<String, dynamic> json) {
@@ -541,9 +541,9 @@ class Challenge {
       startDate: _string(json['startDate']),
       endDate: _string(json['endDate']),
       createdByName: _string(json['createdByName']),
-      contributions: _list(
-        json['contributions'],
-        (item) => ChallengeContribution.fromJson(item),
+      memberProgress: _list(
+        json['memberProgress'],
+        (item) => ChallengeMemberProgress.fromJson(item),
       ),
     );
   }
@@ -560,42 +560,42 @@ class Challenge {
   final String startDate;
   final String endDate;
   final String createdByName;
-  final List<ChallengeContribution> contributions;
+  final List<ChallengeMemberProgress> memberProgress;
 }
 
-class ChallengeContribution {
-  ChallengeContribution({
-    required this.id,
+class ChallengeMemberProgress {
+  ChallengeMemberProgress({
     required this.userId,
-    required this.amount,
-    required this.createdAt,
     required this.name,
     required this.initials,
     required this.avatarColor,
     required this.avatarEmoji,
+    required this.spent,
+    required this.goal,
   });
 
-  factory ChallengeContribution.fromJson(Map<String, dynamic> json) {
-    return ChallengeContribution(
-      id: _string(json['id']),
+  factory ChallengeMemberProgress.fromJson(Map<String, dynamic> json) {
+    return ChallengeMemberProgress(
       userId: _string(json['userId']),
-      amount: _double(json['amount']),
-      createdAt: _string(json['createdAt']),
       name: _string(json['name']),
       initials: _string(json['initials']),
       avatarColor: _string(json['avatarColor']),
       avatarEmoji: _string(json['avatarEmoji']),
+      spent: _double(json['spent']),
+      goal: _double(json['goal']),
     );
   }
 
-  final String id;
   final String userId;
-  final double amount;
-  final String createdAt;
   final String name;
   final String initials;
   final String avatarColor;
   final String avatarEmoji;
+  final double spent;
+  final double goal;
+
+  double get ratio => goal <= 0 ? 0 : (spent / goal).clamp(0.0, 1.0);
+  bool get overBudget => spent > goal;
 }
 
 class ChallengeRing {

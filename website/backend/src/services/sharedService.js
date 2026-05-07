@@ -40,7 +40,19 @@ export function ensureSettings(userId) {
 }
 
 export function getUserById(userId) {
-  return db.prepare('SELECT id, name, email, initials, avatar_color as avatarColor, avatar_emoji as avatarEmoji, created_at as createdAt FROM users WHERE id = ?').get(userId);
+  return db.prepare(`
+    SELECT u.id, u.name, u.email, u.initials, u.avatar_color as avatarColor, u.avatar_emoji as avatarEmoji,
+           u.created_at as createdAt
+    FROM users u
+    WHERE u.id = ?
+  `).get(userId);
+}
+
+export function updateUserProfile(userId, { avatarEmoji } = {}) {
+  if (avatarEmoji !== undefined) {
+    db.prepare('UPDATE users SET avatar_emoji = ? WHERE id = ?').run(avatarEmoji, userId);
+  }
+  return getUserById(userId);
 }
 
 export function getUserByEmail(email) {

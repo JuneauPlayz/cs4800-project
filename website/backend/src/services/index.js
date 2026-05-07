@@ -5,7 +5,7 @@ export { getExpenses, createExpense, createSettlement, calculateBalances } from 
 export { getVotes, respondToVote, undoVote } from './voteService.js';
 export { getAnalytics } from './analyticsService.js';
 export { getChallenges, createChallenge, contributeToChallenge } from './challengeService.js';
-export { getNotifications, markNotificationRead, getSettings, upsertSettings, getUserByEmail, getUserById, requireMembership } from './sharedService.js';
+export { getNotifications, markNotificationRead, getSettings, upsertSettings, getUserByEmail, getUserById, updateUserProfile, requireMembership } from './sharedService.js';
 export { generateAiReply } from './assistantService.js';
 export { buildAssistantActionProposal, executeAssistantAction } from './assistantActionService.js';
 export { reserveAiChatSlot } from './chatLimitService.js';

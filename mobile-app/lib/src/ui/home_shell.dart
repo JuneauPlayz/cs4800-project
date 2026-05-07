@@ -159,7 +159,7 @@ class _HomeShellState extends State<HomeShell> {
     'Groups',
     'Add Expense',
     'Voting',
-    'Challenges',
+    'Goals',
     'Settings',
   ];
 
@@ -2371,22 +2371,13 @@ class _ChallengesTab extends StatelessWidget {
                                 _NewChallengeSheet(controller: controller),
                           ),
                     icon: const Icon(Icons.add_rounded),
-                    label: const Text('New challenge'),
+                    label: const Text('New goal'),
                   ),
                 ],
               ),
             ),
           ),
           const SizedBox(height: 16),
-          if (data.rings.isNotEmpty) ...[
-            _SectionTitle(
-              title: 'Progress snapshot',
-              subtitle: 'Top active challenge progress.',
-            ),
-            const SizedBox(height: 10),
-            ...data.rings.map((ring) => _ChallengeRingTile(ring: ring)),
-            const SizedBox(height: 16),
-          ],
           _SectionTitle(
             title: 'Active challenges',
             subtitle: 'Contribute when your group makes progress.',
@@ -2412,52 +2403,6 @@ class _ChallengesTab extends StatelessWidget {
   }
 }
 
-class _ChallengeRingTile extends StatelessWidget {
-  const _ChallengeRingTile({required this.ring});
-
-  final ChallengeRing ring;
-
-  @override
-  Widget build(BuildContext context) {
-    final ratio = ring.max <= 0 ? 0.0 : (ring.value / ring.max).clamp(0.0, 1.0);
-    final color = colorFromHex(ring.color);
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            SizedBox(
-              width: 54,
-              height: 54,
-              child: CircularProgressIndicator(
-                value: ratio,
-                strokeWidth: 7,
-                backgroundColor: const Color(0xFFE2E8F0),
-                valueColor: AlwaysStoppedAnimation<Color>(color),
-              ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    ring.label,
-                    style: const TextStyle(fontWeight: FontWeight.w800),
-                  ),
-                  const SizedBox(height: 4),
-                  Text('${money(ring.value)} of ${money(ring.max)}'),
-                ],
-              ),
-            ),
-            Text('${(ratio * 100).round()}%'),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _ChallengeCard extends StatefulWidget {
   const _ChallengeCard({
     super.key,
@@ -2473,26 +2418,11 @@ class _ChallengeCard extends StatefulWidget {
 }
 
 class _ChallengeCardState extends State<_ChallengeCard> {
-  final _amountController = TextEditingController();
-  String? _errorText;
-
-  @override
-  void dispose() {
-    _amountController.dispose();
-    super.dispose();
-  }
-
   @override
   Widget build(BuildContext context) {
     final challenge = widget.challenge;
-    final ratio = challenge.goal <= 0
-        ? 0.0
-        : (challenge.current / challenge.goal).clamp(0.0, 1.0);
-    final remaining = (challenge.goal - challenge.current).clamp(
-      0.0,
-      double.infinity,
-    );
     final color = colorFromHex(challenge.color);
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: Card(
@@ -2501,12 +2431,13 @@ class _ChallengeCardState extends State<_ChallengeCard> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Header
               Row(
                 children: [
                   CircleAvatar(
                     backgroundColor: color.withValues(alpha: 0.14),
                     foregroundColor: color,
-                    child: const Icon(Icons.emoji_events_rounded),
+                    child: const Icon(Icons.savings_rounded),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -2530,97 +2461,40 @@ class _ChallengeCardState extends State<_ChallengeCard> {
                 ],
               ),
               if (challenge.description.isNotEmpty) ...[
-                const SizedBox(height: 12),
+                const SizedBox(height: 10),
                 Text(challenge.description),
               ],
-              const SizedBox(height: 14),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(999),
-                child: LinearProgressIndicator(
-                  minHeight: 10,
-                  value: ratio,
-                  backgroundColor: const Color(0xFFE2E8F0),
-                  valueColor: AlwaysStoppedAnimation<Color>(color),
-                ),
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  Text(
-                    '${money(challenge.current)} / ${money(challenge.goal)}',
-                    style: const TextStyle(fontWeight: FontWeight.w800),
-                  ),
-                  const Spacer(),
-                  Text('${money(remaining)} left'),
-                ],
-              ),
               if (challenge.endDate.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Text(
-                  'Ends ${formatDate(challenge.endDate)}',
-                  style: Theme.of(context).textTheme.bodySmall,
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Icon(Icons.calendar_today_rounded,
+                        size: 13,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${challenge.startDate.isNotEmpty ? '${formatDate(challenge.startDate)} – ' : ''}${formatDate(challenge.endDate)}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
                 ),
               ],
-              if (challenge.contributions.isNotEmpty) ...[
-                const SizedBox(height: 14),
+              const SizedBox(height: 16),
+              // Spending goal: per-member progress circles
+              ...[
                 Text(
-                  'Recent contributions',
+                  'Member spending — max ${money(challenge.goal)} each',
                   style: Theme.of(context).textTheme.titleSmall,
                 ),
-                const SizedBox(height: 6),
-                ...challenge.contributions.take(3).map((contribution) {
-                  return ListTile(
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    leading: _ProfileAvatar(
-                      initials: contribution.initials,
-                      avatarColor: contribution.avatarColor,
-                      avatarEmoji: contribution.avatarEmoji,
-                      radius: 16,
-                    ),
-                    title: Text(contribution.name),
-                    trailing: Text(money(contribution.amount)),
-                  );
-                }),
+                const SizedBox(height: 14),
+                Wrap(
+                  spacing: 16,
+                  runSpacing: 16,
+                  children: challenge.memberProgress
+                      .map((m) => _MemberSpendRing(member: m, color: color))
+                      .toList(),
+                ),
               ],
-              const SizedBox(height: 14),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _amountController,
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      decoration: InputDecoration(
-                        labelText: 'Contribution amount',
-                        prefixText: '\$',
-                        errorText: _errorText,
-                      ),
-                      onChanged: (_) {
-                        if (_errorText != null) {
-                          setState(() => _errorText = null);
-                        }
-                      },
-                      onSubmitted: (_) => _submitContribution(),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  SizedBox(
-                    width: 96,
-                    height: 54,
-                    child: FilledButton.icon(
-                      onPressed: _submitContribution,
-                      style: FilledButton.styleFrom(
-                        minimumSize: Size.zero,
-                        padding: const EdgeInsets.symmetric(horizontal: 14),
-                      ),
-                      icon: const Icon(Icons.add_rounded),
-                      label: const Text('Add'),
-                    ),
-                  ),
-                ],
-              ),
             ],
           ),
         ),
@@ -2628,36 +2502,71 @@ class _ChallengeCardState extends State<_ChallengeCard> {
     );
   }
 
-  Future<void> _submitContribution() async {
-    final amount = double.tryParse(_amountController.text.trim());
-    if (amount == null || amount <= 0) {
-      setState(() => _errorText = 'Enter a positive amount');
-      return;
-    }
+}
 
-    FocusManager.instance.primaryFocus?.unfocus();
-    _amountController.clear();
-    setState(() => _errorText = null);
+class _MemberSpendRing extends StatelessWidget {
+  const _MemberSpendRing({required this.member, required this.color});
 
-    try {
-      await widget.controller.contributeToChallenge(
-        challengeId: widget.challenge.id,
-        amount: amount,
-      );
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Contribution added.')));
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            widget.controller.errorMessage ?? 'Unable to save contribution.',
+  final ChallengeMemberProgress member;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final ringColor = member.overBudget ? AppTheme.red : color;
+    return SizedBox(
+      width: 80,
+      child: Column(
+        children: [
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              SizedBox(
+                width: 64,
+                height: 64,
+                child: CircularProgressIndicator(
+                  value: member.ratio,
+                  strokeWidth: 5,
+                  backgroundColor:
+                      Theme.of(context).colorScheme.surfaceContainerHighest,
+                  valueColor: AlwaysStoppedAnimation<Color>(ringColor),
+                ),
+              ),
+              _ProfileAvatar(
+                initials: member.initials,
+                avatarColor: member.avatarColor,
+                avatarEmoji: member.avatarEmoji,
+                radius: 24,
+              ),
+            ],
           ),
-        ),
-      );
-    }
+          const SizedBox(height: 6),
+          Text(
+            member.name.split(' ').first,
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          Text(
+            money(member.spent),
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: ringColor,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          Text(
+            'of ${money(member.goal)}',
+            style: Theme.of(context)
+                .textTheme
+                .bodySmall
+                ?.copyWith(fontSize: 10),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -2710,7 +2619,7 @@ class _NewChallengeSheetState extends State<_NewChallengeSheet> {
           shrinkWrap: true,
           children: [
             const Text(
-              'New challenge',
+              'New goal',
               style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 16),
@@ -2731,7 +2640,7 @@ class _NewChallengeSheetState extends State<_NewChallengeSheet> {
             const SizedBox(height: 14),
             TextFormField(
               controller: _nameController,
-              decoration: const InputDecoration(labelText: 'Challenge name'),
+              decoration: const InputDecoration(labelText: 'Goal name'),
               validator: (value) =>
                   (value ?? '').trim().isEmpty ? 'Enter a name' : null,
             ),
@@ -2740,9 +2649,10 @@ class _NewChallengeSheetState extends State<_NewChallengeSheet> {
               controller: _descriptionController,
               minLines: 2,
               maxLines: 3,
-              decoration: const InputDecoration(labelText: 'Description'),
-              validator: (value) =>
-                  (value ?? '').trim().isEmpty ? 'Enter a description' : null,
+              decoration: const InputDecoration(
+                labelText: 'Description (optional)',
+              ),
+              validator: (value) => null,
             ),
             const SizedBox(height: 14),
             TextFormField(
@@ -2750,10 +2660,13 @@ class _NewChallengeSheetState extends State<_NewChallengeSheet> {
               keyboardType: const TextInputType.numberWithOptions(
                 decimal: true,
               ),
-              decoration: const InputDecoration(labelText: 'Goal amount'),
+              decoration: const InputDecoration(
+                labelText: 'Max spend per person (\$)',
+                prefixText: '\$',
+              ),
               validator: (value) {
                 final goal = double.tryParse((value ?? '').trim());
-                if (goal == null || goal <= 0) return 'Enter a valid goal';
+                if (goal == null || goal <= 0) return 'Enter a valid amount';
                 return null;
               },
             ),
@@ -2763,12 +2676,12 @@ class _NewChallengeSheetState extends State<_NewChallengeSheet> {
               onTap: _pickEndDate,
               child: InputDecorator(
                 decoration: const InputDecoration(
-                  labelText: 'End date optional',
+                  labelText: 'End date',
                   suffixIcon: Icon(Icons.calendar_today_rounded),
                 ),
                 child: Text(
                   _endDate == null
-                      ? 'No end date'
+                      ? 'Pick a date'
                       : formatDate(_datePayload(_endDate!)),
                 ),
               ),
@@ -2776,7 +2689,7 @@ class _NewChallengeSheetState extends State<_NewChallengeSheet> {
             const SizedBox(height: 18),
             FilledButton(
               onPressed: widget.controller.loading ? null : _submit,
-              child: const Text('Create challenge'),
+              child: const Text('Create goal'),
             ),
           ],
         ),
@@ -2798,18 +2711,22 @@ class _NewChallengeSheetState extends State<_NewChallengeSheet> {
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     try {
+      final today = DateTime.now();
+      final localToday =
+          '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
       await widget.controller.createChallenge(
         groupId: _groupId!,
         name: _nameController.text.trim(),
         description: _descriptionController.text.trim(),
         goal: double.parse(_goalController.text.trim()),
         endDate: _endDate == null ? '' : _datePayload(_endDate!),
+        startDate: localToday,
       );
       if (!mounted) return;
       Navigator.of(context).pop();
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Challenge created.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Spending goal created.')),
+      );
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -2834,6 +2751,11 @@ class _SettingsTab extends StatefulWidget {
 
 class _SettingsTabState extends State<_SettingsTab> {
   SettingsData? _draft;
+
+  @override
+  void initState() {
+    super.initState();
+  }
 
   @override
   void didChangeDependencies() {
@@ -4538,6 +4460,9 @@ class _OwedToPersonPageState extends State<_OwedToPersonPage> {
                   onPressed: _selected.isEmpty
                       ? null
                       : () => _paySelected(context),
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size.fromHeight(48),
+                  ),
                   child: Text(
                     _selected.isEmpty
                         ? 'Select expenses to pay'

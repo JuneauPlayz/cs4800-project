@@ -51,7 +51,7 @@ class ApiClient {
     return User.fromJson(json['user'] as Map<String, dynamic>? ?? const {});
   }
 
-  Future<User> updateMe(String token, {required String avatarEmoji}) async {
+  Future<User> updateMe(String token, {String? avatarEmoji}) async {
     final json = await _request(
       'PUT',
       '/api/me',
@@ -168,6 +168,7 @@ class ApiClient {
     required String description,
     required double goal,
     String endDate = '',
+    String startDate = '',
   }) {
     return _request(
       'POST',
@@ -178,24 +179,10 @@ class ApiClient {
         'name': name,
         'description': description,
         'goal': goal,
+        'type': 'spending_goal',
+        if (startDate.isNotEmpty) 'startDate': startDate,
         if (endDate.isNotEmpty) 'endDate': endDate,
       },
-    );
-  }
-
-  Future<Challenge> contributeToChallenge(
-    String token, {
-    required String challengeId,
-    required double amount,
-  }) async {
-    final json = await _request(
-      'POST',
-      '/api/challenges/$challengeId/contribute',
-      token: token,
-      body: {'amount': amount},
-    );
-    return Challenge.fromJson(
-      json['challenge'] as Map<String, dynamic>? ?? const {},
     );
   }
 

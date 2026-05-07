@@ -10,7 +10,7 @@ export function getChallenges(userId) {
   const rows = db.prepare(`
     SELECT c.id, c.group_id as groupId, c.created_by as createdBy, c.name, c.description, c.goal, c.current,
            c.unit, c.color, c.start_date as startDate, c.end_date as endDate, c.created_at as createdAt,
-           gt.name as groupName, u.name as createdByName
+           c.challenge_type, gt.name as groupName, u.name as createdByName
     FROM challenges c
     JOIN groups_table gt ON gt.id = c.group_id
     JOIN users u ON u.id = c.created_by
@@ -26,21 +26,60 @@ export function getChallenges(userId) {
     ORDER BY cc.created_at DESC
   `);
 
-  const challenges = rows.map((row) => ({ ...row, contributions: contributionStmt.all(row.id) }));
+  const memberSpendStmt = db.prepare(`
+    SELECT COALESCE(SUM(total), 0) as total FROM (
+      SELECT es.amount as total
+      FROM expense_splits es
+      JOIN expenses e ON e.id = es.expense_id
+      WHERE es.user_id = ?
+        AND e.group_id != 'self'
+        AND e.expense_date >= ? AND e.expense_date <= ?
+      UNION ALL
+      SELECT e.amount as total
+      FROM expenses e
+      WHERE e.group_id = 'self'
+        AND e.paid_by = ?
+        AND e.expense_date >= ? AND e.expense_date <= ?
+    )
+  `);
+
+  const challenges = rows.map((row) => {
+    if (row.challenge_type === 'spending_goal') {
+      const members = getMembersByGroup(row.groupId);
+      const startDate = row.startDate || row.createdAt.slice(0, 10);
+      const endDate = row.endDate || '9999-12-31';
+      const memberProgress = members.map((member) => {
+        const spent = memberSpendStmt.get(member.id, startDate, endDate, member.id, startDate, endDate);
+        return {
+          userId: member.id,
+          name: member.name,
+          initials: member.initials,
+          avatarColor: member.avatarColor,
+          avatarEmoji: member.avatarEmoji,
+          spent: Number((spent?.total ?? 0).toFixed(2)),
+          goal: row.goal,
+        };
+      });
+      return { ...row, contributions: [], memberProgress };
+    }
+    return { ...row, contributions: contributionStmt.all(row.id), memberProgress: [] };
+  });
+
   const rings = challenges.slice(0, 3).map((challenge) => ({ id: challenge.id, label: challenge.name, value: challenge.current, max: challenge.goal, color: challenge.color }));
   return { challenges, rings };
 }
 
-export function createChallenge({ userId, groupId, name, description, goal, endDate }) {
+export function createChallenge({ userId, groupId, name, description, goal, endDate, startDate, type = 'group_goal' }) {
   if (!requireMembership(groupId, userId)) return null;
 
   const id = makeId('c');
   const now = new Date().toISOString();
+  const resolvedStartDate = startDate || now.slice(0, 10);
   const count = db.prepare('SELECT COUNT(*) as count FROM challenges').get().count;
   db.prepare(`
-    INSERT INTO challenges (id, group_id, created_by, name, description, goal, current, unit, color, start_date, end_date, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, 0, '$', ?, ?, ?, ?)
-  `).run(id, groupId, userId, name.trim(), description.trim(), Number(goal), challengeColors[count % challengeColors.length], now.slice(0, 10), endDate || null, now);
+    INSERT INTO challenges (id, group_id, created_by, name, description, goal, current, unit, color, start_date, end_date, challenge_type, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, 0, '$', ?, ?, ?, ?, ?)
+  `).run(id, groupId, userId, name.trim(), (description || '').trim(), Number(goal), challengeColors[count % challengeColors.length], resolvedStartDate, endDate || null, type, now);
 
   const group = db.prepare('SELECT name FROM groups_table WHERE id = ?').get(groupId);
   getMembersByGroup(groupId).forEach((member) => {

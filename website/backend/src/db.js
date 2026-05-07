@@ -223,6 +223,7 @@ function bootstrap() {
   ensureColumn('user_payout_profiles', 'cash_note', 'cash_note TEXT');
   ensureColumn('user_payout_profiles', 'preferred_method', "preferred_method TEXT NOT NULL DEFAULT 'cash'");
   ensureColumn('user_payout_profiles', 'updated_at', "updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
+  ensureColumn('challenges', 'challenge_type', "challenge_type TEXT NOT NULL DEFAULT 'group_goal'");
 
   const settlementCols = db.pragma('table_info(settlements)').map((c) => c.name);
   if (settlementCols.includes('payer_id') && settlementCols.includes('payee_id')) {

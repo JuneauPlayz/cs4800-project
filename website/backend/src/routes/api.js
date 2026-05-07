@@ -31,6 +31,7 @@ router.post('/auth/register', authController.register);
 router.use(auth);
 
 router.get('/me', workspaceController.me);
+router.put('/me', workspaceController.updateMe);
 router.get('/dashboard', workspaceController.dashboard);
 
 router.get('/groups', groupController.list);
