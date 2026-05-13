@@ -1,0 +1,315 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>test_plan_and_results_summary</title>
+<style>
+@page { size: Letter; margin: 0.75in 0.85in 0.9in 0.85in; }
+html { font-family: 'Helvetica', 'Arial', sans-serif; font-size: 10.5pt; color: #1a1a1a; }
+body { line-height: 1.45; margin: 0; }
+h1 { font-size: 22pt; color: #0b3d91; margin: 0 0 0.4em 0; page-break-after: avoid; }
+h2 { font-size: 15pt; color: #0b3d91; margin: 1.2em 0 0.3em; border-bottom: 1px solid #ccd6e6; padding-bottom: 0.15em; page-break-after: avoid; }
+h3 { font-size: 12.5pt; color: #163b6b; margin: 1.0em 0 0.25em; page-break-after: avoid; }
+h4 { font-size: 11pt; color: #163b6b; margin: 0.9em 0 0.2em; page-break-after: avoid; }
+p { margin: 0.45em 0; }
+ul, ol { margin: 0.4em 0 0.6em 0; padding-left: 1.3em; }
+li { margin: 0.15em 0; }
+code { font-family: 'Menlo','Consolas',monospace; font-size: 9.5pt; background: #f3f3f6; padding: 1px 4px; border-radius: 3px; }
+pre { background: #f5f7fa; border: 1px solid #e0e6ee; border-radius: 6px; padding: 10px 12px; font-family: 'Menlo','Consolas',monospace; font-size: 9pt; line-height: 1.35; overflow-wrap: break-word; white-space: pre-wrap; page-break-inside: avoid; }
+pre code { background: none; padding: 0; font-size: 9pt; }
+table { border-collapse: collapse; margin: 0.7em 0; font-size: 9.8pt; width: 100%; page-break-inside: avoid; }
+th, td { border: 1px solid #cdd3df; padding: 5px 8px; vertical-align: top; }
+th { background: #eaf0fa; color: #0b3d91; text-align: left; }
+tr:nth-child(even) td { background: #f8fafc; }
+blockquote { border-left: 4px solid #c5d2e6; background: #f5f8fc; margin: 0.6em 0; padding: 0.4em 0.8em; color: #2b3a55; }
+.diagram { margin: 0.8em 0 1.2em 0; padding: 8px; background: #fff; border: 1px solid #e0e6ee; border-radius: 6px; text-align: center; page-break-inside: avoid; }
+.diagram svg { max-width: 100%; height: auto; }
+hr { border: none; border-top: 1px solid #d0d7e2; margin: 1.2em 0; }
+a { color: #0b5cad; text-decoration: none; }
+</style>
+</head><body><h1 id="splitstack-test-plan-and-results-summary">SplitStack Test Plan and Results Summary</h1>
+<p>Version: 1.0<br>
+Date: May 12, 2026<br>
+Related test case specification: <code>docs/splitstack_test_case_specification.md</code></p>
+<h2 id="test-strategy-and-approach">Test Strategy and Approach</h2>
+<p>SplitStack testing combines black-box functional testing, automated lint/build checks, and focused mobile widget/unit tests.</p>
+<p>Primary strategy:</p>
+<ul>
+<li>Validate user-visible behavior against the main use cases.</li>
+<li>Confirm authentication prevents unauthenticated workspace access.</li>
+<li>Verify group and invite workflows across multiple users.</li>
+<li>Verify expense split validation and balance updates.</li>
+<li>Verify above-threshold expenses require voting before affecting balances.</li>
+<li>Verify settlements reduce open payment status.</li>
+<li>Verify receipt OCR extraction and receipt upload behavior.</li>
+<li>Verify analytics, budget, challenge, notification, and assistant flows.</li>
+<li>Run static checks and build checks before final submission.</li>
+</ul>
+<h2 id="test-scope">Test Scope</h2>
+<p>In scope:</p>
+<ul>
+<li>Account registration and login.</li>
+<li>Group creation, editing, deletion, leave group, and invite response.</li>
+<li>Expense entry with equal, percent, custom, and personal split flows.</li>
+<li>Vote creation, approval, decline, and undo behavior.</li>
+<li>Dashboard balances and analytics.</li>
+<li>Settlement recording.</li>
+<li>Challenge creation and contribution.</li>
+<li>Settings and notification read state.</li>
+<li>AI assistant responses and confirmation-required actions.</li>
+<li>Web build/lint and backend lint.</li>
+<li>Existing Flutter tests for mobile UI and receipt parsing.</li>
+</ul>
+<p>Out of scope for this class-project test plan:</p>
+<ul>
+<li>Production load testing over a multi-day window.</li>
+<li>Real payment processor integration testing.</li>
+<li>Public app-store release testing.</li>
+<li>Security penetration testing beyond membership and auth validation.</li>
+</ul>
+<h2 id="test-environment">Test Environment</h2>
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>OS used for documentation validation</td>
+<td>Windows, PowerShell</td>
+</tr>
+<tr>
+<td>Node version observed</td>
+<td><code>v22.20.0</code></td>
+</tr>
+<tr>
+<td>Backend</td>
+<td>Express API on port 3001</td>
+</tr>
+<tr>
+<td>Web frontend</td>
+<td>Vite dev server on port 5173</td>
+</tr>
+<tr>
+<td>Database</td>
+<td>Local SQLite database</td>
+</tr>
+<tr>
+<td>Mobile</td>
+<td>Flutter project under <code>mobile-app/</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="test-data">Test Data</h2>
+<p>Recommended final walkthrough data:</p>
+<ul>
+<li>Register at least two real demo accounts.</li>
+<li>Create one shared group.</li>
+<li>Invite the second account by email.</li>
+<li>Add one below-threshold expense.</li>
+<li>Add one above-threshold expense to trigger a vote.</li>
+<li>Accept or decline the generated vote from all relevant members.</li>
+<li>Record one settlement payment.</li>
+<li>Add at least one personal expense.</li>
+<li>Add one challenge and one contribution.</li>
+<li>Upload at least one receipt image.</li>
+<li>Set a monthly budget with category breakdowns.</li>
+<li>Ask the assistant about balances and budget recommendations.</li>
+</ul>
+<h2 id="entry-criteria">Entry Criteria</h2>
+<ul>
+<li>Backend dependencies installed.</li>
+<li>Frontend dependencies installed.</li>
+<li>Backend starts successfully.</li>
+<li>Frontend starts successfully.</li>
+<li>Test users are available or can be registered.</li>
+<li>Mobile Flutter SDK is installed if mobile test execution is required.</li>
+</ul>
+<h2 id="exit-criteria">Exit Criteria</h2>
+<ul>
+<li>Critical user workflows pass in manual testing.</li>
+<li>Backend lint passes.</li>
+<li>Frontend lint passes.</li>
+<li>Frontend production build passes.</li>
+<li>Mobile test status is recorded.</li>
+<li>Known limitations are documented.</li>
+</ul>
+<h2 id="traceability">Traceability</h2>
+<p>Detailed test cases and traceability matrix are maintained in:</p>
+<pre><code class="language-text">docs/splitstack_test_case_specification.md
+</code></pre>
+<p>That file maps test cases TC-01 through TC-16 to the main use cases UC-01 through UC-11.</p>
+<h2 id="automated-validation-results">Automated Validation Results</h2>
+<p>Commands run during this documentation pass:</p>
+<table>
+<thead>
+<tr>
+<th>Check</th>
+<th>Command</th>
+<th>Result</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Backend lint</td>
+<td><code>npm.cmd run lint</code> from <code>website/backend</code></td>
+<td>Pass</td>
+<td>ESLint completed successfully.</td>
+</tr>
+<tr>
+<td>Frontend lint</td>
+<td><code>npm.cmd run lint</code> from <code>website/frontend</code></td>
+<td>Pass</td>
+<td>ESLint completed successfully.</td>
+</tr>
+<tr>
+<td>Frontend build</td>
+<td><code>npm.cmd run build</code> from <code>website/frontend</code></td>
+<td>Pass</td>
+<td>Production build completed after resolving a local filesystem permission issue; output generated under <code>dist/</code>.</td>
+</tr>
+<tr>
+<td>Flutter availability</td>
+<td><code>where.exe flutter</code></td>
+<td>Not available</td>
+<td>Flutter CLI was not found in the current shell path.</td>
+</tr>
+<tr>
+<td>Mobile tests</td>
+<td><code>flutter test</code> from <code>mobile-app</code></td>
+<td>Not run</td>
+<td>Blocked because Flutter CLI was not available in this environment.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="existing-mobile-test-coverage">Existing Mobile Test Coverage</h2>
+<p>The repository includes Flutter tests in <code>mobile-app/test/</code> that cover:</p>
+<ul>
+<li>SplitStack login screen rendering.</li>
+<li>Receipt OCR amount extraction.</li>
+<li>Receipt OCR date extraction.</li>
+<li>Date picker editability after receipt autofill.</li>
+<li>Payout sheet payment method selection.</li>
+<li>Challenge tab rendering and contribution controls.</li>
+</ul>
+<p>These should be run with:</p>
+<pre><code class="language-bash">cd mobile-app
+flutter test
+</code></pre>
+<h2 id="manual-test-results-summary-template">Manual Test Results Summary Template</h2>
+<p>Use this table during the final walkthrough or before submitting:</p>
+<table>
+<thead>
+<tr>
+<th>Test Case</th>
+<th>Scenario</th>
+<th>Result</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>TC-01</td>
+<td>Register a new user account</td>
+<td>Pending final walkthrough</td>
+<td></td>
+</tr>
+<tr>
+<td>TC-02</td>
+<td>Reject login with invalid credentials</td>
+<td>Pending final walkthrough</td>
+<td></td>
+</tr>
+<tr>
+<td>TC-03</td>
+<td>Create a new group with invite</td>
+<td>Pending final walkthrough</td>
+<td></td>
+</tr>
+<tr>
+<td>TC-04</td>
+<td>Accept a pending group invite</td>
+<td>Pending final walkthrough</td>
+<td></td>
+</tr>
+<tr>
+<td>TC-05</td>
+<td>Add an equal split expense</td>
+<td>Pending final walkthrough</td>
+<td></td>
+</tr>
+<tr>
+<td>TC-06</td>
+<td>Reject invalid percent split expense</td>
+<td>Pending final walkthrough</td>
+<td></td>
+</tr>
+<tr>
+<td>TC-07</td>
+<td>Create vote for expense above threshold</td>
+<td>Pending final walkthrough</td>
+<td></td>
+</tr>
+<tr>
+<td>TC-08</td>
+<td>Approve a pending expense vote</td>
+<td>Pending final walkthrough</td>
+<td></td>
+</tr>
+<tr>
+<td>TC-09</td>
+<td>Decline a pending expense vote</td>
+<td>Pending final walkthrough</td>
+<td></td>
+</tr>
+<tr>
+<td>TC-10</td>
+<td>View dashboard balances</td>
+<td>Pending final walkthrough</td>
+<td></td>
+</tr>
+<tr>
+<td>TC-11</td>
+<td>Record a settlement payment</td>
+<td>Pending final walkthrough</td>
+<td></td>
+</tr>
+<tr>
+<td>TC-12</td>
+<td>Create a savings challenge</td>
+<td>Pending final walkthrough</td>
+<td></td>
+</tr>
+<tr>
+<td>TC-13</td>
+<td>Add contribution to savings challenge</td>
+<td>Pending final walkthrough</td>
+<td></td>
+</tr>
+<tr>
+<td>TC-14</td>
+<td>View analytics</td>
+<td>Pending final walkthrough</td>
+<td></td>
+</tr>
+<tr>
+<td>TC-15</td>
+<td>Update settings and mark notification read</td>
+<td>Pending final walkthrough</td>
+<td></td>
+</tr>
+<tr>
+<td>TC-16</td>
+<td>Ask AI assistant a question</td>
+<td>Pending final walkthrough</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h2 id="known-test-gaps">Known Test Gaps</h2>
+<ul>
+<li>Mobile tests were not executed in this environment because Flutter was unavailable.</li>
+<li>Manual end-to-end test results should be filled in after running the final demo flow.</li>
+<li>Performance and uptime criteria from the requirements document are specified but not fully measured in this local validation pass.</li>
+<li>Gemini-backed assistant behavior requires a valid <code>GEMINI_API_KEY</code>; without it, local fallback behavior should be tested instead.</li>
+</ul></body></html>
