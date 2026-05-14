@@ -146,7 +146,7 @@ flutter run -d <device-id> --dart-define=API_BASE_URL=http://YOUR_IP:3001
 5. Create a group and invite another account by email.
 6. Log in as the invited account and accept the invite.
 7. Add normal and above-threshold expenses.
-8. Approve or decline the generated vote.
+8. Approve or decline the new vote.
 9. Record a settlement payment.
 10. Create a challenge and add contribution progress.
 11. Upload a receipt image.
@@ -163,4 +163,3 @@ flutter run -d <device-id> --dart-define=API_BASE_URL=http://YOUR_IP:3001
 | PowerShell blocks npm | Use `npm.cmd` commands or adjust execution policy for your shell. |
 | Flutter cannot see backend on Android Emulator | Use `http://10.0.2.2:3001` or pass `API_BASE_URL`. |
 | Gemini assistant does not call API | Add `GEMINI_API_KEY` to `website/backend/.env` and restart backend. |
-

@@ -36,8 +36,25 @@ cs4800-project/
 │   ├── frontend/     ← React + Vite app
 │   └── backend/      ← Express + SQLite API
 ├── mobile-app/       ← Flutter mobile client
+├── docs/             ← Final submission documentation
+├── planning files/   ← Original planning/prototype artifacts
 └── README.md
 ```
+
+---
+
+## Grader Quick Links
+
+| Required artifact | File |
+|---|---|
+| Project Charter (PM) | [docs/project_charter.md](docs/project_charter.md) |
+| Functional/Requirement Spec (BA) with use cases, activity diagrams, domain model, and ER diagram | [docs/functional_requirements_specification.md](docs/functional_requirements_specification.md) |
+| Technical/Design Spec (DEV) with deployment, architecture, component, class, and sequence diagrams | [docs/technical_design_specification.md](docs/technical_design_specification.md) |
+| Test Case Spec (QA), traceability matrix, and test results | [docs/splitstack_test_case_specification.md](docs/splitstack_test_case_specification.md) |
+| Build and Deployment Instructions | [docs/project_build_deployment_instructions.md](docs/project_build_deployment_instructions.md) |
+| Release Notes | [docs/project_release_notes.md](docs/project_release_notes.md) |
+| Full checklist map | [docs/submission_artifact_checklist.md](docs/submission_artifact_checklist.md) |
+| Docs folder guide | [docs/README.md](docs/README.md) |
 
 ---
 

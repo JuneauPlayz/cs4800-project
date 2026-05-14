@@ -4,9 +4,9 @@ Version: 1.0
 Date: May 12, 2026  
 Related documents: `planning files/Project_Requirements_Specification (2).docx`, `planning files/SplitStack_Use_Cases (1) (3).docx`
 
-## Purpose
+## Overview
 
-This document supplements the functional requirements and use-case documents with activity diagrams and a domain/ER model for the implemented SplitStack system.
+These diagrams support the requirements and use-case files with activity flows plus a domain/ER model for the implemented SplitStack system.
 
 ## Activity Diagram: Register and Log In
 
@@ -338,7 +338,7 @@ erDiagram
 | GroupInvite | Pending or completed invitation to join a group. |
 | Expense | Recorded purchase, personal cost, or shared group cost. |
 | ExpenseSplit | Per-user amount owed for an expense. |
-| Vote | Approval workflow for above-threshold expenses. |
+| Vote | Voting workflow for above-threshold expenses. |
 | VoteDecision | A member's yes/no response to a vote. |
 | Settlement | Recorded payment against an outstanding expense amount. |
 | Challenge | Group savings/spending goal with progress. |
@@ -346,4 +346,3 @@ erDiagram
 | BudgetGoal | User monthly budget and category breakdown. |
 | Notification | In-app event message for invites, votes, balances, and challenges. |
 | UserSettings | Notification and privacy preferences. |
-

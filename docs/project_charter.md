@@ -1,114 +1,135 @@
 # SplitStack Project Charter
 
 Version: 1.0  
-Date: May 12, 2026  
-Project: SplitStack shared budgeting and expense management app
+Date: May 2026  
+Project: SplitStack shared expense management app  
+Course: CS 4800
 
-## Purpose
+## 1. Purpose
 
-SplitStack helps roommates, travel groups, families, and other shared-cost groups track expenses, split balances fairly, approve large purchases, record settlements, and understand spending patterns from one workspace.
+SplitStack is a shared expense management system for roommates, trips, families, and other groups that need a transparent way to record purchases, split costs, vote on large expenses, settle balances, and understand spending patterns.
 
-## Business Need
+The sections below cover the goal, scope, stakeholders, schedule, assumptions, risks, and handoff files for the project.
 
-Shared expenses are often tracked through informal chats, spreadsheets, payment apps, and screenshots. This creates missed reimbursements, unclear balances, and disagreements over larger purchases. SplitStack provides one system for group membership, expense entry, voting, settlements, budget tracking, analytics, receipt capture, and AI-assisted financial guidance.
+## 2. Problem Statement
 
-## Project Objectives
+Shared finances often rely on manual notes, screenshots, group chats, and memory. This creates confusion about who paid, who owes, whether a purchase was approved, and whether balances are up to date. SplitStack addresses this by providing a single source of truth for group expenses and balances with built-in approval workflows and reporting.
 
-- Provide account registration and login for individual users.
-- Let users create shared groups, invite members, and manage accepted memberships.
-- Let group members add expenses with equal, percent, and custom split methods.
-- Require group approval for expenses above a configurable threshold.
-- Calculate balances and outstanding payment relationships from approved expenses.
-- Let users mark expenses paid and notify the payer/payee.
-- Support receipt upload and OCR-assisted expense entry.
-- Provide personal budget tracking and spending analytics.
-- Provide a SplitStack assistant that answers questions using workspace data.
-- Provide a web client, mobile client, backend API, persistent database, and project documentation.
+## 3. Project Objectives
 
-## Scope
+| Objective ID | Objective | Success Measure |
+| --- | --- | --- |
+| OBJ-01 | Allow users to create accounts and access their own workspace. | Users can register, log in, log out, and reload persisted sessions. |
+| OBJ-02 | Support group-based shared expense tracking. | Users can create groups, invite members, accept invites, and view member-aware data. |
+| OBJ-03 | Support flexible expense splitting. | Expenses can be split equally, by percentage, or by custom amounts. |
+| OBJ-04 | Maintain accurate group balances. | Dashboard balances reflect approved expenses and completed settlements. |
+| OBJ-05 | Add group governance for large purchases. | Expenses above the group threshold create votes and do not affect balances until approved. |
+| OBJ-06 | Provide mobile and web access. | React web client and Flutter mobile client both use the same API and database. |
+| OBJ-07 | Provide project documentation. | PM, BA, DEV, QA, build/deploy, release notes, and source code are present in the repo. |
 
-In scope:
+## 4. Scope
 
-- React/Vite web app.
-- Flutter mobile app.
-- Express API.
-- SQLite persistence.
-- Local/demo deployment instructions.
-- Functional, technical, and QA documentation.
+### In Scope
 
-Out of scope for this submission:
+- Email/password registration and login.
+- User profile avatar settings.
+- Group creation, editing, deletion, leaving, invites, and invite responses.
+- Shared expense creation with equal, percentage, and custom split methods.
+- Receipt image attachment for expenses.
+- Automatic vote creation for expenses above a group threshold.
+- Voting responses, vote approval, vote decline, and vote undo while pending.
+- Dashboard balances, totals, people summaries, and recent financial state.
+- Settlement recording for outstanding expense shares.
+- Analytics by category, month, frequency, and top expenses.
+- Budget goal tracking for the current month.
+- Group challenges and challenge contributions.
+- Notifications and settings.
+- AI assistant answers and confirmable assistant actions, with local fallback behavior.
+- React/Vite frontend, Express/SQLite backend, and Flutter mobile client.
+- Documentation under `docs/`.
 
+### Out of Scope
+
+- Real money movement through a bank or payment gateway.
+- Production payment processor integration.
+- Production email, SMS, or push-notification delivery.
 - Production cloud deployment.
-- Real payment transfer processing.
-- Enterprise identity provider integration.
-- Public app-store distribution.
-- Production-grade observability and backup operations.
+- Premium billing and subscription management.
+- Blockchain audit trail.
+- Full admin console for system operators.
 
-## Stakeholders
+## 5. Stakeholders
 
-| Role | Responsibility |
+| Stakeholder | Role / Interest |
 | --- | --- |
-| Project Manager | Project coordination, scope, schedule, and final submission organization. |
-| Business Analyst | Requirements, use cases, activity flows, and functional acceptance criteria. |
-| Developers | Web, mobile, backend, database, integrations, and technical documentation. |
-| QA | Test strategy, test cases, traceability, and test results summary. |
-| End Users | Group members and group owners who manage shared spending. |
-| Instructor | Reviews deliverables and evaluates project completeness. |
+| Project team | Builds and documents the project. |
+| Instructor / grader | Evaluates project completeness, implementation quality, and documentation. |
+| Group member user | Records expenses, views balances, votes, settles, and manages preferences. |
+| Group owner/admin user | Creates groups, invites members, sets thresholds, and manages group records. |
+| QA role | Verifies implemented behavior against use cases and requirements. |
+| Developer role | Designs, implements, builds, tests, and documents deployment steps. |
+| Business analyst role | Defines requirements, use cases, workflows, and domain model. |
+| Project manager role | Defines scope, schedule, handoff files, and risks. |
 
-## Major Deliverables
+## 6. Handoff Files
 
-- Project charter.
-- Functional and requirements specification.
-- Use cases.
-- Activity diagrams.
-- Domain object model or ER diagram.
-- Technical/design specification.
-- Context/deployment diagram.
-- Architecture layout.
-- Component diagram.
-- Class hierarchy and relationship diagrams.
-- Sequence diagrams.
-- Test strategy, test plan, traceability matrix, test cases, and test results summary.
-- Source code.
-- Build and deployment instructions.
-- Release notes.
+| File / Folder | Location |
+| --- | --- |
+| Project charter | `docs/project_charter.md` |
+| Functional / requirements specification | `docs/functional_requirements_specification.md` |
+| Technical / design specification | `docs/technical_design_specification.md` |
+| Test case specification and traceability matrix | `docs/splitstack_test_case_specification.md` |
+| Build and deployment instructions | `docs/project_build_deployment_instructions.md` and `README.md` |
+| Release notes | `docs/project_release_notes.md` |
+| Source code | `website/backend`, `website/frontend`, `mobile-app` |
+| Supporting planning artifacts | `planning files/` |
 
-## Assumptions
+## 7. High-Level Schedule
 
-- Users have access to a browser or Flutter-supported device/emulator.
-- The backend runs locally for the final project demo.
-- SQLite is sufficient for class-project persistence and demo workflows.
-- Gemini assistant behavior is optional and falls back to local summaries if no API key is configured.
-- Real payment transfer is represented by recorded settlements, not by transferring money.
+| Phase | Work Products | Completion Criteria |
+| --- | --- | --- |
+| Planning | Requirements, use cases, risk notes, prototype artifacts. | Problem, users, features, and risks are documented. |
+| MVP implementation | Backend API, SQLite persistence, React client, Flutter client. | Core workflows work end to end with persistent data. |
+| Enhancement implementation | Receipt upload, analytics, challenges, budget goals, assistant features. | Enhanced workflows are integrated into the same data model. |
+| QA and stabilization | Test cases, lint/build/test runs, bug fixes. | Key use cases have traceable test cases and verification results. |
+| Handoff | PM, BA, DEV, QA, build/deploy, release notes, source code. | Checklist items are mapped to files in the repository. |
 
-## Constraints
+## 8. Assumptions
 
-- The project uses Node.js 22 LTS for the website/backend.
-- The mobile client depends on Flutter SDK availability.
-- Local mobile simulator setup depends on Xcode for iOS and Android Studio for Android.
-- The final release is not tagged in git; it is based on the current `main` branch.
+- The grader can review Markdown documentation directly from the repository.
+- Node.js 22 LTS, npm, and Flutter are available or can be installed from the documented instructions.
+- The application is evaluated as a local development/demo project.
+- SQLite is acceptable for local project persistence.
+- Gemini API access is optional; the assistant has a local fallback when no key is configured.
+- Real payment processing is represented by settlement records rather than external transfers.
 
-## Risks
+## 9. Constraints
+
+- Class project timeline.
+- Local development environment rather than production infrastructure.
+- No external database server required.
+- Network-dependent AI features must degrade gracefully when not configured.
+- Security is appropriate for a classroom prototype, not a production financial platform.
+
+## 10. Risks and Mitigations
 
 | Risk | Impact | Mitigation |
 | --- | --- | --- |
-| Local environment differences | Demo or build issues | Provide separate web, backend, and mobile setup instructions. |
-| Sparse sample data | AI and analytics appear limited | Use real registered demo accounts and add several test expenses before demo. |
-| Flutter SDK missing on reviewer machine | Mobile app cannot be run locally | Include web client as primary runnable client and document Flutter prerequisites. |
-| AI API key unavailable | Assistant cannot call Gemini | Backend local fallback answers workspace questions without an API key. |
-| SQLite is local-only | Not production ready | State local/demo scope clearly in release notes and known limitations. |
+| Required file is hard to find | Grader may miss work that is already done | Keep the checklist and README artifact table up to date. |
+| Backend and clients drift apart | Broken demo workflows | Both React and Flutter clients call the same Express API. |
+| Incorrect balance calculations | Loss of trust in app results | Store expenses and splits separately; test balance and settlement workflows. |
+| Vote workflow confusion | Expenses may appear before approval | Expenses tied to pending votes are hidden from balances until approved. |
+| Local environment setup issues | Demo cannot run | Provide separate backend, frontend, and mobile instructions plus troubleshooting. |
+| Optional AI service unavailable | Assistant feature fails | Backend supports local fallback summaries. |
+| Receipt files too large or invalid | Upload failures | Backend validates image type and size; mobile compresses images before upload. |
 
-## Success Criteria
+## 11. Handoff Checklist
 
-- A user can register, log in, create or join a group, add expenses, and view updated balances.
-- Above-threshold expenses create votes and only affect balances after approval.
-- Users can record settlements and see payment status update.
-- Users can create challenges and add contributions.
-- Users can set budgets and review spending analytics.
-- The assistant can answer workspace questions or provide fallback summaries.
-- The source code builds and the documentation maps to every requested deliverable.
-
-## Approval
-
-This charter defines the intended final submission scope for SplitStack 1.0.0.
-
+- All source code is present for backend, frontend, and mobile app.
+- The backend can start and respond to `/api/health`.
+- The web client can build successfully.
+- The mobile app can run tests successfully.
+- Required PM, BA, DEV, QA, build/deploy, and release-note documents are present.
+- Use cases are traceable to requirements and test cases.
+- Required diagrams are included in the BA and DEV specifications.
+- Known limitations are documented in release notes.

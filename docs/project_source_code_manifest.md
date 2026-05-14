@@ -1,7 +1,7 @@
 # SplitStack Project Source Code Manifest
 
-Version: 1.0  
-Date: May 12, 2026
+Version: 1.1  
+Date: May 2026
 
 ## Source Code Location
 
@@ -24,7 +24,7 @@ https://github.com/JuneauPlayz/cs4800-project
 | `website/frontend/` | React/Vite web client. |
 | `website/backend/` | Express/SQLite backend API. |
 | `mobile-app/` | Flutter mobile client. |
-| `docs/` | Generated documentation for QA, technical design, deployment, and submission mapping. |
+| `docs/` | Final PM, BA, DEV, QA, build/deployment, release, and submission mapping documentation. |
 | `planning files/` | Existing project planning artifacts, requirements, use cases, business plan, prototypes, and architecture image. |
 
 ## Web Frontend Source
@@ -69,3 +69,15 @@ https://github.com/JuneauPlayz/cs4800-project
 | `mobile-app/lib/src/ui/auth_screen.dart` | Mobile auth UI. |
 | `mobile-app/lib/src/ui/home_shell.dart` | Main mobile workspace UI. |
 | `mobile-app/test/` | Flutter unit/widget tests. |
+
+## Final Documentation Source
+
+| Path | Purpose |
+| --- | --- |
+| `docs/project_charter.md` | Project charter for PM review. |
+| `docs/functional_requirements_specification.md` | BA requirements, use cases, activity diagrams, domain model, and ER diagram. |
+| `docs/technical_design_specification.md` | DEV technical design, deployment/context, architecture, component, class, and sequence diagrams. |
+| `docs/splitstack_test_case_specification.md` | QA strategy, test plan, traceability matrix, test cases, and results summary. |
+| `docs/project_build_deployment_instructions.md` | Project build and deployment instructions. |
+| `docs/project_release_notes.md` | Final release notes. |
+| `docs/submission_artifact_checklist.md` | Direct checklist-to-file mapping for grading. |

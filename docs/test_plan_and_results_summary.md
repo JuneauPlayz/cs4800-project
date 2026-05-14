@@ -1,7 +1,7 @@
 # SplitStack Test Plan and Results Summary
 
-Version: 1.0  
-Date: May 12, 2026  
+Version: 1.1  
+Date: May 2026  
 Related test case specification: `docs/splitstack_test_case_specification.md`
 
 ## Test Strategy and Approach
@@ -36,7 +36,7 @@ In scope:
 - Web build/lint and backend lint.
 - Existing Flutter tests for mobile UI and receipt parsing.
 
-Out of scope for this class-project test plan:
+Not covered in this local test pass:
 
 - Production load testing over a multi-day window.
 - Real payment processor integration testing.
@@ -47,8 +47,8 @@ Out of scope for this class-project test plan:
 
 | Item | Value |
 | --- | --- |
-| OS used for documentation validation | Windows, PowerShell |
-| Node version observed | `v22.20.0` |
+| OS used for documentation validation | macOS local development environment |
+| Node version expected | Node.js 22 LTS |
 | Backend | Express API on port 3001 |
 | Web frontend | Vite dev server on port 5173 |
 | Database | Local SQLite database |
@@ -56,14 +56,14 @@ Out of scope for this class-project test plan:
 
 ## Test Data
 
-Recommended final walkthrough data:
+Walkthrough data:
 
 - Register at least two real demo accounts.
 - Create one shared group.
 - Invite the second account by email.
 - Add one below-threshold expense.
 - Add one above-threshold expense to trigger a vote.
-- Accept or decline the generated vote from all relevant members.
+- Accept or decline the new vote from all relevant members.
 - Record one settlement payment.
 - Add at least one personal expense.
 - Add one challenge and one contribution.
@@ -105,11 +105,12 @@ Commands run during this documentation pass:
 
 | Check | Command | Result | Notes |
 | --- | --- | --- | --- |
-| Backend lint | `npm.cmd run lint` from `website/backend` | Pass | ESLint completed successfully. |
-| Frontend lint | `npm.cmd run lint` from `website/frontend` | Pass | ESLint completed successfully. |
-| Frontend build | `npm.cmd run build` from `website/frontend` | Pass | Production build completed after resolving a local filesystem permission issue; output generated under `dist/`. |
-| Flutter availability | `where.exe flutter` | Not available | Flutter CLI was not found in the current shell path. |
-| Mobile tests | `flutter test` from `mobile-app` | Not run | Blocked because Flutter CLI was not available in this environment. |
+| Backend lint | `npm run lint` from `website/backend` | Pass | ESLint completed successfully. |
+| Backend build check | `npm run build` from `website/backend` | Pass | Backend reports no build step is required. |
+| Frontend lint | `npm run lint` from `website/frontend` | Pass | ESLint completed successfully. |
+| Frontend build | `npm run build` from `website/frontend` | Pass | Vite production build completed successfully. |
+| Mobile tests | `flutter test` from `mobile-app` | Pass | 25 Flutter tests passed. |
+| Mobile analyzer | `flutter analyze` from `mobile-app` | Pass | Analyzer reported no issues. |
 
 ## Existing Mobile Test Coverage
 
@@ -120,7 +121,7 @@ The repository includes Flutter tests in `mobile-app/test/` that cover:
 - Receipt OCR date extraction.
 - Date picker editability after receipt autofill.
 - Payout sheet payment method selection.
-- Challenge tab rendering and contribution controls.
+- Challenge tab rendering and member spending progress.
 
 These should be run with:
 
@@ -152,7 +153,6 @@ flutter test
 
 ## Known Test Gaps
 
-- Mobile tests were not executed in this environment because Flutter was unavailable.
-- Manual end-to-end test results should be filled in after running the final demo flow.
+- Manual end-to-end test results should be rechecked during the final live demo flow.
 - Performance and uptime criteria from the requirements document are specified but not fully measured in this local validation pass.
 - Gemini-backed assistant behavior requires a valid `GEMINI_API_KEY`; without it, local fallback behavior should be tested instead.

@@ -1,13 +1,13 @@
 # SplitStack Test Case Specification and Traceability Matrix
 
-Version: 1.0
-Date: April 28, 2026
-Testing Type: Black-box testing
+Version: 1.1
+Date: May 2026
+Testing Type: Black-box testing, smoke testing, build verification, and static analysis
 Project: SplitStack shared budgeting and expense management app
 
-## 1. Purpose
+## 1. Overview
 
-This document defines black-box test cases for the main SplitStack use cases. The tests focus on externally visible behavior, not internal code structure. Each test case includes steps, inputs, and expected outputs. A traceability matrix maps each test case to the use case it verifies.
+The test cases below cover the main SplitStack use cases from the user's point of view. Each case lists the setup, input, steps, and expected result, followed by a traceability matrix.
 
 ## 2. Main Use Cases
 
@@ -25,7 +25,50 @@ This document defines black-box test cases for the main SplitStack use cases. Th
 | UC-10 | Update Settings and Notifications | Group Member | A user can update settings and mark notifications as read. |
 | UC-11 | Chat with AI Assistant | Group Member | A user can ask the SplitStack assistant questions about their data. |
 
-## 3. Test Case Specification
+## 3. Test Strategy/Approach
+
+SplitStack testing combines black-box functional testing with automated smoke checks and build verification. The test approach is designed around user-visible behavior because the final project is evaluated through implemented workflows and documented requirements.
+
+| Test Type | Purpose | Scope |
+| --- | --- | --- |
+| Black-box functional tests | Verify each major use case from the user's point of view. | Authentication, groups, invites, expenses, votes, settlements, analytics, challenges, settings, notifications, assistant. |
+| Traceability review | Confirm that use cases are covered by test cases. | Matrix in section 6 maps every primary use case to one or more test cases. |
+| Automated mobile widget/unit tests | Verify critical Flutter UI and receipt parsing behavior. | Login screen, receipt amount/date extraction, date picker, payment sheet, challenges tab. |
+| Static analysis | Catch syntax, lint, and analyzer issues before submission. | Backend ESLint, frontend ESLint, Flutter analyzer. |
+| Build verification | Confirm submitted source can produce a runnable web build. | React/Vite production build. |
+| Manual demo testing | Validate end-to-end behavior with real local backend state. | Register users, create group, invite, add expense, vote, settle, inspect dashboard. |
+
+Testing priorities:
+
+- P0: User cannot authenticate, load workspace, or access app.
+- P1: Group, expense, vote, balance, or settlement data is incorrect.
+- P2: Analytics, challenges, assistant, receipt, settings, or notification behavior is incomplete.
+- P3: Copy, polish, minor layout, and non-blocking warnings.
+
+## 4. Test Plan
+
+| Plan Item | Details |
+| --- | --- |
+| Test environment | Local macOS development machine using Node.js, npm, Flutter, SQLite, and browser/mobile simulators. |
+| Backend under test | `website/backend`, Express API on `http://localhost:3001`. |
+| Web client under test | `website/frontend`, React/Vite app on `http://localhost:5173`. |
+| Mobile client under test | `mobile-app`, Flutter app using the same backend API. |
+| Test data | Fresh registered users and/or optional seeded demo data through `SPLITSTACK_SEED_DEMO=true`. |
+| Entry criteria | Dependencies installed, backend starts, frontend starts/builds, mobile dependencies resolve. |
+| Exit criteria | Required test cases are documented; automated verification commands pass or blockers are documented; known limitations are listed in release notes. |
+| Risks tested | Unauthorized access, incorrect balances, unapproved expenses affecting balances, settlement overpayment, stale UI states, receipt upload errors. |
+| Regression focus | Authentication, expense splitting, vote resolution, settlement recording, receipt parsing, and dashboard refresh. |
+
+Recommended test execution order:
+
+1. Run backend lint.
+2. Run frontend lint and production build.
+3. Run Flutter tests and analyzer.
+4. Start backend and frontend.
+5. Execute manual black-box test cases TC-01 through TC-16.
+6. Record results and any defects before submission.
+
+## 5. Test Case Specification
 
 ### TC-01: Register a New User Account
 
@@ -203,7 +246,7 @@ This document defines black-box test cases for the main SplitStack use cases. Th
 | Steps | 1. Go to `AI Assistant`. 2. Type the question. 3. Submit the message. |
 | Expected Output | The user's question appears in the chat. The assistant returns a response or displays an error if the request cannot be completed. |
 
-## 4. Traceability Matrix
+## 6. Traceability Matrix
 
 | Test Case ID | Test Case Name | UC-01 | UC-02 | UC-03 | UC-04 | UC-05 | UC-06 | UC-07 | UC-08 | UC-09 | UC-10 | UC-11 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -224,7 +267,7 @@ This document defines black-box test cases for the main SplitStack use cases. Th
 | TC-15 | Update Settings and Mark Notification Read |  |  |  |  |  |  |  |  |  | X |  |
 | TC-16 | Ask AI Assistant a Question |  |  |  |  |  |  |  |  |  |  | X |
 
-## 5. Coverage Summary
+## 7. Coverage Summary
 
 | Use Case ID | Use Case Name | Covered By |
 | --- | --- | --- |
@@ -239,3 +282,21 @@ This document defines black-box test cases for the main SplitStack use cases. Th
 | UC-09 | View Analytics and Insights | TC-14 |
 | UC-10 | Update Settings and Notifications | TC-15 |
 | UC-11 | Chat with AI Assistant | TC-16 |
+
+## 8. Test Results Summary
+
+Latest local verification results:
+
+| Check | Command | Result | Notes |
+| --- | --- | --- | --- |
+| Backend lint | `cd website/backend && npm run lint` | Pass | ESLint completed with no reported issues. |
+| Backend build check | `cd website/backend && npm run build` | Pass | Backend reports no build step is required. |
+| Frontend lint | `cd website/frontend && npm run lint` | Pass | ESLint completed with no reported issues. |
+| Frontend production build | `cd website/frontend && npm run build` | Pass | Vite built 32 modules successfully. |
+| Flutter tests | `cd mobile-app && flutter test` | Pass | 25 tests passed, including receipt OCR parsing, auth smoke test, payment sheet, date picker, and challenges tab. |
+| Flutter static analysis | `cd mobile-app && flutter analyze` | Pass | Analyzer reported "No issues found." |
+
+Non-blocking notes:
+
+- Flutter reported that 12 packages have newer versions incompatible with current dependency constraints. This is informational and did not block tests or analysis.
+- Manual black-box test cases TC-01 through TC-16 remain the recommended final demo checklist because they verify complete workflows across the running backend, web frontend, and mobile client.

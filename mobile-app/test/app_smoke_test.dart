@@ -357,7 +357,17 @@ TOTAL \$84.80
             totalYouOwe: 18.5,
             settleCount: 1,
             owedToYou: const [],
-            youOwe: const [],
+            youOwe: [
+              CounterpartyBalance(
+                id: 'u2',
+                name: 'Alex Chen',
+                initials: 'AC',
+                avatarColor: '#8B5CF6',
+                avatarEmoji: '',
+                amount: 18.5,
+                groups: [GroupRef(id: 'g1', name: 'Roommates')],
+              ),
+            ],
             people: const [],
           ),
           pendingVotes: 0,
@@ -398,12 +408,13 @@ TOTAL \$84.80
       );
       await tester.pumpAndSettle();
 
-      await tester.scrollUntilVisible(
-        find.text('Pay \$18.50'),
-        300,
-        scrollable: find.byType(Scrollable).first,
-      );
-      await tester.tap(find.text('Pay \$18.50').first);
+      await tester.tap(find.text('You owe'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.arrow_forward_ios_rounded));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(Checkbox).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Pay selected (\$18.50)'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Venmo'));
       await tester.pumpAndSettle();
@@ -469,7 +480,17 @@ TOTAL \$84.80
                 startDate: '2026-04-01',
                 endDate: '2026-04-30',
                 createdByName: 'Jordan Lee',
-                memberProgress: const [],
+                memberProgress: [
+                  ChallengeMemberProgress(
+                    userId: 'u1',
+                    name: 'Jordan Lee',
+                    initials: 'JL',
+                    avatarColor: '#0D9488',
+                    avatarEmoji: '',
+                    spent: 180,
+                    goal: 400,
+                  ),
+                ],
               ),
             ],
           );
@@ -485,7 +506,7 @@ TOTAL \$84.80
 
     expect(tester.takeException(), isNull);
     expect(find.text('April Grocery Goal'), findsWidgets);
-    expect(find.text('Contribution amount'), findsOneWidget);
-    expect(find.text('Add'), findsWidgets);
+    expect(find.textContaining('Member spending'), findsOneWidget);
+    expect(find.text('Jordan'), findsOneWidget);
   });
 }
