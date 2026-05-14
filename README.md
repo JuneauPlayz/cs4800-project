@@ -163,20 +163,6 @@ PORT=3002 npm run dev       # backend
 
 ---
 
-## Demo Data
-
-Fresh databases start empty so the team can demo real registration, invites, and
-persisted group data. If you need disposable sample data for local development,
-start the backend with:
-
-```bash
-SPLITSTACK_SEED_DEMO=true npm run dev
-```
-
-Do not use seeded accounts for the final walkthrough.
-
----
-
 ## Included Features
 
 - Real email/password registration and login
