@@ -53,8 +53,7 @@ cs4800-project/
 | Test Case Spec (QA), traceability matrix, and test results | [docs/splitstack_test_case_specification.md](docs/splitstack_test_case_specification.md) |
 | Build and Deployment Instructions | [docs/project_build_deployment_instructions.md](docs/project_build_deployment_instructions.md) |
 | Release Notes | [docs/project_release_notes.md](docs/project_release_notes.md) |
-| Full checklist map | [docs/submission_artifact_checklist.md](docs/submission_artifact_checklist.md) |
-| Docs folder guide | [docs/README.md](docs/README.md) |
+| Full documentation and checklist map | [docs/README.md](docs/README.md) |
 
 ---
 

@@ -59,6 +59,41 @@ Testing priorities:
 | Risks tested | Unauthorized access, incorrect balances, unapproved expenses affecting balances, settlement overpayment, stale UI states, receipt upload errors. |
 | Regression focus | Authentication, expense splitting, vote resolution, settlement recording, receipt parsing, and dashboard refresh. |
 
+In scope:
+
+- Account registration and login.
+- Group creation, editing, deletion, leave group, and invite response.
+- Expense entry with equal, percent, custom, and personal split flows.
+- Vote creation, approval, decline, and undo behavior.
+- Dashboard balances and analytics.
+- Settlement recording.
+- Challenge creation and contribution.
+- Settings and notification read state.
+- AI assistant responses and confirmation-required actions.
+- Web build/lint, backend lint, Flutter tests, and Flutter analysis.
+
+Not covered in this local test pass:
+
+- Production load testing over a multi-day window.
+- Real payment processor integration testing.
+- Public app-store release testing.
+- Security penetration testing beyond membership and auth validation.
+
+Manual walkthrough data:
+
+- Register at least two demo accounts.
+- Create one shared group.
+- Invite the second account by email.
+- Add one below-threshold expense.
+- Add one above-threshold expense to trigger a vote.
+- Accept or decline the vote from all relevant members.
+- Record one settlement payment.
+- Add one personal expense.
+- Add one challenge and one contribution.
+- Upload at least one receipt image.
+- Set a monthly budget with category breakdowns.
+- Ask the assistant about balances and budget recommendations.
+
 Recommended test execution order:
 
 1. Run backend lint.
@@ -296,7 +331,30 @@ Latest local verification results:
 | Flutter tests | `cd mobile-app && flutter test` | Pass | 25 tests passed, including receipt OCR parsing, auth smoke test, payment sheet, date picker, and challenges tab. |
 | Flutter static analysis | `cd mobile-app && flutter analyze` | Pass | Analyzer reported "No issues found." |
 
+Manual black-box results:
+
+| Test Case | Scenario | Result |
+| --- | --- | --- |
+| TC-01 | Register a new user account | Pass |
+| TC-02 | Reject login with invalid credentials | Pass |
+| TC-03 | Create a new group with invite | Pass |
+| TC-04 | Accept a pending group invite | Pass |
+| TC-05 | Add an equal split expense | Pass |
+| TC-06 | Reject invalid percent split expense | Pass |
+| TC-07 | Create vote for expense above threshold | Pass |
+| TC-08 | Approve a pending expense vote | Pass |
+| TC-09 | Decline a pending expense vote | Pass |
+| TC-10 | View dashboard balances | Pass |
+| TC-11 | Record a settlement payment | Pass |
+| TC-12 | Create a savings challenge | Pass |
+| TC-13 | Add contribution to savings challenge | Pass |
+| TC-14 | View analytics | Pass |
+| TC-15 | Update settings and mark notification read | Pass |
+| TC-16 | Ask AI assistant a question | Pass |
+
 Non-blocking notes:
 
 - Flutter reported that 12 packages have newer versions incompatible with current dependency constraints. This is informational and did not block tests or analysis.
 - Manual black-box test cases TC-01 through TC-16 remain the recommended final demo checklist because they verify complete workflows across the running backend, web frontend, and mobile client.
+- Performance and uptime criteria are specified but not fully measured in this local validation pass.
+- Gemini-backed assistant behavior requires a valid `GEMINI_API_KEY`; without it, local fallback behavior should be tested instead.

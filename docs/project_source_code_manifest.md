@@ -80,4 +80,4 @@ https://github.com/JuneauPlayz/cs4800-project
 | `docs/splitstack_test_case_specification.md` | QA strategy, test plan, traceability matrix, test cases, and results summary. |
 | `docs/project_build_deployment_instructions.md` | Project build and deployment instructions. |
 | `docs/project_release_notes.md` | Final release notes. |
-| `docs/submission_artifact_checklist.md` | Direct checklist-to-file mapping for grading. |
+| `docs/README.md` | Direct checklist-to-file mapping for grading. |

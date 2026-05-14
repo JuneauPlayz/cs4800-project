@@ -46,7 +46,8 @@ cs4800-project/
     splitstack_test_case_specification.md
     project_build_deployment_instructions.md
     project_release_notes.md
-    submission_artifact_checklist.md
+    project_source_code_manifest.md
+    README.md
   planning files/
     Project_Requirements_Specification (2).docx
     SplitStack_Use_Cases (1) (3).docx
