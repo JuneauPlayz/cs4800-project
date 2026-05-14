@@ -46,4 +46,4 @@ This folder contains the current final-submission documentation for SplitStack. 
 
 ## Supporting Artifacts
 
-The `planning files/` folder contains original planning documents, prototypes, and the supporting architecture image. Those files are historical/supporting artifacts; the Markdown files in this folder reflect the implemented system.
+The `planning files/` folder contains original planning documents, prototypes, and the supporting architecture image from in-class excercises. Those files are historical/supporting artifacts; the Markdown files in this folder reflect the implemented system.
