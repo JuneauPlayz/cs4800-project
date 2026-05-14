@@ -3,7 +3,7 @@
 Version: 1.1  
 Date: May 12, 2026
 
-This index maps the instructor's requested deliverables to the files in this repository. PDF versions of every generated markdown document live in `docs/pdf/`.
+This index maps the deliverables to the files in this repository. PDF versions of every generated markdown document live in `docs/pdf/`.
 
 ## Submission Checklist
 
