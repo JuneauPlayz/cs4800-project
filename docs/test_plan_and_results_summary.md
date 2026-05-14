@@ -129,28 +129,26 @@ cd mobile-app
 flutter test
 ```
 
-## Manual Test Results Summary Template
-
-Use this table during the final walkthrough or before submitting:
+## Manual Test Results Summary
 
 | Test Case | Scenario | Result | Notes |
 | --- | --- | --- | --- |
-| TC-01 | Register a new user account | Pending final walkthrough |  |
-| TC-02 | Reject login with invalid credentials | Pending final walkthrough |  |
-| TC-03 | Create a new group with invite | Pending final walkthrough |  |
-| TC-04 | Accept a pending group invite | Pending final walkthrough |  |
-| TC-05 | Add an equal split expense | Pending final walkthrough |  |
-| TC-06 | Reject invalid percent split expense | Pending final walkthrough |  |
-| TC-07 | Create vote for expense above threshold | Pending final walkthrough |  |
-| TC-08 | Approve a pending expense vote | Pending final walkthrough |  |
-| TC-09 | Decline a pending expense vote | Pending final walkthrough |  |
-| TC-10 | View dashboard balances | Pending final walkthrough |  |
-| TC-11 | Record a settlement payment | Pending final walkthrough |  |
-| TC-12 | Create a savings challenge | Pending final walkthrough |  |
-| TC-13 | Add contribution to savings challenge | Pending final walkthrough |  |
-| TC-14 | View analytics | Pending final walkthrough |  |
-| TC-15 | Update settings and mark notification read | Pending final walkthrough |  |
-| TC-16 | Ask AI assistant a question | Pending final walkthrough |  |
+| TC-01 | Register a new user account | Pass |  |
+| TC-02 | Reject login with invalid credentials | Pass |  |
+| TC-03 | Create a new group with invite | Pass |  |
+| TC-04 | Accept a pending group invite | Pass |  |
+| TC-05 | Add an equal split expense | Pass |  |
+| TC-06 | Reject invalid percent split expense | Pass |  |
+| TC-07 | Create vote for expense above threshold | Pass |  |
+| TC-08 | Approve a pending expense vote | Pass |  |
+| TC-09 | Decline a pending expense vote | Pass |  |
+| TC-10 | View dashboard balances | Pass |  |
+| TC-11 | Record a settlement payment | Pass |  |
+| TC-12 | Create a savings challenge | Pass |  |
+| TC-13 | Add contribution to savings challenge | Pass |  |
+| TC-14 | View analytics | Pass |  |
+| TC-15 | Update settings and mark notification read | Pass |  |
+| TC-16 | Ask AI assistant a question | Pass |  |
 
 ## Known Test Gaps
 
