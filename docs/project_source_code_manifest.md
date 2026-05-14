@@ -69,18 +69,3 @@ https://github.com/JuneauPlayz/cs4800-project
 | `mobile-app/lib/src/ui/auth_screen.dart` | Mobile auth UI. |
 | `mobile-app/lib/src/ui/home_shell.dart` | Main mobile workspace UI. |
 | `mobile-app/test/` | Flutter unit/widget tests. |
-
-## Source Code Submission Recommendation
-
-Submit the full repository, including:
-
-- `website/`
-- `mobile-app/`
-- `docs/`
-- `planning files/`
-- `README.md`
-- `RELEASE_NOTES.md`
-- lockfiles such as `package-lock.json`, `pubspec.lock`, and platform project files
-
-Do not rely on only the `planning files` folder because the source code, test spec, build instructions, release notes, and generated design supplements live outside that folder.
-
